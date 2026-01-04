@@ -9,13 +9,19 @@ export interface GitHubContext {
 	};
 }
 
+/** GitHub user account types */
+export type GitHubUserType = "User" | "Bot" | "Organization";
+
+/** Represents a GitHub user (human, bot, or organization) */
+export interface GitHubUser {
+	login: string;
+	type: GitHubUserType;
+}
+
 export interface TriggerInfo {
 	isCommentEvent: boolean;
 	triggerText: string;
-	author: {
-		login: string;
-		type: string;
-	};
+	author: GitHubUser;
 	authorAssociation: string;
 	issueNumber: number;
 	issueTitle: string;
@@ -41,8 +47,8 @@ export function extractTriggerInfo(
 		? (comment?.body as string)
 		: (issue.body as string);
 	const author = isCommentEvent
-		? (comment?.user as { login: string; type: string })
-		: (issue.user as { login: string; type: string });
+		? (comment?.user as GitHubUser)
+		: (issue.user as GitHubUser);
 	const authorAssociation = isCommentEvent
 		? (comment?.author_association as string)
 		: (issue.author_association as string);
