@@ -27,6 +27,9 @@ inputs:
   model:
     description: 'Model ID'
     default: 'claude-sonnet-4-20250514'
+  prompt_template:
+    description: 'Custom prompt template with placeholder variables'
+    required: false
 
 runs:
   using: 'composite'
@@ -128,3 +131,4 @@ runs:
         INPUT_TIMEOUT: ${{ inputs.timeout }}
         INPUT_PROVIDER: ${{ inputs.provider }}
         INPUT_MODEL: ${{ inputs.model }}
+        INPUT_PROMPT_TEMPLATE: ${{ inputs.prompt_template }}

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildPrompt, extractTask, hasTrigger } from "./context.js";
+import {
+	buildPrompt,
+	extractTask,
+	hasTrigger,
+	renderTemplate,
+} from "./context.js";
 
 describe("hasTrigger", () => {
 	it("detects @pi at start", () => {
@@ -50,6 +55,53 @@ describe("extractTask", () => {
 	});
 });
 
+describe("renderTemplate", () => {
+	const mockContext = {
+		type: "issue" as const,
+		title: "Bug Report",
+		body: "Something is broken",
+		number: 42,
+		triggerComment: "@pi help",
+		task: "help",
+	};
+
+	it("renders all variables correctly", () => {
+		const template =
+			"Type: {{type}}, Display: {{type_display}}, Number: {{number}}, Title: {{title}}, Body: {{body}}, Task: {{task}}, Comment: {{trigger_comment}}";
+		const result = renderTemplate(template, mockContext);
+
+		expect(result).toBe(
+			"Type: issue, Display: Issue, Number: 42, Title: Bug Report, Body: Something is broken, Task: help, Comment: @pi help",
+		);
+	});
+
+	it("handles diff variable for PR", () => {
+		const prContext = {
+			...mockContext,
+			type: "pull_request" as const,
+			diff: "+ added line\n- removed line",
+		};
+		const template = "{{type_display}} has diff: {{diff}}";
+		const result = renderTemplate(template, prContext);
+
+		expect(result).toBe("Pull Request has diff: + added line\n- removed line");
+	});
+
+	it("handles missing diff as empty string", () => {
+		const template = "Diff: '{{diff}}'";
+		const result = renderTemplate(template, mockContext);
+
+		expect(result).toBe("Diff: ''");
+	});
+
+	it("handles multiple occurrences of same variable", () => {
+		const template = "{{title}} - {{title}} - {{title}}";
+		const result = renderTemplate(template, mockContext);
+
+		expect(result).toBe("Bug Report - Bug Report - Bug Report");
+	});
+});
+
 describe("buildPrompt", () => {
 	it("builds issue prompt", () => {
 		const prompt = buildPrompt({
@@ -80,5 +132,38 @@ describe("buildPrompt", () => {
 
 		expect(prompt).toContain("# GitHub Pull Request #99");
 		expect(prompt).toContain("```diff\n+ new line\n- old line\n```");
+	});
+
+	it("uses custom template when provided", () => {
+		const customTemplate = "Custom: {{title}} - {{task}}";
+		const prompt = buildPrompt(
+			{
+				type: "issue",
+				title: "Bug Report",
+				body: "Something is broken",
+				number: 42,
+				triggerComment: "@pi help",
+				task: "help",
+			},
+			customTemplate,
+		);
+
+		expect(prompt).toBe("Custom: Bug Report - help");
+	});
+
+	it("falls back to default template when custom is empty", () => {
+		const prompt = buildPrompt(
+			{
+				type: "issue",
+				title: "Bug Report",
+				body: "Something is broken",
+				number: 42,
+				triggerComment: "@pi help",
+				task: "help",
+			},
+			"",
+		);
+
+		expect(prompt).toContain("# GitHub Issue #42");
 	});
 });

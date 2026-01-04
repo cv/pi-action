@@ -2,7 +2,7 @@ import { SessionManager, SettingsManager, createAgentSession, createCodingTools,
 import { buildPrompt } from "./context.js";
 import { getErrorMessage } from "./utils.js";
 export async function runAgent(piContext, config, authStorage, modelRegistry) {
-    const prompt = buildPrompt(piContext);
+    const prompt = buildPrompt(piContext, config.promptTemplate);
     // Use provided or discover auth/models
     const auth = authStorage ?? discoverAuthStorage();
     const models = modelRegistry ?? discoverModels(auth);

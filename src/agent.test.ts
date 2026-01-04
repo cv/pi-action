@@ -306,4 +306,33 @@ describe("runAgent", () => {
 		expect(capturedPrompt).toContain("PR Diff");
 		expect(capturedPrompt).toContain("+added line");
 	});
+
+	it("uses custom template when provided", async () => {
+		const mockModel = { provider: "anthropic", id: "claude-sonnet-4-20250514" };
+		const mockRegistry = {
+			find: vi.fn(() => mockModel),
+		};
+		mockDiscoverModels.mockReturnValue(mockRegistry);
+
+		let capturedPrompt = "";
+		const mockSession = {
+			subscribe: vi.fn(),
+			prompt: vi.fn((prompt: string) => {
+				capturedPrompt = prompt;
+			}),
+		};
+		mockCreateAgentSession.mockResolvedValue({ session: mockSession });
+
+		const configWithTemplate: AgentConfig = {
+			...defaultConfig,
+			promptTemplate: "Custom template: {{title}} - Task: {{task}}",
+		};
+
+		await runAgent(defaultContext, configWithTemplate);
+
+		expect(capturedPrompt).toBe(
+			"Custom template: Test Issue - Task: do something",
+		);
+		expect(capturedPrompt).not.toContain("GitHub Issue");
+	});
 });

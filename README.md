@@ -77,6 +77,7 @@ Alternatively, you can set provider-specific environment variables (e.g., `ANTHR
 | `timeout` | Execution timeout in seconds | No | `300` |
 | `provider` | LLM provider (anthropic, openai, google, etc.) | No | `anthropic` |
 | `model` | Model ID | No | `claude-sonnet-4-20250514` |
+| `prompt_template` | Custom prompt template with placeholder variables | No | (built-in default) |
 
 ### Examples
 
@@ -123,6 +124,41 @@ jobs:
   pi-response:
     if: contains(github.event.comment.body, '@pi')
 ```
+
+#### Custom Prompt Template
+
+Customize how GitHub issue/PR context is presented to the agent:
+
+```yaml
+- uses: cv/pi-action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    prompt_template: |
+      # Task for {{type_display}} #{{number}}
+      
+      **Title:** {{title}}
+      
+      **Description:**
+      {{body}}
+      
+      **Your Task:**
+      {{task}}
+      
+      ## Guidelines
+      - Follow our coding standards
+      - Write tests for any new code
+      - Use conventional commits
+```
+
+**Available template variables:**
+- `{{type}}` - Context type (`issue` or `pull_request`)
+- `{{type_display}}` - Human-readable type (`Issue` or `Pull Request`)
+- `{{number}}` - Issue/PR number
+- `{{title}}` - Issue/PR title
+- `{{body}}` - Issue/PR description/body
+- `{{task}}` - Extracted task (text after trigger phrase)
+- `{{diff}}` - PR diff (empty string for issues)
+- `{{trigger_comment}}` - Full trigger comment text
 
 ## How It Works
 

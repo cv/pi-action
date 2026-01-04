@@ -15,6 +15,7 @@ run({
         model: core.getInput("model") || "claude-sonnet-4-20250514",
         githubToken: core.getInput("github_token") || process.env.GITHUB_TOKEN,
         piAuthJson: core.getInput("pi_auth_json"),
+        promptTemplate: core.getInput("prompt_template"),
     },
     context: {
         payload: github.context.payload,

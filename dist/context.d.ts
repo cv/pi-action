@@ -9,4 +9,5 @@ export interface PIContext {
     task: string;
     diff?: string;
 }
-export declare function buildPrompt(context: PIContext): string;
+export declare function renderTemplate(template: string, context: PIContext): string;
+export declare function buildPrompt(context: PIContext, customTemplate?: string): string;

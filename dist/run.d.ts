@@ -7,6 +7,7 @@ export interface ActionInputs {
     model: string;
     githubToken: string | undefined;
     piAuthJson: string | undefined;
+    promptTemplate?: string;
 }
 export interface ActionContext {
     payload: Record<string, unknown>;

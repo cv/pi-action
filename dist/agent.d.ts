@@ -6,5 +6,6 @@ export interface AgentConfig {
     model: string;
     timeout: number;
     cwd: string;
+    promptTemplate?: string;
 }
 export declare function runAgent(piContext: PIContext, config: AgentConfig, authStorage?: AuthStorage, modelRegistry?: ModelRegistry): Promise<AgentResult>;

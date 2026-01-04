@@ -7,7 +7,32 @@ export function extractTask(comment, trigger) {
         return comment;
     return comment.slice(idx + trigger.length).trim();
 }
-export function buildPrompt(context) {
+export function renderTemplate(template, context) {
+    // Template variables that can be used in the custom template
+    const variables = {
+        type: context.type,
+        type_display: context.type === "pull_request" ? "Pull Request" : "Issue",
+        number: context.number.toString(),
+        title: context.title,
+        body: context.body,
+        task: context.task,
+        diff: context.diff || "",
+        trigger_comment: context.triggerComment,
+    };
+    // Replace all template variables
+    let rendered = template;
+    for (const [key, value] of Object.entries(variables)) {
+        const placeholder = new RegExp(`\\{\\{${key}\\}\\}`, "g");
+        rendered = rendered.replace(placeholder, value);
+    }
+    return rendered;
+}
+export function buildPrompt(context, customTemplate) {
+    // If custom template is provided and not empty, use it
+    if (customTemplate?.trim()) {
+        return renderTemplate(customTemplate, context);
+    }
+    // Default template (preserving backward compatibility)
     let prompt = `# GitHub ${context.type === "pull_request" ? "Pull Request" : "Issue"} #${context.number}
 
 ## Title
