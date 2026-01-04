@@ -9,7 +9,7 @@
 		"test:watch": "vitest",
 		"check": "biome check --write .",
 		"typecheck": "tsc --noEmit",
-		"prepare": "npm run build"
+		"prepare": "husky"
 	},
 	"keywords": ["github-action", "pi", "ai", "coding-agent", "automation"],
 	"author": "Carlos Villela",
@@ -29,8 +29,11 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.4",
+		"@commitlint/cli": "^20.3.0",
+		"@commitlint/config-conventional": "^20.3.0",
 		"@types/node": "^20.17.12",
 		"@vitest/coverage-v8": "^2.1.9",
+		"husky": "^9.1.7",
 		"typescript": "^5.7.2",
 		"vitest": "^2.1.8"
 	}

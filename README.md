@@ -166,6 +166,38 @@ npm run typecheck
 npm run check
 ```
 
+### Git Hooks
+
+This project uses [Husky](https://typicode.github.io/husky/) to enforce quality checks via git hooks:
+
+| Hook | What it does |
+|------|--------------|
+| **pre-commit** | Runs tests, type checking, linting, builds, and verifies `dist/` is up to date |
+| **commit-msg** | Enforces [Conventional Commits](https://www.conventionalcommits.org/) format |
+| **prepare-commit-msg** | Auto-appends issue number from branch name (e.g., `feat/123-description` → `Refs #123`) |
+| **pre-push** | Runs full test suite with coverage thresholds (80% lines/functions, 70% branches) |
+
+#### Commit Message Format
+
+Commits must follow the conventional commits format:
+
+```
+type(scope?): subject
+
+body?
+
+footer?
+```
+
+Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`
+
+Examples:
+```bash
+git commit -m "feat: add webhook support"
+git commit -m "fix: handle empty response from API"
+git commit -m "docs: update installation instructions"
+```
+
 ### Architecture
 
 The action is built with TypeScript and uses the pi-coding-agent SDK directly:
