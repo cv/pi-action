@@ -2,6 +2,17 @@
 // biome-ignore lint/suspicious/noExplicitAny: Octokit type from CommonJS module
 type OctokitClient = any;
 
+/** Valid GitHub reaction types for issues and comments */
+export type GitHubReaction =
+	| "+1"
+	| "-1"
+	| "laugh"
+	| "confused"
+	| "heart"
+	| "hooray"
+	| "rocket"
+	| "eyes";
+
 export interface GitHubContext {
 	repo: {
 		owner: string;
@@ -65,8 +76,14 @@ export function extractTriggerInfo(
 }
 
 export interface GitHubClient {
-	addReactionToComment(commentId: number, reaction: string): Promise<void>;
-	addReactionToIssue(issueNumber: number, reaction: string): Promise<void>;
+	addReactionToComment(
+		commentId: number,
+		reaction: GitHubReaction,
+	): Promise<void>;
+	addReactionToIssue(
+		issueNumber: number,
+		reaction: GitHubReaction,
+	): Promise<void>;
 	createComment(issueNumber: number, body: string): Promise<void>;
 	getPullRequestDiff(pullNumber: number): Promise<string>;
 }
@@ -76,37 +93,21 @@ export function createGitHubClient(
 	context: GitHubContext,
 ): GitHubClient {
 	return {
-		async addReactionToComment(commentId: number, reaction: string) {
+		async addReactionToComment(commentId: number, reaction: GitHubReaction) {
 			await octokit.rest.reactions.createForIssueComment({
 				owner: context.repo.owner,
 				repo: context.repo.repo,
 				comment_id: commentId,
-				content: reaction as
-					| "+1"
-					| "-1"
-					| "laugh"
-					| "confused"
-					| "heart"
-					| "hooray"
-					| "rocket"
-					| "eyes",
+				content: reaction,
 			});
 		},
 
-		async addReactionToIssue(issueNumber: number, reaction: string) {
+		async addReactionToIssue(issueNumber: number, reaction: GitHubReaction) {
 			await octokit.rest.reactions.createForIssue({
 				owner: context.repo.owner,
 				repo: context.repo.repo,
 				issue_number: issueNumber,
-				content: reaction as
-					| "+1"
-					| "-1"
-					| "laugh"
-					| "confused"
-					| "heart"
-					| "hooray"
-					| "rocket"
-					| "eyes",
+				content: reaction,
 			});
 		},
 
@@ -134,7 +135,7 @@ export function createGitHubClient(
 export async function addReaction(
 	client: GitHubClient,
 	triggerInfo: TriggerInfo,
-	reaction: string,
+	reaction: GitHubReaction,
 ): Promise<void> {
 	if (triggerInfo.isCommentEvent && triggerInfo.commentId) {
 		await client.addReactionToComment(triggerInfo.commentId, reaction);
