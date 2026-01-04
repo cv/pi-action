@@ -135,13 +135,14 @@ jobs:
 
 ### Git Hooks for the Agent
 
-The action automatically installs git hooks in your repository before running the agent. This ensures that any commits made by the pi agent follow your project's conventions:
+The action automatically installs **lightweight, standalone git hooks** in your repository before running the agent. These hooks have no dependencies and work with any language/stack:
 
-- **pre-commit**: Runs tests, type checking, linting, and verifies build artifacts
 - **commit-msg**: Enforces [Conventional Commits](https://www.conventionalcommits.org/) format
-- **pre-push**: Verifies test coverage thresholds
+- **prepare-commit-msg**: Auto-appends issue numbers from branch names
 
-This means the agent cannot make commits that violate your project standards.
+**Important**: These hooks are only installed if no existing hook is present - your existing hooks are never overwritten.
+
+This ensures the agent follows conventional commit format without imposing any tooling requirements on your repository.
 
 ## Security
 

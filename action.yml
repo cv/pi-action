@@ -35,51 +35,87 @@ runs:
       shell: bash
       run: npm ci --prefix ${{ github.action_path }}
     
-    - name: Install repository git hooks
+    - name: Install pi-agent git hooks
       shell: bash
       run: |
-        # Install husky and commitlint in the target repository if it has a package.json
-        if [ -f "package.json" ]; then
-          echo "📦 Installing git hooks in target repository..."
-          
-          # Check if husky is already a dependency
-          if grep -q '"husky"' package.json; then
-            echo "Husky already in package.json, running npm ci to install hooks..."
-            npm ci
-          else
-            echo "Adding husky and commitlint as dev dependencies..."
-            npm install --save-dev husky @commitlint/cli @commitlint/config-conventional
-            
-            # Initialize husky
-            npx husky init
-          fi
-          
-          # Copy hook files from action to target repo if they don't exist
-          ACTION_HOOKS="${{ github.action_path }}/.husky"
-          TARGET_HOOKS=".husky"
-          
-          if [ -d "$ACTION_HOOKS" ]; then
-            mkdir -p "$TARGET_HOOKS"
-            
-            for hook in pre-commit commit-msg prepare-commit-msg pre-push; do
-              if [ -f "$ACTION_HOOKS/$hook" ] && [ ! -f "$TARGET_HOOKS/$hook" ]; then
-                echo "Installing $hook hook..."
-                cp "$ACTION_HOOKS/$hook" "$TARGET_HOOKS/$hook"
-                chmod +x "$TARGET_HOOKS/$hook"
-              fi
-            done
-          fi
-          
-          # Copy commitlint config if it doesn't exist
-          if [ -f "${{ github.action_path }}/commitlint.config.js" ] && [ ! -f "commitlint.config.js" ]; then
-            echo "Installing commitlint config..."
-            cp "${{ github.action_path }}/commitlint.config.js" ./
-          fi
-          
-          echo "✅ Git hooks installed!"
-        else
-          echo "⚠️ No package.json found, skipping git hooks installation"
+        # Install lightweight git hooks that enforce conventional commits
+        # These are standalone shell scripts with no dependencies
+        
+        HOOKS_DIR=".git/hooks"
+        
+        if [ ! -d "$HOOKS_DIR" ]; then
+          echo "⚠️ Not a git repository, skipping hooks installation"
+          exit 0
         fi
+        
+        echo "🪝 Installing pi-agent git hooks..."
+        
+        # Create commit-msg hook for conventional commits (standalone, no deps)
+        # Only install if no existing hook
+        if [ ! -f "$HOOKS_DIR/commit-msg" ]; then
+          cat > "$HOOKS_DIR/commit-msg" << 'HOOK'
+        #!/bin/sh
+        # pi-agent: Enforce conventional commits format
+        # This hook is installed by pi-action to ensure agent commits follow conventions
+        
+        commit_msg=$(cat "$1")
+        
+        # Pattern for conventional commits: type(scope)?: description
+        pattern="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?: .{1,}"
+        
+        if ! echo "$commit_msg" | grep -qE "$pattern"; then
+          echo ""
+          echo "❌ Commit message does not follow Conventional Commits format!"
+          echo ""
+          echo "Expected format: type(scope?): description"
+          echo ""
+          echo "Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+          echo ""
+          echo "Examples:"
+          echo "  feat: add new feature"
+          echo "  fix(auth): resolve login issue"
+          echo "  docs: update README"
+          echo ""
+          echo "Your message: $commit_msg"
+          echo ""
+          exit 1
+        fi
+        HOOK
+          chmod +x "$HOOKS_DIR/commit-msg"
+          echo "  ✓ commit-msg hook installed (conventional commits)"
+        else
+          echo "  ⏭️ commit-msg hook already exists, skipping"
+        fi
+        
+        # Create prepare-commit-msg hook for auto-linking issues
+        if [ ! -f "$HOOKS_DIR/prepare-commit-msg" ]; then
+          cat > "$HOOKS_DIR/prepare-commit-msg" << 'HOOK'
+        #!/bin/sh
+        # pi-agent: Auto-append issue number from branch name
+        
+        COMMIT_MSG_FILE=$1
+        COMMIT_SOURCE=$2
+        
+        # Only for regular commits (not merge, squash, etc.)
+        if [ -z "$COMMIT_SOURCE" ]; then
+          BRANCH_NAME=$(git symbolic-ref --short HEAD 2>/dev/null)
+          ISSUE_NUMBER=$(echo "$BRANCH_NAME" | grep -oE '[0-9]+' | head -1)
+          
+          if [ -n "$ISSUE_NUMBER" ]; then
+            if ! grep -qE "#$ISSUE_NUMBER" "$COMMIT_MSG_FILE"; then
+              echo "" >> "$COMMIT_MSG_FILE"
+              echo "Refs #$ISSUE_NUMBER" >> "$COMMIT_MSG_FILE"
+            fi
+          fi
+        fi
+        HOOK
+          chmod +x "$HOOKS_DIR/prepare-commit-msg"
+          echo "  ✓ prepare-commit-msg hook installed (auto issue linking)"
+        else
+          echo "  ⏭️ prepare-commit-msg hook already exists, skipping"
+        fi
+        
+        echo "✅ Git hooks ready!"
     
     - name: Run pi-action
       shell: bash
