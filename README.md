@@ -11,6 +11,7 @@ A GitHub Action that invokes the [pi coding agent](https://github.com/mariozechn
 - 🆕 Trigger on issue/PR creation, not just comments
 - 🔀 Automatically includes PR diffs for code review tasks
 - 📦 Uses the pi SDK directly - no separate installation needed
+- 🪝 Auto-installs git hooks to enforce commit conventions for the agent
 
 ## Usage
 
@@ -128,8 +129,19 @@ jobs:
 1. When a comment or issue/PR containing the trigger phrase is posted, the action is triggered
 2. The action validates that the author has write access to the repository
 3. An 👀 reaction is added to acknowledge the request
-4. The pi SDK is invoked with the issue/PR context and the task from the trigger
-5. The response is posted as a new comment with a 🚀 reaction
+4. **Git hooks are installed** in the target repository (husky + commitlint) to enforce commit conventions
+5. The pi SDK is invoked with the issue/PR context and the task from the trigger
+6. The response is posted as a new comment with a 🚀 reaction
+
+### Git Hooks for the Agent
+
+The action automatically installs git hooks in your repository before running the agent. This ensures that any commits made by the pi agent follow your project's conventions:
+
+- **pre-commit**: Runs tests, type checking, linting, and verifies build artifacts
+- **commit-msg**: Enforces [Conventional Commits](https://www.conventionalcommits.org/) format
+- **pre-push**: Verifies test coverage thresholds
+
+This means the agent cannot make commits that violate your project standards.
 
 ## Security
 

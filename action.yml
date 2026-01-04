@@ -31,9 +31,55 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Install dependencies
+    - name: Install action dependencies
       shell: bash
       run: npm ci --prefix ${{ github.action_path }}
+    
+    - name: Install repository git hooks
+      shell: bash
+      run: |
+        # Install husky and commitlint in the target repository if it has a package.json
+        if [ -f "package.json" ]; then
+          echo "📦 Installing git hooks in target repository..."
+          
+          # Check if husky is already a dependency
+          if grep -q '"husky"' package.json; then
+            echo "Husky already in package.json, running npm ci to install hooks..."
+            npm ci
+          else
+            echo "Adding husky and commitlint as dev dependencies..."
+            npm install --save-dev husky @commitlint/cli @commitlint/config-conventional
+            
+            # Initialize husky
+            npx husky init
+          fi
+          
+          # Copy hook files from action to target repo if they don't exist
+          ACTION_HOOKS="${{ github.action_path }}/.husky"
+          TARGET_HOOKS=".husky"
+          
+          if [ -d "$ACTION_HOOKS" ]; then
+            mkdir -p "$TARGET_HOOKS"
+            
+            for hook in pre-commit commit-msg prepare-commit-msg pre-push; do
+              if [ -f "$ACTION_HOOKS/$hook" ] && [ ! -f "$TARGET_HOOKS/$hook" ]; then
+                echo "Installing $hook hook..."
+                cp "$ACTION_HOOKS/$hook" "$TARGET_HOOKS/$hook"
+                chmod +x "$TARGET_HOOKS/$hook"
+              fi
+            done
+          fi
+          
+          # Copy commitlint config if it doesn't exist
+          if [ -f "${{ github.action_path }}/commitlint.config.js" ] && [ ! -f "commitlint.config.js" ]; then
+            echo "Installing commitlint config..."
+            cp "${{ github.action_path }}/commitlint.config.js" ./
+          fi
+          
+          echo "✅ Git hooks installed!"
+        else
+          echo "⚠️ No package.json found, skipping git hooks installation"
+        fi
     
     - name: Run pi-action
       shell: bash
