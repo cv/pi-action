@@ -13,11 +13,16 @@ import { buildPrompt } from "./context.js";
 import type { AgentResult } from "./types.js";
 import { getErrorMessage } from "./utils.js";
 
+export interface AgentLogger {
+	info: (msg: string) => void;
+}
+
 export interface AgentConfig {
 	provider: string;
 	model: string;
 	timeout: number;
 	cwd: string;
+	logger?: AgentLogger;
 	promptTemplate?: string;
 }
 
@@ -65,13 +70,39 @@ export async function runAgent(
 			slashCommands: [],
 		});
 
-		// Subscribe to collect response
+		const log = config.logger ?? { info: () => {} };
+
+		// Subscribe to collect response and log events
 		session.subscribe((event) => {
-			if (
-				event.type === "message_update" &&
-				event.assistantMessageEvent.type === "text_delta"
-			) {
-				response += event.assistantMessageEvent.delta;
+			switch (event.type) {
+				case "turn_start":
+					log.info("🔄 Turn started");
+					break;
+				case "turn_end":
+					log.info("✅ Turn completed");
+					break;
+				case "tool_execution_start":
+					log.info(`🔧 Tool: ${event.toolName}`);
+					if (event.toolName === "bash" && event.args?.command) {
+						log.info(`   $ ${event.args.command}`);
+					} else if (event.toolName === "read" && event.args?.path) {
+						log.info(`   📖 ${event.args.path}`);
+					} else if (event.toolName === "write" && event.args?.path) {
+						log.info(`   ✏️ ${event.args.path}`);
+					} else if (event.toolName === "edit" && event.args?.path) {
+						log.info(`   📝 ${event.args.path}`);
+					}
+					break;
+				case "tool_execution_end":
+					if (event.isError) {
+						log.info(`   ❌ Tool error: ${event.toolName}`);
+					}
+					break;
+				case "message_update":
+					if (event.assistantMessageEvent.type === "text_delta") {
+						response += event.assistantMessageEvent.delta;
+					}
+					break;
 			}
 		});
 

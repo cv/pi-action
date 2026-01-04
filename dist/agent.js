@@ -35,11 +35,41 @@ export async function runAgent(piContext, config, authStorage, modelRegistry) {
             contextFiles: [],
             slashCommands: [],
         });
-        // Subscribe to collect response
+        const log = config.logger ?? { info: () => { } };
+        // Subscribe to collect response and log events
         session.subscribe((event) => {
-            if (event.type === "message_update" &&
-                event.assistantMessageEvent.type === "text_delta") {
-                response += event.assistantMessageEvent.delta;
+            switch (event.type) {
+                case "turn_start":
+                    log.info("🔄 Turn started");
+                    break;
+                case "turn_end":
+                    log.info("✅ Turn completed");
+                    break;
+                case "tool_execution_start":
+                    log.info(`🔧 Tool: ${event.toolName}`);
+                    if (event.toolName === "bash" && event.args?.command) {
+                        log.info(`   $ ${event.args.command}`);
+                    }
+                    else if (event.toolName === "read" && event.args?.path) {
+                        log.info(`   📖 ${event.args.path}`);
+                    }
+                    else if (event.toolName === "write" && event.args?.path) {
+                        log.info(`   ✏️ ${event.args.path}`);
+                    }
+                    else if (event.toolName === "edit" && event.args?.path) {
+                        log.info(`   📝 ${event.args.path}`);
+                    }
+                    break;
+                case "tool_execution_end":
+                    if (event.isError) {
+                        log.info(`   ❌ Tool error: ${event.toolName}`);
+                    }
+                    break;
+                case "message_update":
+                    if (event.assistantMessageEvent.type === "text_delta") {
+                        response += event.assistantMessageEvent.delta;
+                    }
+                    break;
             }
         });
         // Create a timeout promise

@@ -67,6 +67,7 @@ export async function run(deps) {
         model: inputs.model,
         timeout: inputs.timeout,
         cwd,
+        logger: log,
         promptTemplate: inputs.promptTemplate,
     });
     if (result.success) {

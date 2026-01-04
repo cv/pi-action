@@ -56,54 +56,63 @@ describe("extractTask", () => {
 });
 
 describe("renderTemplate", () => {
-	const mockContext = {
+	const context = {
 		type: "issue" as const,
-		title: "Bug Report",
-		body: "Something is broken",
+		title: "Test Issue",
+		body: "Issue body",
 		number: 42,
-		triggerComment: "@pi help",
-		task: "help",
+		triggerComment: "@pi help me",
+		task: "help me",
+		diff: undefined,
 	};
 
-	it("renders all variables correctly", () => {
-		const template =
-			"Type: {{type}}, Display: {{type_display}}, Number: {{number}}, Title: {{title}}, Body: {{body}}, Task: {{task}}, Comment: {{trigger_comment}}";
-		const result = renderTemplate(template, mockContext);
-
-		expect(result).toBe(
-			"Type: issue, Display: Issue, Number: 42, Title: Bug Report, Body: Something is broken, Task: help, Comment: @pi help",
-		);
+	it("replaces all template variables", () => {
+		const template = "{{type}} #{{number}}: {{title}} - {{task}}";
+		const result = renderTemplate(template, context);
+		expect(result).toBe("issue #42: Test Issue - help me");
 	});
 
-	it("handles diff variable for PR", () => {
-		const prContext = {
-			...mockContext,
-			type: "pull_request" as const,
-			diff: "+ added line\n- removed line",
-		};
-		const template = "{{type_display}} has diff: {{diff}}";
+	it("handles type_display variable", () => {
+		const template = "{{type_display}} {{number}}";
+		const result = renderTemplate(template, context);
+		expect(result).toBe("Issue 42");
+	});
+
+	it("handles PR type_display", () => {
+		const template = "{{type_display}} {{number}}";
+		const prContext = { ...context, type: "pull_request" as const };
 		const result = renderTemplate(template, prContext);
-
-		expect(result).toBe("Pull Request has diff: + added line\n- removed line");
+		expect(result).toBe("Pull Request 42");
 	});
 
-	it("handles missing diff as empty string", () => {
-		const template = "Diff: '{{diff}}'";
-		const result = renderTemplate(template, mockContext);
+	it("handles empty diff", () => {
+		const template = "Diff: {{diff}}";
+		const result = renderTemplate(template, context);
+		expect(result).toBe("Diff: ");
+	});
 
-		expect(result).toBe("Diff: ''");
+	it("handles diff with content", () => {
+		const template = "Changes:\n{{diff}}";
+		const contextWithDiff = { ...context, diff: "+ added line" };
+		const result = renderTemplate(template, contextWithDiff);
+		expect(result).toBe("Changes:\n+ added line");
+	});
+
+	it("leaves unknown placeholders unchanged", () => {
+		const template = "{{unknown}} {{title}}";
+		const result = renderTemplate(template, context);
+		expect(result).toBe("{{unknown}} Test Issue");
 	});
 
 	it("handles multiple occurrences of same variable", () => {
-		const template = "{{title}} - {{title}} - {{title}}";
-		const result = renderTemplate(template, mockContext);
-
-		expect(result).toBe("Bug Report - Bug Report - Bug Report");
+		const template = "{{title}} - {{title}}";
+		const result = renderTemplate(template, context);
+		expect(result).toBe("Test Issue - Test Issue");
 	});
 });
 
 describe("buildPrompt", () => {
-	it("builds issue prompt", () => {
+	it("builds default issue prompt when no template provided", () => {
 		const prompt = buildPrompt({
 			type: "issue",
 			title: "Bug Report",
@@ -119,7 +128,7 @@ describe("buildPrompt", () => {
 		expect(prompt).toContain("## Task\nhelp");
 	});
 
-	it("builds PR prompt with diff", () => {
+	it("builds default PR prompt with diff", () => {
 		const prompt = buildPrompt({
 			type: "pull_request",
 			title: "Add feature",
@@ -135,7 +144,7 @@ describe("buildPrompt", () => {
 	});
 
 	it("uses custom template when provided", () => {
-		const customTemplate = "Custom: {{title}} - {{task}}";
+		const customTemplate = "Task: {{task}} for {{type_display}} #{{number}}";
 		const prompt = buildPrompt(
 			{
 				type: "issue",
@@ -148,10 +157,10 @@ describe("buildPrompt", () => {
 			customTemplate,
 		);
 
-		expect(prompt).toBe("Custom: Bug Report - help");
+		expect(prompt).toBe("Task: help for Issue #42");
 	});
 
-	it("falls back to default template when custom is empty", () => {
+	it("ignores empty custom template", () => {
 		const prompt = buildPrompt(
 			{
 				type: "issue",
@@ -162,6 +171,22 @@ describe("buildPrompt", () => {
 				task: "help",
 			},
 			"",
+		);
+
+		expect(prompt).toContain("# GitHub Issue #42");
+	});
+
+	it("ignores whitespace-only custom template", () => {
+		const prompt = buildPrompt(
+			{
+				type: "issue",
+				title: "Bug Report",
+				body: "Something is broken",
+				number: 42,
+				triggerComment: "@pi help",
+				task: "help",
+			},
+			"   \n  ",
 		);
 
 		expect(prompt).toContain("# GitHub Issue #42");

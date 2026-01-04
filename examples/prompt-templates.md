@@ -1,23 +1,27 @@
 # Custom Prompt Template Examples
 
-This document provides examples of how to use the `prompt_template` feature to customize how GitHub issue/PR context is presented to the pi agent.
+This document provides ready-to-use custom prompt templates for various use cases.
 
-## Available Template Variables
+## Available Variables
+
+Use these placeholder variables in your custom templates:
 
 | Variable | Description | Example |
-|----------|-------------|---------|
+|----------|-------------|----------|
 | `{{type}}` | Context type | `issue` or `pull_request` |
 | `{{type_display}}` | Human-readable type | `Issue` or `Pull Request` |
 | `{{number}}` | Issue/PR number | `42` |
 | `{{title}}` | Issue/PR title | `Fix login bug` |
-| `{{body}}` | Issue/PR description/body | The full description text |
-| `{{task}}` | Extracted task (text after trigger phrase) | `please review this code` |
-| `{{diff}}` | PR diff (empty string for issues) | The unified diff content |
+| `{{body}}` | Issue/PR description/body | Full description text |
+| `{{task}}` | Extracted task (after trigger phrase) | `please review this code` |
+| `{{diff}}` | PR diff (empty for issues) | Unified diff content |
 | `{{trigger_comment}}` | Full trigger comment text | `@pi please review this code` |
 
-## Example Templates
+## Template Examples
 
 ### 1. Basic Custom Template
+
+Simple structure modification:
 
 ```yaml
 - uses: cv/pi-action@v1
@@ -27,115 +31,201 @@ This document provides examples of how to use the `prompt_template` feature to c
       # Task for {{type_display}} #{{number}}
       
       **Title:** {{title}}
+      **Task:** {{task}}
       
-      **Description:**
+      ## Context
       {{body}}
       
-      **Your Task:**
-      {{task}}
-      
-      ## Guidelines
-      - Follow our coding standards
-      - Write tests for any new code
-      - Use conventional commits
+      Please help with this request.
 ```
 
-### 2. Code Review Template (for PRs)
+### 2. Code Review Template
+
+Focused on pull request reviews:
 
 ```yaml
 - uses: cv/pi-action@v1
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     prompt_template: |
-      # Code Review Request for PR #{{number}}
+      # Code Review for PR #{{number}}: {{title}}
       
-      ## PR Title
-      {{title}}
-      
-      ## PR Description
+      ## Description
       {{body}}
       
-      ## Review Task
+      ## Review Request
       {{task}}
       
-      ## Diff to Review
+      ## Changes
       ```diff
       {{diff}}
       ```
       
       ## Review Guidelines
       - Check for security vulnerabilities
-      - Verify error handling
-      - Ensure adequate test coverage
+      - Verify test coverage
+      - Ensure code follows our style guide
       - Flag any performance concerns
-      - Suggest improvements where appropriate
+      - Suggest improvements where applicable
+      
+      Please provide a thorough code review.
 ```
 
 ### 3. Minimal Template
 
+Just the essential information:
+
 ```yaml
 - uses: cv/pi-action@v1
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
-    prompt_template: "{{task}}"
+    prompt_template: |
+      **Task:** {{task}}
+      
+      **Context:** {{title}}
+      {{body}}
 ```
 
 ### 4. Issue Triage Template
 
-```yaml
-- uses: cv/pi-action@v1
-  with:
-    github_token: ${{ secrets.GITHUB_TOKEN }}
-    prompt_template: |
-      # Issue Triage - {{type_display}} #{{number}}
-      
-      **Title:** {{title}}
-      **Body:** {{body}}
-      **Task:** {{task}}
-      
-      Please help with:
-      1. Categorize this issue (bug, feature, enhancement, question)
-      2. Assign appropriate labels
-      3. Determine priority level
-      4. Suggest next steps
-```
-
-### 5. Documentation Review Template
+Specialized for bug reports and feature requests:
 
 ```yaml
 - uses: cv/pi-action@v1
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     prompt_template: |
-      # Documentation Review
+      # {{type_display}} Triage: {{title}}
       
-      {{type_display}}: {{title}} (#{{number}})
-      
-      Content to review:
+      ## Issue Details
       {{body}}
       
-      Task: {{task}}
+      ## Triage Request
+      {{task}}
       
-      Please review for:
-      - Clarity and readability
-      - Technical accuracy
-      - Missing information
-      - Formatting and structure
-      - Grammar and spelling
+      ## Triage Guidelines
+      - Classify the issue type (bug/feature/enhancement)
+      - Assess priority and severity
+      - Identify affected components
+      - Suggest labels and assignees
+      - Provide initial troubleshooting steps if applicable
+      
+      Please analyze this issue and provide triage recommendations.
+```
+
+### 5. Documentation Template
+
+For documentation-focused assistance:
+
+```yaml
+- uses: cv/pi-action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    prompt_template: |
+      # Documentation Task: {{title}}
+      
+      ## Request
+      {{task}}
+      
+      ## Context
+      {{body}}
+      
+      ## Documentation Standards
+      - Use clear, concise language
+      - Include practical examples
+      - Follow our style guide
+      - Ensure accessibility
+      - Add cross-references where appropriate
+      
+      Please help improve our documentation.
+```
+
+### 6. Testing Template
+
+Focused on test-related tasks:
+
+```yaml
+- uses: cv/pi-action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    prompt_template: |
+      # Testing Task for {{type_display}} #{{number}}
+      
+      **Title:** {{title}}
+      **Request:** {{task}}
+      
+      ## Context
+      {{body}}
+      
+      {{#if diff}}
+      ## Code Changes
+      ```diff
+      {{diff}}
+      ```
+      {{/if}}
+      
+      ## Testing Requirements
+      - Write comprehensive unit tests
+      - Include integration tests where needed
+      - Ensure edge cases are covered
+      - Follow TDD practices
+      - Maintain high code coverage
+      
+      Please help with testing requirements.
+```
+
+### 7. Security Review Template
+
+For security-focused reviews:
+
+```yaml
+- uses: cv/pi-action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    prompt_template: |
+      # Security Review: {{title}}
+      
+      ## Security Assessment Request
+      {{task}}
+      
+      ## Details
+      {{body}}
+      
+      ## Code Changes
+      {{diff}}
+      
+      ## Security Checklist
+      - [ ] Input validation and sanitization
+      - [ ] Authentication and authorization
+      - [ ] Data encryption and secure storage
+      - [ ] SQL injection prevention
+      - [ ] XSS protection
+      - [ ] CSRF protection
+      - [ ] Dependency vulnerabilities
+      - [ ] Secrets management
+      
+      Please conduct a thorough security review.
 ```
 
 ## Usage Tips
 
-1. **Empty Template**: If `prompt_template` is not provided or is empty, the default template will be used
-2. **Variable Substitution**: All `{{variable}}` placeholders are replaced with actual values
-3. **Missing Variables**: Unknown placeholders are left as-is (not replaced)
-4. **Diff Variable**: `{{diff}}` will be empty for issues, only populated for pull requests
-5. **Multiline Support**: Templates can span multiple lines and include markdown formatting
+1. **Test your templates**: Start with simple templates and gradually add complexity
+2. **Include context**: Even with custom templates, provide enough context for the AI
+3. **Be specific**: Clear instructions lead to better results
+4. **Maintain consistency**: Use similar templates across your project for consistency
+5. **Version control**: Store your templates in your repository for team sharing
 
-## Testing Your Template
+## Conditional Logic
 
-You can test your template by:
-1. Creating a draft PR with your template changes
-2. Using `@pi test this template` in a comment
-3. Checking if the resulting prompt contains the expected content
-4. Iterating on the template format as needed
+Note that the template system uses simple variable replacement. For more complex conditional logic (like showing diff only for PRs), you might need to:
+
+1. Create separate workflow files for issues vs PRs
+2. Use different templates for different event types
+3. Handle the logic in your template content
+
+## Troubleshooting
+
+- **Variables not replaced**: Check variable names match exactly (case-sensitive)
+- **Empty output**: Ensure template isn't empty or whitespace-only
+- **Malformed templates**: Unknown `{{variables}}` are left as-is, not errors
+- **Long templates**: No size limits, but consider readability

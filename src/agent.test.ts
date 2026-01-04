@@ -307,32 +307,205 @@ describe("runAgent", () => {
 		expect(capturedPrompt).toContain("+added line");
 	});
 
-	it("uses custom template when provided", async () => {
+	it("logs tool executions when logger is provided", async () => {
 		const mockModel = { provider: "anthropic", id: "claude-sonnet-4-20250514" };
 		const mockRegistry = {
 			find: vi.fn(() => mockModel),
 		};
 		mockDiscoverModels.mockReturnValue(mockRegistry);
 
-		let capturedPrompt = "";
+		const logMessages: string[] = [];
+		const mockLogger = {
+			info: vi.fn((msg: string) => logMessages.push(msg)),
+		};
+
+		let subscribeCallback: ((event: unknown) => void) | null = null;
 		const mockSession = {
-			subscribe: vi.fn(),
-			prompt: vi.fn((prompt: string) => {
-				capturedPrompt = prompt;
+			subscribe: vi.fn((cb) => {
+				subscribeCallback = cb;
+			}),
+			prompt: vi.fn(async () => {
+				if (subscribeCallback) {
+					subscribeCallback({ type: "turn_start" });
+					subscribeCallback({
+						type: "tool_execution_start",
+						toolName: "bash",
+						args: { command: "ls -la" },
+					});
+					subscribeCallback({
+						type: "tool_execution_end",
+						toolName: "bash",
+						isError: false,
+					});
+					subscribeCallback({
+						type: "tool_execution_start",
+						toolName: "read",
+						args: { path: "/test/file.ts" },
+					});
+					subscribeCallback({
+						type: "tool_execution_end",
+						toolName: "read",
+						isError: false,
+					});
+					subscribeCallback({
+						type: "tool_execution_start",
+						toolName: "write",
+						args: { path: "/test/new.ts" },
+					});
+					subscribeCallback({
+						type: "tool_execution_end",
+						toolName: "write",
+						isError: false,
+					});
+					subscribeCallback({
+						type: "tool_execution_start",
+						toolName: "edit",
+						args: { path: "/test/edit.ts" },
+					});
+					subscribeCallback({
+						type: "tool_execution_end",
+						toolName: "edit",
+						isError: false,
+					});
+					subscribeCallback({ type: "turn_end" });
+					subscribeCallback({
+						type: "message_update",
+						assistantMessageEvent: { type: "text_delta", delta: "Done" },
+					});
+				}
 			}),
 		};
 		mockCreateAgentSession.mockResolvedValue({ session: mockSession });
 
-		const configWithTemplate: AgentConfig = {
-			...defaultConfig,
-			promptTemplate: "Custom template: {{title}} - Task: {{task}}",
+		await runAgent(defaultContext, { ...defaultConfig, logger: mockLogger });
+
+		expect(logMessages).toContain("🔄 Turn started");
+		expect(logMessages).toContain("🔧 Tool: bash");
+		expect(logMessages).toContain("   $ ls -la");
+		expect(logMessages).toContain("🔧 Tool: read");
+		expect(logMessages).toContain("   📖 /test/file.ts");
+		expect(logMessages).toContain("🔧 Tool: write");
+		expect(logMessages).toContain("   ✏️ /test/new.ts");
+		expect(logMessages).toContain("🔧 Tool: edit");
+		expect(logMessages).toContain("   📝 /test/edit.ts");
+		expect(logMessages).toContain("✅ Turn completed");
+	});
+
+	it("logs tool errors", async () => {
+		const mockModel = { provider: "anthropic", id: "claude-sonnet-4-20250514" };
+		const mockRegistry = {
+			find: vi.fn(() => mockModel),
+		};
+		mockDiscoverModels.mockReturnValue(mockRegistry);
+
+		const logMessages: string[] = [];
+		const mockLogger = {
+			info: vi.fn((msg: string) => logMessages.push(msg)),
 		};
 
-		await runAgent(defaultContext, configWithTemplate);
+		let subscribeCallback: ((event: unknown) => void) | null = null;
+		const mockSession = {
+			subscribe: vi.fn((cb) => {
+				subscribeCallback = cb;
+			}),
+			prompt: vi.fn(async () => {
+				if (subscribeCallback) {
+					subscribeCallback({
+						type: "tool_execution_start",
+						toolName: "bash",
+						args: { command: "exit 1" },
+					});
+					subscribeCallback({
+						type: "tool_execution_end",
+						toolName: "bash",
+						isError: true,
+					});
+					subscribeCallback({
+						type: "message_update",
+						assistantMessageEvent: { type: "text_delta", delta: "Failed" },
+					});
+				}
+			}),
+		};
+		mockCreateAgentSession.mockResolvedValue({ session: mockSession });
 
-		expect(capturedPrompt).toBe(
-			"Custom template: Test Issue - Task: do something",
-		);
-		expect(capturedPrompt).not.toContain("GitHub Issue");
+		await runAgent(defaultContext, { ...defaultConfig, logger: mockLogger });
+
+		expect(logMessages).toContain("   ❌ Tool error: bash");
+	});
+
+	it("handles tools without args gracefully", async () => {
+		const mockModel = { provider: "anthropic", id: "claude-sonnet-4-20250514" };
+		const mockRegistry = {
+			find: vi.fn(() => mockModel),
+		};
+		mockDiscoverModels.mockReturnValue(mockRegistry);
+
+		const logMessages: string[] = [];
+		const mockLogger = {
+			info: vi.fn((msg: string) => logMessages.push(msg)),
+		};
+
+		let subscribeCallback: ((event: unknown) => void) | null = null;
+		const mockSession = {
+			subscribe: vi.fn((cb) => {
+				subscribeCallback = cb;
+			}),
+			prompt: vi.fn(async () => {
+				if (subscribeCallback) {
+					subscribeCallback({
+						type: "tool_execution_start",
+						toolName: "custom_tool",
+						args: {},
+					});
+					subscribeCallback({
+						type: "tool_execution_end",
+						toolName: "custom_tool",
+						isError: false,
+					});
+					subscribeCallback({
+						type: "message_update",
+						assistantMessageEvent: { type: "text_delta", delta: "Done" },
+					});
+				}
+			}),
+		};
+		mockCreateAgentSession.mockResolvedValue({ session: mockSession });
+
+		await runAgent(defaultContext, { ...defaultConfig, logger: mockLogger });
+
+		expect(logMessages).toContain("🔧 Tool: custom_tool");
+		// Should not have additional log lines for args since they're empty
+		expect(logMessages.filter((m) => m.startsWith("   "))).toHaveLength(0);
+	});
+
+	it("passes custom prompt template through to buildPrompt", async () => {
+		const mockModel = { id: "test-model", name: "Test Model" };
+		const mockSession = {
+			subscribe: vi.fn((cb) => {
+				cb({
+					type: "message_update",
+					assistantMessageEvent: { type: "text_delta", delta: "Response" },
+				});
+			}),
+			prompt: vi.fn(async () => {}),
+		};
+
+		mockDiscoverModels.mockReturnValue({
+			find: vi.fn().mockReturnValue(mockModel),
+		});
+		mockCreateAgentSession.mockResolvedValue({ session: mockSession });
+
+		const customTemplate = "Custom: {{task}} for {{number}}";
+		await runAgent(defaultContext, {
+			...defaultConfig,
+			promptTemplate: customTemplate,
+		});
+
+		// Verify that the session.prompt was called with the custom template result
+		// Since we can't easily mock buildPrompt, we'll verify that it was called
+		expect(mockSession.prompt).toHaveBeenCalled();
+		const promptArg = mockSession.prompt.mock.calls[0][0];
+		expect(promptArg).toBe("Custom: do something for 1");
 	});
 });
