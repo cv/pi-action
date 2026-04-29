@@ -9,7 +9,12 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import type { PIContext } from "./context.js";
 import { buildPrompt } from "./context.js";
-import type { AgentResult, ModelConfig, Session } from "./types.js";
+import type {
+	AgentResult,
+	CustomProviderConfig,
+	ModelConfig,
+	Session,
+} from "./types.js";
 import { getErrorMessage, withTimeout } from "./utils.js";
 
 export interface AgentLogger {
@@ -20,6 +25,7 @@ export interface AgentConfig extends ModelConfig {
 	cwd: string;
 	logger?: AgentLogger;
 	apiKey?: string;
+	customProvider?: CustomProviderConfig;
 	promptTemplate?: string;
 }
 
@@ -85,6 +91,46 @@ function createSessionEventHandler(
 	};
 }
 
+function registerCustomProvider(
+	modelRegistry: ModelRegistry,
+	config: AgentConfig,
+): string | undefined {
+	const customProvider = config.customProvider;
+	if (!customProvider) {
+		return undefined;
+	}
+
+	const providerApiKey =
+		customProvider.apiKey ?? (config.apiKey ? config.provider : undefined);
+	if (!providerApiKey) {
+		return "api_key or provider_api_key is required when provider_base_url is set";
+	}
+
+	try {
+		modelRegistry.registerProvider(config.provider, {
+			baseUrl: customProvider.baseUrl,
+			api: customProvider.api,
+			apiKey: providerApiKey,
+			authHeader: customProvider.authHeader,
+			models: [
+				{
+					id: config.model,
+					name: customProvider.modelName ?? config.model,
+					reasoning: customProvider.reasoning,
+					input: customProvider.input,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: customProvider.contextWindow,
+					maxTokens: customProvider.maxTokens,
+					...(customProvider.compat ? { compat: customProvider.compat } : {}),
+				},
+			],
+		});
+	} catch (error) {
+		return getErrorMessage(error);
+	}
+	return undefined;
+}
+
 export async function runAgent(
 	piContext: PIContext,
 	config: AgentConfig,
@@ -99,6 +145,10 @@ export async function runAgent(
 		auth.setRuntimeApiKey(config.provider, config.apiKey);
 	}
 	const models = modelRegistry ?? ModelRegistry.inMemory(auth);
+	const customProviderError = registerCustomProvider(models, config);
+	if (customProviderError) {
+		return { success: false, error: customProviderError };
+	}
 
 	// Find the model
 	const model = models.find(config.provider, config.model);

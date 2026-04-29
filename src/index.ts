@@ -1,5 +1,6 @@
 import * as core from "@actions/core";
 import * as github from "@actions/github";
+import { readCustomProviderConfig } from "./custom-provider.js";
 import { DEFAULTS } from "./defaults.js";
 import { createGitHubClient } from "./github.js";
 import {
@@ -32,6 +33,7 @@ run({
 		githubToken: core.getInput("github_token") || process.env[GITHUB_TOKEN_ENV],
 		gistToken: core.getInput("gist_token") || undefined,
 		apiKey: core.getInput("api_key") || undefined,
+		customProvider: readCustomProviderConfig(core.getInput),
 		promptTemplate: core.getInput("prompt_template"),
 		shareSession: parseBooleanInput(
 			core.getInput("share_session"),

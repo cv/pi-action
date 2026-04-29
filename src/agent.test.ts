@@ -31,6 +31,7 @@ vi.mock("@mariozechner/pi-coding-agent", () => {
 				find: vi.fn(),
 				getAll: vi.fn(() => []),
 				getAvailable: vi.fn(() => []),
+				registerProvider: vi.fn(),
 			})),
 		},
 		createAgentSession: vi.fn(() => Promise.resolve({ session: mockSession })),
@@ -300,6 +301,86 @@ describe("runAgent", () => {
 			"anthropic",
 			"sk-test",
 		);
+	});
+
+	it("registers a single custom provider/model", async () => {
+		const mockModel = { provider: "nvidia", id: "openai/openai/gpt-5.5" };
+		const mockRegistry = {
+			find: vi.fn(() => mockModel),
+			registerProvider: vi.fn(),
+		};
+		mockModelRegistryInMemory.mockReturnValue(mockRegistry);
+		mockCreateAgentSession.mockResolvedValue({ session: createMockSession() });
+
+		await runAgent(defaultContext, {
+			...defaultConfig,
+			provider: "nvidia",
+			model: "openai/openai/gpt-5.5",
+			apiKey: "sk-test",
+			customProvider: {
+				baseUrl: "https://inference-api.nvidia.com",
+				api: "openai-responses",
+				authHeader: false,
+				modelName: "GPT-5.5 (OpenAI)",
+				reasoning: true,
+				input: ["text", "image"],
+				contextWindow: 1050000,
+				maxTokens: 16384,
+				compat: {
+					supportsDeveloperRole: false,
+					supportsReasoningEffort: false,
+				},
+			},
+		});
+
+		expect(mockRegistry.registerProvider).toHaveBeenCalledWith("nvidia", {
+			baseUrl: "https://inference-api.nvidia.com",
+			api: "openai-responses",
+			apiKey: "nvidia",
+			authHeader: false,
+			models: [
+				{
+					id: "openai/openai/gpt-5.5",
+					name: "GPT-5.5 (OpenAI)",
+					reasoning: true,
+					input: ["text", "image"],
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 1050000,
+					maxTokens: 16384,
+					compat: {
+						supportsDeveloperRole: false,
+						supportsReasoningEffort: false,
+					},
+				},
+			],
+		});
+	});
+
+	it("returns an error when custom provider auth is missing", async () => {
+		const mockRegistry = {
+			find: vi.fn(),
+			registerProvider: vi.fn(),
+		};
+		mockModelRegistryInMemory.mockReturnValue(mockRegistry);
+
+		const result = await runAgent(defaultContext, {
+			...defaultConfig,
+			customProvider: {
+				baseUrl: "https://inference-api.nvidia.com",
+				api: "openai-responses",
+				authHeader: false,
+				reasoning: true,
+				input: ["text"],
+				contextWindow: 1050000,
+				maxTokens: 16384,
+			},
+		});
+
+		assertFailure(result);
+		expect(result.error).toBe(
+			"api_key or provider_api_key is required when provider_base_url is set",
+		);
+		expect(mockRegistry.registerProvider).not.toHaveBeenCalled();
 	});
 
 	it("passes correct options to createAgentSession", async () => {

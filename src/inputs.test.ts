@@ -3,6 +3,8 @@ import {
 	getInputOrDefault,
 	parseBooleanInput,
 	parseCsvInput,
+	parseModelInputModes,
+	parseOptionalBooleanInput,
 	parsePositiveIntegerInput,
 } from "./inputs.js";
 
@@ -67,6 +69,18 @@ describe("parseBooleanInput", () => {
 	});
 });
 
+describe("parseOptionalBooleanInput", () => {
+	it("returns undefined for empty or invalid values", () => {
+		expect(parseOptionalBooleanInput("")).toBeUndefined();
+		expect(parseOptionalBooleanInput("maybe")).toBeUndefined();
+	});
+
+	it("parses explicit boolean values", () => {
+		expect(parseOptionalBooleanInput("yes")).toBe(true);
+		expect(parseOptionalBooleanInput("no")).toBe(false);
+	});
+});
+
 describe("parsePositiveIntegerInput", () => {
 	it("parses positive integers", () => {
 		expect(parsePositiveIntegerInput("1800", 300)).toBe(1800);
@@ -82,5 +96,18 @@ describe("parsePositiveIntegerInput", () => {
 		"abc",
 	])("returns the default for invalid value %s", (value) => {
 		expect(parsePositiveIntegerInput(value, 300)).toBe(300);
+	});
+});
+
+describe("parseModelInputModes", () => {
+	it("parses valid model input modes", () => {
+		expect(parseModelInputModes("text,image", ["text"])).toEqual([
+			"text",
+			"image",
+		]);
+	});
+
+	it("returns default when no valid modes are present", () => {
+		expect(parseModelInputModes("audio", ["text"])).toEqual(["text"]);
 	});
 });

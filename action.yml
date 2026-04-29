@@ -30,6 +30,45 @@ inputs:
   model:
     description: 'Model ID'
     default: 'claude-sonnet-4-20250514'
+  provider_base_url:
+    description: 'Base URL for a single custom provider/model (e.g., https://inference-api.nvidia.com)'
+    required: false
+  provider_api:
+    description: 'API type for the custom provider/model'
+    required: false
+    default: 'openai-completions'
+  provider_api_key:
+    description: 'Provider apiKey config value for custom providers; can be a literal key or env var name'
+    required: false
+  provider_auth_header:
+    description: 'Add Authorization: Bearer <key> for custom provider requests'
+    required: false
+    default: 'false'
+  model_name:
+    description: 'Display name for the custom model'
+    required: false
+  model_reasoning:
+    description: 'Whether the custom model supports reasoning/thinking'
+    required: false
+    default: 'false'
+  model_input:
+    description: 'Comma-separated custom model input modalities (text or text,image)'
+    required: false
+    default: 'text'
+  model_context_window:
+    description: 'Context window tokens for the custom model'
+    required: false
+    default: '128000'
+  model_max_tokens:
+    description: 'Max output tokens for the custom model'
+    required: false
+    default: '16384'
+  compat_supports_developer_role:
+    description: 'Whether the OpenAI-compatible custom provider supports developer role messages'
+    required: false
+  compat_supports_reasoning_effort:
+    description: 'Whether the OpenAI-compatible custom provider supports reasoning_effort'
+    required: false
   prompt_template:
     description: 'Custom prompt template with placeholder variables'
     required: false
@@ -61,5 +100,16 @@ runs:
         INPUT_TIMEOUT: ${{ inputs.timeout }}
         INPUT_PROVIDER: ${{ inputs.provider }}
         INPUT_MODEL: ${{ inputs.model }}
+        INPUT_PROVIDER_BASE_URL: ${{ inputs.provider_base_url }}
+        INPUT_PROVIDER_API: ${{ inputs.provider_api }}
+        INPUT_PROVIDER_API_KEY: ${{ inputs.provider_api_key }}
+        INPUT_PROVIDER_AUTH_HEADER: ${{ inputs.provider_auth_header }}
+        INPUT_MODEL_NAME: ${{ inputs.model_name }}
+        INPUT_MODEL_REASONING: ${{ inputs.model_reasoning }}
+        INPUT_MODEL_INPUT: ${{ inputs.model_input }}
+        INPUT_MODEL_CONTEXT_WINDOW: ${{ inputs.model_context_window }}
+        INPUT_MODEL_MAX_TOKENS: ${{ inputs.model_max_tokens }}
+        INPUT_COMPAT_SUPPORTS_DEVELOPER_ROLE: ${{ inputs.compat_supports_developer_role }}
+        INPUT_COMPAT_SUPPORTS_REASONING_EFFORT: ${{ inputs.compat_supports_reasoning_effort }}
         INPUT_PROMPT_TEMPLATE: ${{ inputs.prompt_template }}
         INPUT_SHARE_SESSION: ${{ inputs.share_session }}

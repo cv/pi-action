@@ -10,6 +10,12 @@ const DEFAULT_CASES = [
 	["timeout", String(DEFAULTS.timeout)],
 	["provider", DEFAULTS.provider],
 	["model", DEFAULTS.model],
+	["provider_api", DEFAULTS.customProviderApi],
+	["provider_auth_header", String(DEFAULTS.customProviderAuthHeader)],
+	["model_reasoning", String(DEFAULTS.customModelReasoning)],
+	["model_input", DEFAULTS.customModelInput],
+	["model_context_window", String(DEFAULTS.customModelContextWindow)],
+	["model_max_tokens", String(DEFAULTS.customModelMaxTokens)],
 	["share_session", String(DEFAULTS.shareSession)],
 ] as const;
 

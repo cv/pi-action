@@ -19,6 +19,7 @@ vi.mock("./share.js", () => ({
 
 import { runAgent } from "./agent.js";
 import { shareSession } from "./share.js";
+import type { CustomProviderConfig } from "./types.js";
 
 describe("run", () => {
 	function createMockDeps(
@@ -32,6 +33,7 @@ describe("run", () => {
 				githubToken: "test-token",
 				gistToken: undefined,
 				apiKey: undefined,
+				customProvider: undefined,
 				promptTemplate: undefined,
 				shareSession: true,
 			},
@@ -117,6 +119,7 @@ describe("run", () => {
 				githubToken: "test-token",
 				gistToken: undefined,
 				apiKey: undefined,
+				customProvider: undefined,
 				promptTemplate: undefined,
 				shareSession: DEFAULTS.shareSession,
 			},
@@ -163,6 +166,7 @@ describe("run", () => {
 				githubToken: undefined,
 				gistToken: undefined,
 				apiKey: undefined,
+				customProvider: undefined,
 				promptTemplate: undefined,
 				shareSession: DEFAULTS.shareSession,
 			},
@@ -240,6 +244,7 @@ describe("run", () => {
 				githubToken: "test-token",
 				gistToken: undefined,
 				apiKey: "sk-test",
+				customProvider: undefined,
 				promptTemplate: undefined,
 				shareSession: DEFAULTS.shareSession,
 			},
@@ -268,6 +273,57 @@ describe("run", () => {
 		expect(runAgent).toHaveBeenCalledWith(
 			expect.anything(),
 			expect.objectContaining({ apiKey: "sk-test" }),
+		);
+	});
+
+	it("passes custom provider config through to the agent config", async () => {
+		const mockClient = createMockGitHubClient();
+		const customProvider: CustomProviderConfig = {
+			baseUrl: "https://inference-api.nvidia.com",
+			api: "openai-responses",
+			authHeader: false,
+			reasoning: true,
+			input: ["text", "image"],
+			contextWindow: 1050000,
+			maxTokens: 16384,
+		};
+		const deps = createMockDeps({
+			inputs: {
+				triggerPhrase: DEFAULTS.triggerPhrase,
+				allowedBots: [],
+				modelConfig: createModelConfig(),
+				githubToken: "test-token",
+				gistToken: undefined,
+				apiKey: "sk-test",
+				customProvider,
+				promptTemplate: undefined,
+				shareSession: DEFAULTS.shareSession,
+			},
+			context: {
+				payload: {
+					issue: {
+						number: 42,
+						title: "Test Issue",
+						body: "@pi help me",
+						user: { login: "user", type: "User" },
+						author_association: "OWNER",
+					},
+				},
+				repo: createRepoRef(),
+			},
+			createClient: vi.fn(() => mockClient),
+		});
+
+		vi.mocked(runAgent).mockResolvedValue({
+			success: true,
+			response: "Done",
+		});
+
+		await run(deps);
+
+		expect(runAgent).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({ customProvider }),
 		);
 	});
 

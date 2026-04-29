@@ -1,5 +1,8 @@
+import type { ModelInputMode } from "./types.js";
 export type InputReader = (name: string) => string;
 export declare function getInputOrDefault(readInput: InputReader, name: string, defaultValue: string): string;
 export declare function parseCsvInput(value: string): string[];
 export declare function parseBooleanInput(value: string, defaultValue: boolean): boolean;
+export declare function parseOptionalBooleanInput(value: string): boolean | undefined;
 export declare function parsePositiveIntegerInput(value: string, defaultValue: number): number;
+export declare function parseModelInputModes(value: string, defaultValue: ModelInputMode[]): ModelInputMode[];

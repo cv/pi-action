@@ -9,4 +9,10 @@ export const DEFAULTS = {
 	shareSession: true,
 	provider: "anthropic",
 	model: "claude-sonnet-4-20250514",
+	customProviderApi: "openai-completions",
+	customProviderAuthHeader: false,
+	customModelReasoning: false,
+	customModelInput: "text",
+	customModelContextWindow: 128000,
+	customModelMaxTokens: 16384,
 } as const;

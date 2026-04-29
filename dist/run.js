@@ -112,6 +112,7 @@ export async function run(deps) {
         cwd,
         logger: log,
         ...(inputs.apiKey ? { apiKey: inputs.apiKey } : {}),
+        ...(inputs.customProvider ? { customProvider: inputs.customProvider } : {}),
         ...(inputs.promptTemplate ? { promptTemplate: inputs.promptTemplate } : {}),
     });
     // Post result (use gistClient for session sharing if available)

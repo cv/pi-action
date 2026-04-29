@@ -24,6 +24,26 @@ export interface ModelConfig {
     model: string;
     timeout: number;
 }
+export type ModelInputMode = "text" | "image";
+export interface CustomProviderCompatConfig {
+    supportsDeveloperRole?: boolean;
+    supportsReasoningEffort?: boolean;
+}
+/**
+ * Single custom provider/model definition, exposed as flat action inputs.
+ */
+export interface CustomProviderConfig {
+    baseUrl: string;
+    api: string;
+    apiKey?: string;
+    authHeader: boolean;
+    modelName?: string;
+    reasoning: boolean;
+    input: ModelInputMode[];
+    contextWindow: number;
+    maxTokens: number;
+    compat?: CustomProviderCompatConfig;
+}
 export interface TriggerInfo {
     isCommentEvent: boolean;
     triggerText: string;

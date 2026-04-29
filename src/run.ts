@@ -10,7 +10,13 @@ import {
 import type { SecurityContext } from "./security.js";
 import { sanitizeInput, validatePermissions } from "./security.js";
 import { shareSession } from "./share.js";
-import type { ModelConfig, RepoRef, Session, TriggerInfo } from "./types.js";
+import type {
+	CustomProviderConfig,
+	ModelConfig,
+	RepoRef,
+	Session,
+	TriggerInfo,
+} from "./types.js";
 
 export interface ActionInputs {
 	triggerPhrase: string;
@@ -19,6 +25,7 @@ export interface ActionInputs {
 	githubToken: string | undefined;
 	gistToken: string | undefined;
 	apiKey: string | undefined;
+	customProvider: CustomProviderConfig | undefined;
 	promptTemplate: string | undefined;
 	shareSession: boolean;
 }
@@ -201,6 +208,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		cwd,
 		logger: log,
 		...(inputs.apiKey ? { apiKey: inputs.apiKey } : {}),
+		...(inputs.customProvider ? { customProvider: inputs.customProvider } : {}),
 		...(inputs.promptTemplate ? { promptTemplate: inputs.promptTemplate } : {}),
 	});
 

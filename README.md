@@ -90,6 +90,17 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 | `timeout` | Execution timeout in seconds | No | `1800` |
 | `provider` | LLM provider (anthropic, openai, google, etc.) | No | `anthropic` |
 | `model` | Model ID | No | `claude-sonnet-4-20250514` |
+| `provider_base_url` | Base URL for a single custom provider/model | No | - |
+| `provider_api` | API type for a custom provider/model | No | `openai-completions` |
+| `provider_api_key` | Provider apiKey config value for custom providers (literal or env var name) | No | - |
+| `provider_auth_header` | Add `Authorization: Bearer <key>` for custom provider requests | No | `false` |
+| `model_name` | Display name for the custom model | No | - |
+| `model_reasoning` | Whether the custom model supports reasoning/thinking | No | `false` |
+| `model_input` | Comma-separated custom model input modalities (`text` or `text,image`) | No | `text` |
+| `model_context_window` | Context window tokens for the custom model | No | `128000` |
+| `model_max_tokens` | Max output tokens for the custom model | No | `16384` |
+| `compat_supports_developer_role` | Whether OpenAI-compatible custom provider supports developer role messages | No | - |
+| `compat_supports_reasoning_effort` | Whether OpenAI-compatible custom provider supports `reasoning_effort` | No | - |
 | `prompt_template` | Custom prompt template with placeholder variables | No | (built-in default) |
 | `share_session` | Include a link to the full session HTML in the response comment | No | `true` |
 
@@ -124,6 +135,48 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
     github_token: ${{ secrets.GITHUB_TOKEN }}
     trigger_phrase: '@assistant'
 ```
+
+#### Single custom provider/model
+
+For one local or internal model, configure the provider/model directly with action inputs instead of committing a pi `models.json` file.
+
+Example: NVIDIA-hosted `openai/openai/gpt-5.5` using the OpenAI Responses API:
+
+```yaml
+- uses: cv/pi-action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    provider: nvidia
+    model: openai/openai/gpt-5.5
+    api_key: ${{ secrets.NVIDIA_API_KEY }}
+    provider_base_url: https://inference-api.nvidia.com
+    provider_api: openai-responses
+    model_name: GPT-5.5 (OpenAI)
+    model_reasoning: true
+    model_input: text,image
+    model_context_window: 1050000
+    model_max_tokens: 16384
+```
+
+Example: local Ollama/LM Studio/vLLM-style endpoint on a self-hosted runner:
+
+```yaml
+- uses: cv/pi-action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    provider: spark
+    model: huggingface.co/unsloth/gemma-4-26b-a4b-it-gguf:Q8_0
+    provider_base_url: http://192.168.1.16:12434/v1
+    provider_api: openai-completions
+    provider_api_key: spark
+    model_name: Gemma 4 26B-A4B IT Q8 (Spark)
+    model_context_window: 128000
+    model_max_tokens: 16384
+```
+
+`provider_api_key` can be a literal key or the name of an environment variable. If you use the action-level `api_key` input, `provider_api_key` is not required. For local servers that ignore authentication, set `provider_api_key` to any dummy value.
+
+**Note:** `localhost` or LAN URLs are resolved from the GitHub runner. Use a self-hosted runner or a reachable internal endpoint for local models.
 
 #### Custom Prompt Template
 

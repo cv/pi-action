@@ -1,5 +1,5 @@
 import { type GitHubClient } from "./github.js";
-import type { ModelConfig, RepoRef } from "./types.js";
+import type { CustomProviderConfig, ModelConfig, RepoRef } from "./types.js";
 export interface ActionInputs {
     triggerPhrase: string;
     allowedBots: string[];
@@ -7,6 +7,7 @@ export interface ActionInputs {
     githubToken: string | undefined;
     gistToken: string | undefined;
     apiKey: string | undefined;
+    customProvider: CustomProviderConfig | undefined;
     promptTemplate: string | undefined;
     shareSession: boolean;
 }
