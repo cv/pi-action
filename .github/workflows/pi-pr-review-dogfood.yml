@@ -1,0 +1,56 @@
+name: pi PR Review Dogfood
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to review
+        required: true
+      prompt:
+        description: Review instructions
+        required: false
+        default: Review this PR and summarize risks, bugs, and test gaps.
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '25'
+
+      - name: Run pi-action on explicit PR
+        id: pi
+        uses: ./
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          gist_token: ${{ secrets.PAT_WITH_GIST_SCOPE }}
+          output_mode: output
+          pr_number: ${{ github.event.inputs.pr_number }}
+          prompt: ${{ github.event.inputs.prompt }}
+          provider: nvidia
+          model: openai/openai/gpt-5.5
+          api_key: ${{ secrets.NVIDIA_API_KEY }}
+          provider_base_url: https://inference-api.nvidia.com
+          provider_api: openai-responses
+          model_name: GPT-5.5 (OpenAI)
+          model_reasoning: true
+          model_input: text,image
+          model_context_window: 1050000
+          model_max_tokens: 16384
+
+      - name: Print review summary
+        run: |
+          echo "success=${{ steps.pi.outputs.success }}"
+          echo "share_url=${{ steps.pi.outputs.share_url }}"
+          echo "response<<EOF"
+          echo "${{ steps.pi.outputs.response }}"
+          echo "EOF"
