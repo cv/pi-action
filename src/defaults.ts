@@ -5,6 +5,7 @@
 
 export const DEFAULTS = {
 	triggerPhrase: "@pi",
+	allowedAssociations: ["OWNER", "MEMBER"],
 	timeout: 1800,
 	shareSession: true,
 	provider: "anthropic",

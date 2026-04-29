@@ -101,6 +101,8 @@ export function createActionInputs(
 	return {
 		triggerPhrase: DEFAULTS.triggerPhrase,
 		allowedBots: [],
+		allowedUsers: [],
+		allowedAssociations: [...DEFAULTS.allowedAssociations],
 		modelConfig: createModelConfig(),
 		githubToken: "test-token",
 		apiKey: undefined,

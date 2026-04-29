@@ -14,6 +14,8 @@ type OutputMode = "comment" | "output";
 export interface ActionInputs {
 	triggerPhrase: string;
 	allowedBots: string[];
+	allowedUsers: string[];
+	allowedAssociations: string[];
 	modelConfig: ModelConfig;
 	githubToken: string | undefined;
 	apiKey: string | undefined;

@@ -17,6 +17,8 @@ describe("readActionInputs", () => {
 		expect(inputs).toEqual({
 			triggerPhrase: DEFAULTS.triggerPhrase,
 			allowedBots: [],
+			allowedUsers: [],
+			allowedAssociations: [...DEFAULTS.allowedAssociations],
 			modelConfig: {
 				provider: DEFAULTS.provider,
 				model: DEFAULTS.model,
@@ -40,6 +42,8 @@ describe("readActionInputs", () => {
 				api_key: "sk-test",
 				trigger_phrase: "@assistant",
 				allowed_bots: "dependabot[bot], renovate[bot]",
+				allowed_users: "@alice, Bob",
+				allowed_associations: "OWNER,COLLABORATOR",
 				timeout: "60",
 				provider: "nvidia",
 				model: "openai/openai/gpt-5.5",
@@ -60,6 +64,8 @@ describe("readActionInputs", () => {
 		expect(inputs.apiKey).toBe("sk-test");
 		expect(inputs.triggerPhrase).toBe("@assistant");
 		expect(inputs.allowedBots).toEqual(["dependabot[bot]", "renovate[bot]"]);
+		expect(inputs.allowedUsers).toEqual(["@alice", "Bob"]);
+		expect(inputs.allowedAssociations).toEqual(["OWNER", "COLLABORATOR"]);
 		expect(inputs.modelConfig).toEqual({
 			provider: "nvidia",
 			model: "openai/openai/gpt-5.5",

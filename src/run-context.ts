@@ -44,6 +44,8 @@ function validateTrigger(
 		authorLogin: triggerInfo.author.login,
 		isBot: triggerInfo.author.type === "Bot",
 		allowedBots: inputs.allowedBots,
+		allowedUsers: inputs.allowedUsers,
+		allowedAssociations: inputs.allowedAssociations,
 	};
 
 	if (!validatePermissions(securityContext)) {

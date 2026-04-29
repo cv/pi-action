@@ -103,12 +103,40 @@ describe("run", () => {
 		);
 	});
 
+	it("allows explicit users outside allowed associations", async () => {
+		const mockClient = createMockGitHubClient();
+		const deps = createMockDeps({
+			inputs: createActionInputs({ allowedUsers: ["stranger"] }),
+			context: {
+				payload: {
+					issue: {
+						number: 1,
+						title: "Test",
+						body: "@pi do something",
+						user: { login: "stranger", type: "User" },
+						author_association: "NONE",
+					},
+				},
+				repo: { owner: "testowner", name: "testrepo" },
+			},
+			createClient: vi.fn(() => mockClient),
+		});
+		vi.mocked(runAgent).mockResolvedValue({ success: true, response: "Done" });
+
+		await run(deps);
+
+		expect(deps.log.warning).not.toHaveBeenCalled();
+		expect(mockClient.createComment).toHaveBeenCalled();
+	});
+
 	it("allows bots in allowedBots list", async () => {
 		const mockClient = createMockGitHubClient();
 		const deps = createMockDeps({
 			inputs: {
 				triggerPhrase: DEFAULTS.triggerPhrase,
 				allowedBots: ["dependabot[bot]"],
+				allowedUsers: [],
+				allowedAssociations: [...DEFAULTS.allowedAssociations],
 				modelConfig: createModelConfig(),
 				githubToken: "test-token",
 				apiKey: undefined,
@@ -158,6 +186,8 @@ describe("run", () => {
 			inputs: {
 				triggerPhrase: DEFAULTS.triggerPhrase,
 				allowedBots: [],
+				allowedUsers: [],
+				allowedAssociations: [...DEFAULTS.allowedAssociations],
 				modelConfig: createModelConfig(),
 				githubToken: undefined,
 				apiKey: undefined,
@@ -230,6 +260,8 @@ describe("run", () => {
 			inputs: {
 				triggerPhrase: DEFAULTS.triggerPhrase,
 				allowedBots: [],
+				allowedUsers: [],
+				allowedAssociations: [...DEFAULTS.allowedAssociations],
 				modelConfig: createModelConfig(),
 				githubToken: "test-token",
 				apiKey: "sk-test",
@@ -283,6 +315,8 @@ describe("run", () => {
 			inputs: {
 				triggerPhrase: DEFAULTS.triggerPhrase,
 				allowedBots: [],
+				allowedUsers: [],
+				allowedAssociations: [...DEFAULTS.allowedAssociations],
 				modelConfig: createModelConfig(),
 				githubToken: "test-token",
 				apiKey: "sk-test",
@@ -362,6 +396,9 @@ describe("run", () => {
 			.fn()
 			.mockResolvedValue("+added\n-removed");
 		const deps = createMockDeps({
+			inputs: createActionInputs({
+				allowedAssociations: ["OWNER", "MEMBER", "COLLABORATOR"],
+			}),
 			context: {
 				payload: {
 					pull_request: {

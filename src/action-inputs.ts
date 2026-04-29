@@ -27,6 +27,14 @@ export function readActionInputs(
 			DEFAULTS.triggerPhrase,
 		),
 		allowedBots: parseCsvInput(readInput("allowed_bots")),
+		allowedUsers: parseCsvInput(readInput("allowed_users")),
+		allowedAssociations: parseCsvInput(
+			getInputOrDefault(
+				readInput,
+				"allowed_associations",
+				DEFAULTS.allowedAssociations.join(","),
+			),
+		),
 		modelConfig: {
 			timeout: parsePositiveIntegerInput(
 				readInput("timeout"),

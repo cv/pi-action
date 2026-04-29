@@ -86,6 +86,8 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 | `api_key` | LLM provider API key for the selected `provider` (runtime-only; env vars are preferred) | No | - |
 | `trigger_phrase` | Phrase to trigger pi | No | `@pi` |
 | `allowed_bots` | Comma-separated list of allowed bot usernames | No | - |
+| `allowed_users` | Comma-separated GitHub usernames allowed to trigger pi. If set, users must be in this list. | No | - |
+| `allowed_associations` | Comma-separated GitHub author associations allowed to trigger pi when `allowed_users` is empty | No | `OWNER,MEMBER` |
 | `timeout` | Execution timeout in seconds | No | `1800` |
 | `provider` | LLM provider (anthropic, openai, google, etc.) | No | `anthropic` |
 | `model` | Model ID | No | `claude-sonnet-4-20250514` |
@@ -107,6 +109,26 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 | `pr_number` | Pull request number to load explicitly (useful for `workflow_dispatch`) | No | - |
 
 ### Examples
+
+#### Restrict who can trigger pi
+
+By default, only repository owners and organization members can trigger pi. To further restrict triggering to specific users:
+
+```yaml
+- uses: cv/pi-action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    allowed_users: 'alice,bob'
+```
+
+To allow outside collaborators too:
+
+```yaml
+- uses: cv/pi-action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    allowed_associations: 'OWNER,MEMBER,COLLABORATOR'
+```
 
 #### Allow Dependabot to trigger pi
 
@@ -330,12 +352,12 @@ This ensures the agent follows conventional commit format without imposing any t
 
 ## Security
 
-The action only responds to users with write access (see [`src/security.ts`](src/security.ts)):
-- Repository owners
-- Organization members
-- Collaborators
+The action only responds to authorized users (see [`src/security.ts`](src/security.ts)):
+- Repository owners and organization members by default (`allowed_associations: OWNER,MEMBER`)
+- Explicit usernames in `allowed_users`, when configured
+- Bots explicitly added to `allowed_bots`
 
-Bots are blocked by default unless explicitly added to the `allowed_bots` list.
+Collaborators are not allowed by default. Add `COLLABORATOR` to `allowed_associations` if you want outside collaborators to trigger pi.
 
 Input is sanitized to remove:
 - HTML comments (potential injection vectors)

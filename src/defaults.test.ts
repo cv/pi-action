@@ -7,6 +7,7 @@ const README = readFileSync("README.md", "utf-8");
 
 const DEFAULT_CASES = [
 	["trigger_phrase", DEFAULTS.triggerPhrase],
+	["allowed_associations", DEFAULTS.allowedAssociations.join(",")],
 	["timeout", String(DEFAULTS.timeout)],
 	["provider", DEFAULTS.provider],
 	["model", DEFAULTS.model],

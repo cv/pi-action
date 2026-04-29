@@ -18,6 +18,12 @@ inputs:
   allowed_bots:
     description: 'Comma-separated list of allowed bot usernames'
     default: ''
+  allowed_users:
+    description: 'Comma-separated GitHub usernames allowed to trigger pi. If set, users must be in this list.'
+    default: ''
+  allowed_associations:
+    description: 'Comma-separated GitHub author associations allowed to trigger pi when allowed_users is empty'
+    default: 'OWNER,MEMBER'
   timeout:
     description: 'Execution timeout in seconds'
     default: '1800'
@@ -117,6 +123,8 @@ runs:
         INPUT_API_KEY: ${{ inputs.api_key }}
         INPUT_TRIGGER_PHRASE: ${{ inputs.trigger_phrase }}
         INPUT_ALLOWED_BOTS: ${{ inputs.allowed_bots }}
+        INPUT_ALLOWED_USERS: ${{ inputs.allowed_users }}
+        INPUT_ALLOWED_ASSOCIATIONS: ${{ inputs.allowed_associations }}
         INPUT_TIMEOUT: ${{ inputs.timeout }}
         INPUT_PROVIDER: ${{ inputs.provider }}
         INPUT_MODEL: ${{ inputs.model }}
