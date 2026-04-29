@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-	type GitHubContext,
 	addReaction,
 	createGitHubClient,
 	extractTriggerInfo,
+	type GitHubContext,
 } from "./github.js";
 import { createMockGitHubClient, createTriggerInfo } from "./test-helpers.js";
 
@@ -200,6 +200,9 @@ describe("createGitHubClient", () => {
 				},
 				pulls: {
 					get: vi.fn(),
+				},
+				gists: {
+					create: vi.fn(),
 				},
 			},
 		};

@@ -7,7 +7,7 @@ npm test || exit 1
 npm run typecheck || exit 1
 
 # Run linting/formatting check (without --write to just check)
-npx biome check . || exit 1
+npm run check || exit 1
 
 # Build and check if dist/ is up to date
 npm run build || exit 1

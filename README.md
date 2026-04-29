@@ -47,7 +47,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '25'
 
       - name: Run pi-action
         uses: cv/pi-action@v1
@@ -77,7 +77,7 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 | `pi_auth_json` | Contents of `~/.pi/agent/auth.json` | No | - |
 | `trigger_phrase` | Phrase to trigger pi | No | `@pi` |
 | `allowed_bots` | Comma-separated list of allowed bot usernames | No | - |
-| `timeout` | Execution timeout in seconds | No | `300` |
+| `timeout` | Execution timeout in seconds | No | `1800` |
 | `provider` | LLM provider (anthropic, openai, google, etc.) | No | `anthropic` |
 | `model` | Model ID | No | `claude-sonnet-4-20250514` |
 | `prompt_template` | Custom prompt template with placeholder variables | No | (built-in default) |

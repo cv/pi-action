@@ -14,7 +14,7 @@ export async function shareSession(session, githubClient, description = "pi-acti
     const tmpFile = join(tmpdir(), `pi-session-${Date.now()}.html`);
     try {
         // Export session to HTML
-        session.exportToHtml(tmpFile);
+        await session.exportToHtml(tmpFile);
         // Read the HTML content
         const htmlContent = readFileSync(tmpFile, "utf-8");
         // Create secret gist

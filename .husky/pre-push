@@ -3,7 +3,7 @@
 echo "🔍 Running pre-push checks..."
 
 # Run tests with coverage and enforce threshold
-npm test -- --coverage --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=70 || {
+npm run coverage -- --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=70 || {
     echo ""
     echo "❌ ERROR: Tests failed or coverage threshold not met!"
     echo ""

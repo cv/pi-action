@@ -1,10 +1,10 @@
 {
-	"$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
-	"organizeImports": { "enabled": true },
+	"$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
+	"assist": { "actions": { "source": { "organizeImports": "on" } } },
 	"formatter": { "enabled": true, "indentStyle": "tab" },
 	"overrides": [
 		{
-			"include": ["**/*.test.ts", "**/*.spec.ts"],
+			"includes": ["**/*.test.ts", "**/*.spec.ts"],
 			"linter": {
 				"rules": {
 					"suspicious": {
@@ -29,7 +29,6 @@
 				"noUndeclaredVariables": "error",
 				"noConstAssign": "error",
 				"noInvalidConstructorSuper": "error",
-				"noNewSymbol": "error",
 				"noPrecisionLoss": "error",
 				"noSelfAssign": "error",
 				"noSetterReturn": "error",
@@ -39,14 +38,14 @@
 				"noUnreachableSuper": "error",
 				"noUnsafeFinally": "error",
 				"noUnsafeOptionalChaining": "error",
-				"useArrayLiterals": "error",
 				"useIsNan": "error",
 				"useValidForDirection": "error",
-				"useYield": "error"
+				"useYield": "error",
+				"noInvalidBuiltinInstantiation": "error",
+				"useValidTypeof": "error"
 			},
 			"suspicious": {
 				"noExplicitAny": "error",
-				"noConsoleLog": "error",
 				"noArrayIndexKey": "error",
 				"noAssignInExpressions": "error",
 				"noAsyncPromiseExecutor": "error",
@@ -97,21 +96,20 @@
 				"useIsArray": "error",
 				"useNamespaceKeyword": "error",
 				"useNumberToFixedDigitsArgument": "error",
-				"useValidTypeof": "error"
+				"noConsole": { "level": "error", "options": { "allow": ["warn"] } },
+				"noVar": "error",
+				"noWith": "error"
 			},
 			"style": {
 				"noNonNullAssertion": "error",
 				"useConst": "error",
 				"noParameterAssign": "error",
-				"noArguments": "error",
-				"noCommaOperator": "error",
 				"noInferrableTypes": "error",
 				"noNamespace": "error",
 				"noNegationElse": "error",
 				"noParameterProperties": "off",
 				"noRestrictedGlobals": "error",
 				"noUselessElse": "error",
-				"noVar": "error",
 				"useBlockStatements": "error",
 				"useCollapsedElseIf": "error",
 				"useConsistentArrayType": "error",
@@ -125,17 +123,16 @@
 				"useNodejsImportProtocol": "error",
 				"useNumberNamespace": "error",
 				"useSelfClosingElements": "error",
-				"useShorthandArrayType": "error",
 				"useShorthandAssign": "error",
 				"useSingleVarDeclarator": "error",
-				"useTemplate": "error"
+				"useTemplate": "error",
+				"useArrayLiterals": "error"
 			},
 			"complexity": {
 				"noForEach": "error",
 				"noBannedTypes": "error",
 				"noExcessiveCognitiveComplexity": "error",
 				"noExtraBooleanCast": "error",
-				"noMultipleSpacesInRegularExpressionLiterals": "error",
 				"noStaticOnlyClass": "error",
 				"noThisInStatic": "error",
 				"noUselessCatch": "error",
@@ -150,14 +147,16 @@
 				"noUselessThisAlias": "error",
 				"noUselessTypeConstraint": "error",
 				"noVoid": "error",
-				"noWith": "error",
 				"useArrowFunction": "error",
 				"useFlatMap": "error",
 				"useLiteralKeys": "error",
 				"useOptionalChain": "error",
 				"useRegexLiterals": "error",
 				"useSimpleNumberKeys": "error",
-				"useSimplifiedLogicExpression": "error"
+				"useSimplifiedLogicExpression": "error",
+				"noArguments": "error",
+				"noCommaOperator": "error",
+				"noAdjacentSpacesInRegex": "error"
 			},
 			"performance": {
 				"noAccumulatingSpread": "error",
@@ -171,5 +170,7 @@
 			}
 		}
 	},
-	"files": { "ignore": ["dist", "node_modules", "coverage"] }
+	"files": {
+		"includes": ["**", "!**/dist", "!**/node_modules", "!**/coverage"]
+	}
 }

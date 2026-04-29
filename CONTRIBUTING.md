@@ -6,7 +6,7 @@ This document covers development setup, architecture details, and contribution g
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 25+
 - npm
 
 ### Getting Started
@@ -23,7 +23,7 @@ npm install
 npm test
 
 # Run tests with coverage
-npm test -- --coverage
+npm run coverage
 
 # Build
 npm run build
@@ -31,8 +31,11 @@ npm run build
 # Type check
 npm run typecheck
 
-# Lint and format
+# Lint and format check
 npm run check
+
+# Apply safe lint/format fixes
+npm run fix
 ```
 
 ## Git Hooks
@@ -83,6 +86,7 @@ The action is built with TypeScript and uses the [pi-coding-agent SDK](https://g
 | [`src/run.ts`](src/run.ts) | Main orchestration logic |
 | [`src/agent.ts`](src/agent.ts) | pi SDK integration |
 | [`src/github.ts`](src/github.ts) | GitHub API client helpers |
+| [`src/inputs.ts`](src/inputs.ts) | GitHub Actions input parsing helpers |
 | [`src/context.ts`](src/context.ts) | Prompt building and trigger extraction |
 | [`src/security.ts`](src/security.ts) | Permission validation and input sanitization |
 | [`src/formatting.ts`](src/formatting.ts) | Response formatting utilities |
@@ -95,6 +99,9 @@ The action is built with TypeScript and uses the [pi-coding-agent SDK](https://g
 
 #### [`index.ts`](src/index.ts)
 Entry point that reads GitHub Actions inputs, creates dependencies, and invokes `run()`. This is the only file with side effects (reading environment, calling APIs).
+
+#### [`inputs.ts`](src/inputs.ts)
+Pure helpers for parsing GitHub Actions inputs (CSV allowlists, booleans, and positive integer timeouts). Kept separate from `index.ts` so input behavior can be unit tested without loading the GitHub Actions runtime.
 
 #### [`run.ts`](src/run.ts)
 Main orchestration that:
@@ -148,7 +155,7 @@ Tests use [Vitest](https://vitest.dev/) and are colocated with source files (`*.
 ```bash
 npm test                    # Run once
 npm run test:watch          # Watch mode
-npm test -- --coverage      # With coverage report
+npm run coverage            # With coverage report
 ```
 
 **Test philosophy:**

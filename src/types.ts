@@ -26,7 +26,7 @@ export interface RepoRef {
  * Session interface for session sharing
  */
 export interface Session {
-	exportToHtml: (outputPath?: string) => string;
+	exportToHtml: (outputPath?: string) => string | Promise<string>;
 }
 
 /**

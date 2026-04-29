@@ -2,16 +2,16 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { runAgent } from "./agent.js";
-import { extractTask, hasTrigger } from "./context.js";
 import type { PIContext } from "./context.js";
+import { extractTask, hasTrigger } from "./context.js";
 import { formatErrorComment, formatSuccessComment } from "./formatting.js";
 import {
-	type GitHubClient,
 	addReaction,
 	extractTriggerInfo,
+	type GitHubClient,
 } from "./github.js";
-import { sanitizeInput, validatePermissions } from "./security.js";
 import type { SecurityContext } from "./security.js";
+import { sanitizeInput, validatePermissions } from "./security.js";
 import { shareSession } from "./share.js";
 import type { ModelConfig, RepoRef, Session, TriggerInfo } from "./types.js";
 

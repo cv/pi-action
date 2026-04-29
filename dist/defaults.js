@@ -4,7 +4,8 @@
  */
 export const DEFAULTS = {
     triggerPhrase: "@pi",
-    timeout: 300,
+    timeout: 1800,
+    shareSession: true,
     provider: "anthropic",
     model: "claude-sonnet-4-20250514",
 };

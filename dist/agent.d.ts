@@ -1,4 +1,4 @@
-import { type AuthStorage, type ModelRegistry } from "@mariozechner/pi-coding-agent";
+import { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
 import type { PIContext } from "./context.js";
 import type { AgentResult, ModelConfig } from "./types.js";
 export interface AgentLogger {

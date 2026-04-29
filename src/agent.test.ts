@@ -1,10 +1,11 @@
-import { type Mock, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { runAgent } from "./agent.js";
 import {
 	createAgentConfig,
 	createMockSession,
 	createPIContext,
 } from "./test-helpers.js";
+import type { AgentResult } from "./types.js";
 
 // Mock the pi-coding-agent SDK
 vi.mock("@mariozechner/pi-coding-agent", () => {
@@ -13,8 +14,27 @@ vi.mock("@mariozechner/pi-coding-agent", () => {
 		prompt: vi.fn(),
 	};
 
+	class MockDefaultResourceLoader {
+		reload = vi.fn(async () => undefined);
+	}
+
 	return {
+		AuthStorage: {
+			create: vi.fn(() => ({
+				get: vi.fn(),
+				setRuntimeApiKey: vi.fn(),
+			})),
+		},
+		DefaultResourceLoader: MockDefaultResourceLoader,
+		ModelRegistry: {
+			create: vi.fn(() => ({
+				find: vi.fn(),
+				getAll: vi.fn(() => []),
+				getAvailable: vi.fn(() => []),
+			})),
+		},
 		createAgentSession: vi.fn(() => Promise.resolve({ session: mockSession })),
+		getAgentDir: vi.fn(() => "/mock/agent"),
 		SessionManager: {
 			inMemory: vi.fn(() => ({})),
 			create: vi.fn(() => ({})),
@@ -22,27 +42,34 @@ vi.mock("@mariozechner/pi-coding-agent", () => {
 		SettingsManager: {
 			inMemory: vi.fn(() => ({})),
 		},
-		createCodingTools: vi.fn(() => []),
-		discoverAuthStorage: vi.fn(() => ({
-			get: vi.fn(),
-			setRuntimeApiKey: vi.fn(),
-		})),
-		discoverModels: vi.fn(() => ({
-			find: vi.fn(),
-			getAll: vi.fn(() => []),
-			getAvailable: vi.fn(() => []),
-		})),
 	};
 });
 
 // Get references to mocked functions
 import {
 	createAgentSession,
-	discoverModels,
+	DefaultResourceLoader,
+	ModelRegistry,
 } from "@mariozechner/pi-coding-agent";
 
 const mockCreateAgentSession = createAgentSession as Mock;
-const mockDiscoverModels = discoverModels as Mock;
+const mockModelRegistryCreate = ModelRegistry.create as Mock;
+
+function assertSuccess(
+	result: AgentResult,
+): asserts result is Extract<AgentResult, { success: true }> {
+	if (!result.success) {
+		throw new Error(result.error);
+	}
+}
+
+function assertFailure(
+	result: AgentResult,
+): asserts result is Extract<AgentResult, { success: false }> {
+	if (result.success) {
+		throw new Error(result.response);
+	}
+}
 
 describe("runAgent", () => {
 	const defaultContext = createPIContext();
@@ -56,11 +83,11 @@ describe("runAgent", () => {
 		const mockRegistry = {
 			find: vi.fn(() => undefined),
 		};
-		mockDiscoverModels.mockReturnValue(mockRegistry);
+		mockModelRegistryCreate.mockReturnValue(mockRegistry);
 
 		const result = await runAgent(defaultContext, defaultConfig);
 
-		expect(result.success).toBe(false);
+		assertFailure(result);
 		expect(result.error).toBe(
 			"Model not found: anthropic/claude-sonnet-4-20250514",
 		);
@@ -71,7 +98,7 @@ describe("runAgent", () => {
 		const mockRegistry = {
 			find: vi.fn(() => mockModel),
 		};
-		mockDiscoverModels.mockReturnValue(mockRegistry);
+		mockModelRegistryCreate.mockReturnValue(mockRegistry);
 
 		let subscribeCallback: ((event: unknown) => void) | null = null;
 		const mockSession = {
@@ -96,7 +123,7 @@ describe("runAgent", () => {
 
 		const result = await runAgent(defaultContext, defaultConfig);
 
-		expect(result.success).toBe(true);
+		assertSuccess(result);
 		expect(result.response).toBe("Hello world!");
 		expect(mockSession.prompt).toHaveBeenCalled();
 	});
@@ -106,7 +133,7 @@ describe("runAgent", () => {
 		const mockRegistry = {
 			find: vi.fn(() => mockModel),
 		};
-		mockDiscoverModels.mockReturnValue(mockRegistry);
+		mockModelRegistryCreate.mockReturnValue(mockRegistry);
 
 		let subscribeCallback: ((event: unknown) => void) | null = null;
 		const mockSession = {
@@ -137,7 +164,7 @@ describe("runAgent", () => {
 
 		const result = await runAgent(defaultContext, defaultConfig);
 
-		expect(result.success).toBe(true);
+		assertSuccess(result);
 		expect(result.response).toBe("Response");
 	});
 
@@ -146,13 +173,13 @@ describe("runAgent", () => {
 		const mockRegistry = {
 			find: vi.fn(() => mockModel),
 		};
-		mockDiscoverModels.mockReturnValue(mockRegistry);
+		mockModelRegistryCreate.mockReturnValue(mockRegistry);
 
 		mockCreateAgentSession.mockRejectedValue(new Error("Auth failed"));
 
 		const result = await runAgent(defaultContext, defaultConfig);
 
-		expect(result.success).toBe(false);
+		assertFailure(result);
 		expect(result.error).toBe("Auth failed");
 	});
 
@@ -161,7 +188,7 @@ describe("runAgent", () => {
 		const mockRegistry = {
 			find: vi.fn(() => mockModel),
 		};
-		mockDiscoverModels.mockReturnValue(mockRegistry);
+		mockModelRegistryCreate.mockReturnValue(mockRegistry);
 
 		const mockSession = {
 			subscribe: vi.fn(),
@@ -171,7 +198,7 @@ describe("runAgent", () => {
 
 		const result = await runAgent(defaultContext, defaultConfig);
 
-		expect(result.success).toBe(false);
+		assertFailure(result);
 		expect(result.error).toBe("API error");
 	});
 
@@ -180,7 +207,7 @@ describe("runAgent", () => {
 		const mockRegistry = {
 			find: vi.fn(() => mockModel),
 		};
-		mockDiscoverModels.mockReturnValue(mockRegistry);
+		mockModelRegistryCreate.mockReturnValue(mockRegistry);
 
 		const mockSession = {
 			subscribe: vi.fn(),
@@ -194,7 +221,7 @@ describe("runAgent", () => {
 			timeout: 0.1, // 100ms timeout
 		});
 
-		expect(result.success).toBe(false);
+		assertFailure(result);
 		expect(result.error).toContain("Timeout");
 	}, 1000);
 
@@ -203,13 +230,13 @@ describe("runAgent", () => {
 		const mockRegistry = {
 			find: vi.fn(() => mockModel),
 		};
-		mockDiscoverModels.mockReturnValue(mockRegistry);
+		mockModelRegistryCreate.mockReturnValue(mockRegistry);
 
 		mockCreateAgentSession.mockRejectedValue("string error");
 
 		const result = await runAgent(defaultContext, defaultConfig);
 
-		expect(result.success).toBe(false);
+		assertFailure(result);
 		expect(result.error).toBe("string error");
 	});
 
@@ -218,13 +245,13 @@ describe("runAgent", () => {
 		const mockRegistry = {
 			find: vi.fn(() => mockModel),
 		};
-		mockDiscoverModels.mockReturnValue(mockRegistry);
+		mockModelRegistryCreate.mockReturnValue(mockRegistry);
 
 		mockCreateAgentSession.mockRejectedValue(42);
 
 		const result = await runAgent(defaultContext, defaultConfig);
 
-		expect(result.success).toBe(false);
+		assertFailure(result);
 		expect(result.error).toBe("Unknown error");
 	});
 
@@ -241,14 +268,12 @@ describe("runAgent", () => {
 		await runAgent(
 			defaultContext,
 			createAgentConfig({ provider: "openai", model: "gpt-4" }),
-			// @ts-expect-error - mocking in tests
-			customAuth,
-			// @ts-expect-error - mocking in tests
-			customRegistry,
+			customAuth as unknown as Parameters<typeof runAgent>[2],
+			customRegistry as unknown as Parameters<typeof runAgent>[3],
 		);
 
 		expect(customRegistry.find).toHaveBeenCalledWith("openai", "gpt-4");
-		expect(mockDiscoverModels).not.toHaveBeenCalled();
+		expect(mockModelRegistryCreate).not.toHaveBeenCalled();
 	});
 
 	it("passes correct options to createAgentSession", async () => {
@@ -256,7 +281,7 @@ describe("runAgent", () => {
 		const mockRegistry = {
 			find: vi.fn(() => mockModel),
 		};
-		mockDiscoverModels.mockReturnValue(mockRegistry);
+		mockModelRegistryCreate.mockReturnValue(mockRegistry);
 
 		const mockSession = createMockSession();
 		mockCreateAgentSession.mockResolvedValue({ session: mockSession });
@@ -268,10 +293,8 @@ describe("runAgent", () => {
 				cwd: "/test/dir",
 				model: mockModel,
 				thinkingLevel: "off",
-				hooks: [],
-				skills: [],
-				contextFiles: [],
-				slashCommands: [],
+				tools: ["read", "bash", "edit", "write"],
+				resourceLoader: expect.any(DefaultResourceLoader),
 			}),
 		);
 	});
@@ -281,7 +304,7 @@ describe("runAgent", () => {
 		const mockRegistry = {
 			find: vi.fn(() => mockModel),
 		};
-		mockDiscoverModels.mockReturnValue(mockRegistry);
+		mockModelRegistryCreate.mockReturnValue(mockRegistry);
 
 		let capturedPrompt = "";
 		const mockSession = createMockSession();
@@ -312,7 +335,7 @@ describe("runAgent", () => {
 		const mockRegistry = {
 			find: vi.fn(() => mockModel),
 		};
-		mockDiscoverModels.mockReturnValue(mockRegistry);
+		mockModelRegistryCreate.mockReturnValue(mockRegistry);
 
 		const logMessages: string[] = [];
 		const mockLogger = {
@@ -396,7 +419,7 @@ describe("runAgent", () => {
 		const mockRegistry = {
 			find: vi.fn(() => mockModel),
 		};
-		mockDiscoverModels.mockReturnValue(mockRegistry);
+		mockModelRegistryCreate.mockReturnValue(mockRegistry);
 
 		const logMessages: string[] = [];
 		const mockLogger = {
@@ -439,7 +462,7 @@ describe("runAgent", () => {
 		const mockRegistry = {
 			find: vi.fn(() => mockModel),
 		};
-		mockDiscoverModels.mockReturnValue(mockRegistry);
+		mockModelRegistryCreate.mockReturnValue(mockRegistry);
 
 		const logMessages: string[] = [];
 		const mockLogger = {
@@ -492,7 +515,7 @@ describe("runAgent", () => {
 			prompt: vi.fn(async () => {}),
 		};
 
-		mockDiscoverModels.mockReturnValue({
+		mockModelRegistryCreate.mockReturnValue({
 			find: vi.fn().mockReturnValue(mockModel),
 		});
 		mockCreateAgentSession.mockResolvedValue({ session: mockSession });
@@ -503,10 +526,8 @@ describe("runAgent", () => {
 			promptTemplate: customTemplate,
 		});
 
-		// Verify that the session.prompt was called with the custom template result
-		// Since we can't easily mock buildPrompt, we'll verify that it was called
-		expect(mockSession.prompt).toHaveBeenCalled();
-		const promptArg = mockSession.prompt.mock.calls[0][0];
-		expect(promptArg).toBe("Custom: do something for 1");
+		expect(mockSession.prompt).toHaveBeenCalledWith(
+			"Custom: do something for 1",
+		);
 	});
 });

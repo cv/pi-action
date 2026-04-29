@@ -2,35 +2,39 @@ import * as core from "@actions/core";
 import * as github from "@actions/github";
 import { DEFAULTS } from "./defaults.js";
 import { createGitHubClient } from "./github.js";
+import {
+	getInputOrDefault,
+	parseBooleanInput,
+	parseCsvInput,
+	parsePositiveIntegerInput,
+} from "./inputs.js";
 import { run } from "./run.js";
 import { getErrorMessage } from "./utils.js";
 
-function getInputOrDefault(name: string, defaultValue: string): string {
-	const value = core.getInput(name);
-	return value || defaultValue;
-}
-
 run({
 	inputs: {
-		triggerPhrase: getInputOrDefault("trigger_phrase", DEFAULTS.triggerPhrase),
-		allowedBots: (core.getInput("allowed_bots") || "")
-			.split(",")
-			.map((s) => s.trim())
-			.filter(Boolean),
+		triggerPhrase: getInputOrDefault(
+			core.getInput,
+			"trigger_phrase",
+			DEFAULTS.triggerPhrase,
+		),
+		allowedBots: parseCsvInput(core.getInput("allowed_bots")),
 		modelConfig: {
-			timeout: Number.parseInt(
-				getInputOrDefault("timeout", String(DEFAULTS.timeout)),
-				10,
+			timeout: parsePositiveIntegerInput(
+				core.getInput("timeout"),
+				DEFAULTS.timeout,
 			),
-			provider: getInputOrDefault("provider", DEFAULTS.provider),
-			model: getInputOrDefault("model", DEFAULTS.model),
+			provider: getInputOrDefault(core.getInput, "provider", DEFAULTS.provider),
+			model: getInputOrDefault(core.getInput, "model", DEFAULTS.model),
 		},
 		githubToken: core.getInput("github_token") || process.env.GITHUB_TOKEN,
 		gistToken: core.getInput("gist_token") || undefined,
 		piAuthJson: core.getInput("pi_auth_json"),
 		promptTemplate: core.getInput("prompt_template"),
-		shareSession:
-			getInputOrDefault("share_session", "true").toLowerCase() === "true",
+		shareSession: parseBooleanInput(
+			core.getInput("share_session"),
+			DEFAULTS.shareSession,
+		),
 	},
 	context: {
 		payload: github.context.payload,

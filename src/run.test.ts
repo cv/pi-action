@@ -117,7 +117,7 @@ describe("run", () => {
 						author_association: "OWNER",
 					},
 				},
-				repo: { owner: "testowner", repo: "testrepo" },
+				repo: { owner: "testowner", name: "testrepo" },
 			},
 		});
 
@@ -139,7 +139,7 @@ describe("run", () => {
 						author_association: "NONE",
 					},
 				},
-				repo: { owner: "testowner", repo: "testrepo" },
+				repo: { owner: "testowner", name: "testrepo" },
 			},
 		});
 
@@ -157,8 +157,10 @@ describe("run", () => {
 				allowedBots: ["dependabot[bot]"],
 				modelConfig: createModelConfig(),
 				githubToken: "test-token",
+				gistToken: undefined,
 				piAuthJson: undefined,
 				promptTemplate: undefined,
+				shareSession: DEFAULTS.shareSession,
 			},
 			context: {
 				payload: {
@@ -201,8 +203,10 @@ describe("run", () => {
 				allowedBots: [],
 				modelConfig: createModelConfig(),
 				githubToken: undefined,
+				gistToken: undefined,
 				piAuthJson: undefined,
 				promptTemplate: undefined,
+				shareSession: DEFAULTS.shareSession,
 			},
 			context: {
 				payload: {

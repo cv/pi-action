@@ -27,7 +27,7 @@ export async function shareSession(
 
 	try {
 		// Export session to HTML
-		session.exportToHtml(tmpFile);
+		await session.exportToHtml(tmpFile);
 
 		// Read the HTML content
 		const htmlContent = readFileSync(tmpFile, "utf-8");
