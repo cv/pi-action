@@ -23,7 +23,6 @@ describe("readActionInputs", () => {
 				timeout: DEFAULTS.timeout,
 			},
 			githubToken: "env-token",
-			gistToken: undefined,
 			apiKey: undefined,
 			customProvider: undefined,
 			promptTemplate: undefined,
@@ -38,7 +37,6 @@ describe("readActionInputs", () => {
 		const inputs = readActionInputs(
 			createInputReader({
 				github_token: "input-token",
-				gist_token: "gist-token",
 				api_key: "sk-test",
 				trigger_phrase: "@assistant",
 				allowed_bots: "dependabot[bot], renovate[bot]",
@@ -59,7 +57,6 @@ describe("readActionInputs", () => {
 		);
 
 		expect(inputs.githubToken).toBe("input-token");
-		expect(inputs.gistToken).toBe("gist-token");
 		expect(inputs.apiKey).toBe("sk-test");
 		expect(inputs.triggerPhrase).toBe("@assistant");
 		expect(inputs.allowedBots).toEqual(["dependabot[bot]", "renovate[bot]"]);

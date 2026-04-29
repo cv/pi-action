@@ -1,8 +1,15 @@
 # Session Sharing
 
-pi-action automatically shares the complete agent session as a viewable HTML link after each run. This provides full transparency and debugging capabilities.
+pi-action automatically uploads the complete agent session as a GitHub Actions artifact after each run. This provides transparency and debugging data without requiring a gist PAT.
 
 ## What's Included in Sessions
+
+The session artifact contains:
+
+- `session.html` - Human-readable session export
+- `session.jsonl` - Native pi session data for tooling/auditing
+
+The exported session includes:
 
 - **Full conversation history** - Every message between user and agent
 - **Tool executions** - All file reads, writes, bash commands, and their outputs
@@ -36,7 +43,7 @@ I've analyzed the code and made the following changes:
 All tests are passing now.
 
 ---
-📎 [View full session](https://shittycodingagent.ai/session?abc123def456)
+📎 [Download session artifact](https://github.com/owner/repo/actions/runs/123456789/artifacts/987654321)
 ```
 
 ## Disabling Session Sharing
@@ -54,27 +61,10 @@ To disable session sharing:
 
 ## Privacy and Security
 
-- Sessions are uploaded as **secret** (non-public) GitHub gists
-- Only people with the direct link can access the session
-- Sessions include the same information that would be in your repository anyway
-
-## Token Requirements
-
-**Important:** The default `GITHUB_TOKEN` does not have permission to create gists. To enable session sharing, provide a separate Personal Access Token (PAT) with the `gist` scope via the `gist_token` input:
-
-```yaml
-- uses: cv/pi-action@v1
-  with:
-    github_token: ${{ secrets.GITHUB_TOKEN }}  # For issues, PRs, reactions
-    gist_token: ${{ secrets.PAT_WITH_GIST_SCOPE }}  # PAT with gist scope only
-    share_session: true
-  env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-```
-
-This separation follows the principle of least privilege - the PAT only needs `gist` scope, not full repo access.
-
-If gist creation fails (e.g., due to missing permissions), the action will gracefully continue and post the response without a session link. This ensures the action never fails due to session sharing issues.
+- Session artifacts inherit the repository/workflow run visibility
+- No extra PAT or `gist` scope is required
+- Artifact retention follows your repository's GitHub Actions artifact settings
+- Sessions include the same information that would be visible in the workflow logs and repository checkout
 
 ## Use Cases
 
@@ -84,7 +74,7 @@ When the agent makes unexpected changes or fails:
 @pi fix the test failures
 
 # Agent makes some changes but tests still fail
-# Session link shows exactly what the agent tried to do
+# Session artifact shows exactly what the agent tried to do
 # and why it didn't work
 ```
 
@@ -93,9 +83,9 @@ For security-sensitive repositories:
 ```
 @pi review this pull request for security issues
 
-# Session link shows:
+# Session artifact shows:
 # - What files the agent examined
-# - What security checks it performed  
+# - What security checks it performed
 # - Its reasoning for each finding
 ```
 
@@ -104,7 +94,7 @@ Sharing agent interactions with team members:
 ```
 @pi implement the user authentication feature
 
-# Share the session link with team members to show:
+# Share the artifact link with team members to show:
 # - How the feature was implemented
 # - What design decisions the agent made
 # - Full audit trail of all changes
@@ -120,16 +110,6 @@ When something goes wrong:
 # - Error messages and outputs
 # - Agent's troubleshooting attempts
 ```
-
-## Session Viewer Features
-
-The session viewer at `https://shittycodingagent.ai/session` provides:
-
-- **Syntax highlighting** for code and diffs
-- **Collapsible sections** for tool outputs
-- **Timeline view** of the conversation
-- **Search functionality** to find specific content
-- **Mobile-friendly** responsive design
 
 ## Example Session Structure
 
@@ -148,6 +128,6 @@ Agent Response: "Fixed the null reference issue..."
 
 Each step shows:
 - Input parameters
-- Full output/results  
+- Full output/results
 - Execution time
 - Success/error status

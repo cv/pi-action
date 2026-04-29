@@ -27,6 +27,7 @@ export interface RepoRef {
  */
 export interface Session {
 	exportToHtml: (outputPath?: string) => string | Promise<string>;
+	exportToJsonl: (outputPath?: string) => string | Promise<string>;
 }
 
 /**
@@ -125,13 +126,6 @@ export interface OctokitClient {
 				repo: string;
 				pull_number: number;
 			}) => Promise<{ data: unknown }>;
-		};
-		gists: {
-			create: (params: {
-				files: Record<string, { content: string }>;
-				public?: boolean;
-				description?: string;
-			}) => Promise<{ data: { html_url?: string } }>;
 		};
 	};
 }

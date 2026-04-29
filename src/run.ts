@@ -16,7 +16,6 @@ export interface ActionInputs {
 	allowedBots: string[];
 	modelConfig: ModelConfig;
 	githubToken: string | undefined;
-	gistToken: string | undefined;
 	apiKey: string | undefined;
 	customProvider: CustomProviderConfig | undefined;
 	promptTemplate: string | undefined;
@@ -63,17 +62,13 @@ function createAgentConfig(
 }
 
 export async function run(deps: ActionDependencies): Promise<void> {
-	const { inputs, log, cwd, createClient } = deps;
+	const { inputs, log, cwd } = deps;
 	const runContext = await getRunContext(deps);
 	if (!runContext) {
 		return;
 	}
 
 	const { piContext, ghClient, triggerInfo } = runContext;
-	const gistClient = inputs.gistToken
-		? createClient(inputs.gistToken)
-		: undefined;
-
 	if (inputs.outputMode === "comment" && triggerInfo) {
 		await addReaction(ghClient, triggerInfo, "eyes");
 	}
@@ -87,8 +82,6 @@ export async function run(deps: ActionDependencies): Promise<void> {
 
 	if (inputs.outputMode === "output") {
 		const shareUrl = await shareSessionForResult(
-			ghClient,
-			gistClient,
 			piContext.title,
 			result,
 			inputs.shareSession,
@@ -105,12 +98,5 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		return;
 	}
 
-	await postResult(
-		ghClient,
-		gistClient,
-		triggerInfo,
-		result,
-		inputs.shareSession,
-		log,
-	);
+	await postResult(ghClient, triggerInfo, result, inputs.shareSession, log);
 }

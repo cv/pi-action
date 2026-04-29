@@ -115,12 +115,6 @@ export interface GitHubClient {
 	getPullRequestReviewComments(
 		pullNumber: number,
 	): Promise<PullRequestReviewComment[]>;
-	createGist(
-		content: string,
-		filename: string,
-		description: string,
-		isPublic?: boolean,
-	): Promise<string>;
 }
 
 export function createGitHubClient(
@@ -206,20 +200,6 @@ export function createGitHubClient(
 				...(comment.line ? { line: comment.line } : {}),
 				created_at: comment.created_at,
 			}));
-		},
-
-		async createGist(
-			content: string,
-			filename: string,
-			description: string,
-			isPublic = false,
-		): Promise<string> {
-			const { data: gist } = await octokit.rest.gists.create({
-				files: { [filename]: { content } },
-				public: isPublic,
-				description,
-			});
-			return gist.html_url || "";
 		},
 	};
 }

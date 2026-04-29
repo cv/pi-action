@@ -1,146 +1,117 @@
-import { unlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import {
-	afterEach,
-	beforeEach,
-	describe,
-	expect,
-	it,
-	type Mock,
-	vi,
-} from "vitest";
-import type { GitHubClient } from "./github.js";
+import { existsSync, writeFileSync } from "node:fs";
+import { describe, expect, it, vi } from "vitest";
 import { shareSession } from "./share.js";
-import { createMockGitHubClient } from "./test-helpers.js";
 import type { Session } from "./types.js";
 
+function createMockSession(): Session {
+	return {
+		exportToHtml: vi.fn((path?: string) => {
+			if (!path) {
+				throw new Error("Missing HTML output path");
+			}
+			writeFileSync(path, "<html>Mock session HTML</html>");
+			return path;
+		}),
+		exportToJsonl: vi.fn((path?: string) => {
+			if (!path) {
+				throw new Error("Missing JSONL output path");
+			}
+			writeFileSync(path, '{"type":"session"}\n');
+			return path;
+		}),
+	};
+}
+
 describe("shareSession", () => {
-	let mockGitHubClient: GitHubClient;
-	let mockSession: Session;
-	let tmpFile: string;
-
-	beforeEach(() => {
-		mockGitHubClient = createMockGitHubClient();
-		tmpFile = join(tmpdir(), `test-session-${Date.now()}.html`);
-
-		// Create mock session with exportToHtml method
-		mockSession = {
-			exportToHtml: vi.fn((path?: string) => {
-				if (!path) {
-					throw new Error("Missing output path");
-				}
-				writeFileSync(path, "<html>Mock session HTML</html>");
-				return path;
-			}),
+	it("uploads HTML and JSONL session exports as an artifact", async () => {
+		const artifactClient = {
+			uploadArtifact: vi.fn().mockResolvedValue({ id: 123 }),
 		};
+		const session = createMockSession();
 
-		vi.clearAllMocks();
-	});
-
-	afterEach(() => {
-		// Clean up any leftover files
-		try {
-			unlinkSync(tmpFile);
-		} catch {
-			// Ignore if file doesn't exist
-		}
-	});
-
-	it("successfully shares session and returns preview URL", async () => {
-		const gistUrl = "https://gist.github.com/user/abc123";
-		(mockGitHubClient.createGist as Mock).mockResolvedValue(gistUrl);
-
-		const result = await shareSession(
-			mockSession,
-			mockGitHubClient,
-			"Test session",
-		);
-
-		expect(result).toEqual({
-			gistUrl,
-			previewUrl: "https://shittycodingagent.ai/session?abc123",
+		const result = await shareSession(session, {
+			artifactName: "pi-session-test",
+			artifactClient,
+			runUrl: "https://github.com/cv/pi-action/actions/runs/1",
 		});
 
-		expect(mockSession.exportToHtml).toHaveBeenCalledWith(
-			expect.stringMatching(/pi-session-\d+\.html$/),
+		expect(result).toEqual({
+			artifactName: "pi-session-test",
+			artifactId: 123,
+			artifactUrl:
+				"https://github.com/cv/pi-action/actions/runs/1/artifacts/123",
+		});
+		expect(session.exportToHtml).toHaveBeenCalledWith(
+			expect.stringMatching(/session\.html$/),
 		);
-		expect(mockGitHubClient.createGist).toHaveBeenCalledWith(
-			"<html>Mock session HTML</html>",
-			"session.html",
-			"Test session",
-			false,
+		expect(session.exportToJsonl).toHaveBeenCalledWith(
+			expect.stringMatching(/session\.jsonl$/),
+		);
+		expect(artifactClient.uploadArtifact).toHaveBeenCalledWith(
+			"pi-session-test",
+			[
+				expect.stringMatching(/session\.html$/),
+				expect.stringMatching(/session\.jsonl$/),
+			],
+			expect.stringContaining("pi-session-test-"),
 		);
 	});
 
-	it("uses default description when none provided", async () => {
-		const gistUrl = "https://gist.github.com/user/def456";
-		(mockGitHubClient.createGist as Mock).mockResolvedValue(gistUrl);
+	it("falls back to the run URL when artifact id is absent", async () => {
+		const artifactClient = {
+			uploadArtifact: vi.fn().mockResolvedValue({}),
+		};
 
-		await shareSession(mockSession, mockGitHubClient);
+		const result = await shareSession(createMockSession(), {
+			artifactName: "pi-session-test",
+			artifactClient,
+			runUrl: "https://github.com/cv/pi-action/actions/runs/1",
+		});
 
-		expect(mockGitHubClient.createGist).toHaveBeenCalledWith(
-			expect.any(String),
-			"session.html",
-			"pi-action session",
-			false,
-		);
+		expect(result).toEqual({
+			artifactName: "pi-session-test",
+			artifactUrl: "https://github.com/cv/pi-action/actions/runs/1",
+		});
 	});
 
 	it("returns null when session export fails", async () => {
-		mockSession.exportToHtml = vi.fn(() => {
+		const artifactClient = {
+			uploadArtifact: vi.fn(),
+		};
+		const session = createMockSession();
+		session.exportToHtml = vi.fn(() => {
 			throw new Error("Export failed");
 		});
 
-		const result = await shareSession(
-			mockSession,
-			mockGitHubClient,
-			"Test session",
-		);
-
-		expect(result).toBeNull();
-		expect(mockGitHubClient.createGist).not.toHaveBeenCalled();
-	});
-
-	it("returns null when gist creation fails", async () => {
-		(mockGitHubClient.createGist as Mock).mockRejectedValue(
-			new Error("Gist creation failed"),
-		);
-
-		const result = await shareSession(
-			mockSession,
-			mockGitHubClient,
-			"Test session",
-		);
-
-		expect(result).toBeNull();
-		expect(mockSession.exportToHtml).toHaveBeenCalled();
-	});
-
-	it("returns null when gist URL is invalid", async () => {
-		(mockGitHubClient.createGist as Mock).mockResolvedValue("invalid-url");
-
-		const result = await shareSession(
-			mockSession,
-			mockGitHubClient,
-			"Test session",
-		);
-
-		expect(result).toBeNull();
-	});
-
-	it("cleans up temporary file even when sharing fails", async () => {
-		mockSession.exportToHtml = vi.fn((path?: string) => {
-			if (!path) {
-				throw new Error("Missing output path");
-			}
-			writeFileSync(path, "test content");
-			throw new Error("Export failed");
+		const result = await shareSession(session, {
+			artifactName: "pi-session-test",
+			artifactClient,
 		});
 
-		await shareSession(mockSession, mockGitHubClient, "Test session");
+		expect(result).toBeNull();
+		expect(artifactClient.uploadArtifact).not.toHaveBeenCalled();
+	});
 
-		// File should not exist after the function completes
-		expect(() => unlinkSync(tmpFile)).toThrow();
+	it("returns null when artifact upload fails and cleans up temp files", async () => {
+		const artifactClient = {
+			uploadArtifact: vi.fn().mockRejectedValue(new Error("Upload failed")),
+		};
+		let artifactRoot = "";
+		artifactClient.uploadArtifact.mockImplementationOnce(
+			async (_name: string, files: string[], rootDirectory: string) => {
+				artifactRoot = rootDirectory;
+				expect(files.every((file) => existsSync(file))).toBe(true);
+				throw new Error("Upload failed");
+			},
+		);
+
+		const result = await shareSession(createMockSession(), {
+			artifactName: "pi-session-test",
+			artifactClient,
+		});
+
+		expect(result).toBeNull();
+		expect(artifactRoot).not.toBe("");
+		expect(existsSync(artifactRoot)).toBe(false);
 	});
 });

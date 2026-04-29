@@ -18,10 +18,12 @@ describe("result delivery", () => {
 
 	it("returns undefined share URL when sharing is disabled", async () => {
 		const shareUrl = await shareSessionForResult(
-			createMockGitHubClient(),
-			undefined,
 			"Issue title",
-			{ success: true, response: "Done", session: { exportToHtml: vi.fn() } },
+			{
+				success: true,
+				response: "Done",
+				session: { exportToHtml: vi.fn(), exportToJsonl: vi.fn() },
+			},
 			false,
 			{
 				info: vi.fn(),
@@ -67,7 +69,6 @@ describe("result delivery", () => {
 
 		await postResult(
 			client,
-			undefined,
 			createTriggerInfo({ issueNumber: 7 }),
 			{ success: false, error: "Nope" },
 			true,

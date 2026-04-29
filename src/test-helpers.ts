@@ -26,7 +26,6 @@ export function createMockGitHubClient(): GitHubClient {
 		}),
 		getPullRequestDiff: vi.fn().mockResolvedValue(""),
 		getPullRequestReviewComments: vi.fn().mockResolvedValue([]),
-		createGist: vi.fn().mockResolvedValue("https://gist.github.com/test123"),
 	};
 }
 
@@ -104,7 +103,6 @@ export function createActionInputs(
 		allowedBots: [],
 		modelConfig: createModelConfig(),
 		githubToken: "test-token",
-		gistToken: undefined,
 		apiKey: undefined,
 		customProvider: undefined,
 		promptTemplate: undefined,
@@ -168,6 +166,8 @@ export function createRepoRef(overrides: Partial<RepoRef> = {}): RepoRef {
  */
 export function createMockSession() {
 	return {
+		exportToHtml: vi.fn(),
+		exportToJsonl: vi.fn(),
 		subscribe: vi.fn(),
 		prompt: vi.fn(),
 	};

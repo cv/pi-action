@@ -233,9 +233,6 @@ describe("createGitHubClient", () => {
 					get: vi.fn(),
 					listReviewComments: vi.fn(),
 				},
-				gists: {
-					create: vi.fn(),
-				},
 			},
 		};
 	}

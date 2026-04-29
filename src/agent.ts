@@ -89,11 +89,15 @@ export async function runAgent(
 			return {
 				success: false,
 				error: "Agent returned empty response",
-				session,
+				session: createdSession,
 			};
 		}
 
-		return { success: true, response: trimmedResponse, session };
+		return {
+			success: true,
+			response: trimmedResponse,
+			session: createdSession,
+		};
 	} catch (error) {
 		const errorResult = {
 			success: false,

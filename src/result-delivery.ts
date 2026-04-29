@@ -5,8 +5,6 @@ import { shareSession } from "./share.js";
 import type { AgentResult, TriggerInfo } from "./types.js";
 
 export async function shareSessionForResult(
-	ghClient: GitHubClient,
-	gistClient: GitHubClient | undefined,
 	issueTitle: string,
 	result: AgentResult,
 	shareSessionEnabled: boolean,
@@ -16,16 +14,15 @@ export async function shareSessionForResult(
 		return undefined;
 	}
 
-	const clientForGist = gistClient ?? ghClient;
 	try {
-		const shareResult = await shareSession(
-			result.session,
-			clientForGist,
-			`pi-action session for ${result.success ? "success" : "error"}: ${issueTitle}`,
-		);
+		const shareResult = await shareSession(result.session, {
+			artifactName: `pi-session-${result.success ? "success" : "error"}-${Date.now()}`,
+		});
 		if (shareResult) {
-			log.info(`Session shared: ${shareResult.previewUrl}`);
-			return shareResult.previewUrl;
+			log.info(
+				`Session artifact uploaded for ${issueTitle}: ${shareResult.artifactUrl}`,
+			);
+			return shareResult.artifactUrl;
 		}
 	} catch (error) {
 		log.warning(`Failed to share session: ${error}`);
@@ -35,15 +32,12 @@ export async function shareSessionForResult(
 
 export async function postResult(
 	ghClient: GitHubClient,
-	gistClient: GitHubClient | undefined,
 	triggerInfo: TriggerInfo,
 	result: AgentResult,
 	shareSessionEnabled: boolean,
 	log: Logger,
 ): Promise<void> {
 	const shareUrl = await shareSessionForResult(
-		ghClient,
-		gistClient,
 		triggerInfo.issueTitle,
 		result,
 		shareSessionEnabled,

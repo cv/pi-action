@@ -111,7 +111,6 @@ describe("run", () => {
 				allowedBots: ["dependabot[bot]"],
 				modelConfig: createModelConfig(),
 				githubToken: "test-token",
-				gistToken: undefined,
 				apiKey: undefined,
 				customProvider: undefined,
 				promptTemplate: undefined,
@@ -161,7 +160,6 @@ describe("run", () => {
 				allowedBots: [],
 				modelConfig: createModelConfig(),
 				githubToken: undefined,
-				gistToken: undefined,
 				apiKey: undefined,
 				customProvider: undefined,
 				promptTemplate: undefined,
@@ -234,7 +232,6 @@ describe("run", () => {
 				allowedBots: [],
 				modelConfig: createModelConfig(),
 				githubToken: "test-token",
-				gistToken: undefined,
 				apiKey: "sk-test",
 				customProvider: undefined,
 				promptTemplate: undefined,
@@ -288,7 +285,6 @@ describe("run", () => {
 				allowedBots: [],
 				modelConfig: createModelConfig(),
 				githubToken: "test-token",
-				gistToken: undefined,
 				apiKey: "sk-test",
 				customProvider,
 				promptTemplate: undefined,
@@ -471,12 +467,14 @@ describe("run", () => {
 
 	it("shares session when shareSession is enabled", async () => {
 		const mockClient = createMockGitHubClient();
-		const mockSession = { exportToHtml: vi.fn() };
+		const mockSession = { exportToHtml: vi.fn(), exportToJsonl: vi.fn() };
 
 		// Mock shareSession to return a result
 		vi.mocked(shareSession).mockResolvedValue({
-			gistUrl: "https://gist.github.com/user/abc123",
-			previewUrl: "https://shittycodingagent.ai/session?abc123",
+			artifactName: "pi-session-test",
+			artifactId: 123,
+			artifactUrl:
+				"https://github.com/cv/pi-action/actions/runs/1/artifacts/123",
 		});
 
 		const deps = createMockDeps({
@@ -511,7 +509,7 @@ describe("run", () => {
 		expect(mockClient.createComment).toHaveBeenCalledWith(
 			1,
 			expect.stringContaining(
-				"📎 [View full session](https://shittycodingagent.ai/session?abc123)",
+				"📎 [Download session artifact](https://github.com/cv/pi-action/actions/runs/1/artifacts/123)",
 			),
 		);
 	});
@@ -555,12 +553,14 @@ describe("run", () => {
 
 	it("shares session on error response when session is available", async () => {
 		const mockClient = createMockGitHubClient();
-		const mockSession = { exportToHtml: vi.fn() };
+		const mockSession = { exportToHtml: vi.fn(), exportToJsonl: vi.fn() };
 
 		// Mock shareSession to return a result
 		vi.mocked(shareSession).mockResolvedValue({
-			gistUrl: "https://gist.github.com/user/error123",
-			previewUrl: "https://shittycodingagent.ai/session?error123",
+			artifactName: "pi-session-error",
+			artifactId: 456,
+			artifactUrl:
+				"https://github.com/cv/pi-action/actions/runs/1/artifacts/456",
 		});
 
 		const deps = createMockDeps({
@@ -595,7 +595,7 @@ describe("run", () => {
 		expect(mockClient.createComment).toHaveBeenCalledWith(
 			1,
 			expect.stringContaining(
-				"📎 [View full session](https://shittycodingagent.ai/session?error123)",
+				"📎 [Download session artifact](https://github.com/cv/pi-action/actions/runs/1/artifacts/456)",
 			),
 		);
 		expect(mockClient.createComment).toHaveBeenCalledWith(
@@ -606,7 +606,7 @@ describe("run", () => {
 
 	it("posts response without session link when sharing fails", async () => {
 		const mockClient = createMockGitHubClient();
-		const mockSession = { exportToHtml: vi.fn() };
+		const mockSession = { exportToHtml: vi.fn(), exportToJsonl: vi.fn() };
 
 		// Mock shareSession to return null (failure)
 		vi.mocked(shareSession).mockResolvedValue(null);
@@ -688,10 +688,12 @@ describe("run", () => {
 
 	it("logs warning when session sharing throws", async () => {
 		const mockClient = createMockGitHubClient();
-		const mockSession = { exportToHtml: vi.fn() };
+		const mockSession = { exportToHtml: vi.fn(), exportToJsonl: vi.fn() };
 
 		// Mock shareSession to throw an error
-		vi.mocked(shareSession).mockRejectedValue(new Error("Gist API error"));
+		vi.mocked(shareSession).mockRejectedValue(
+			new Error("Artifact upload error"),
+		);
 
 		const deps = createMockDeps({
 			context: {

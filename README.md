@@ -83,7 +83,6 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
 | `github_token` | GitHub token for API access (issues, PRs, reactions, comments) | Yes | - |
-| `gist_token` | GitHub token with gist scope for session sharing (optional) | No | - |
 | `api_key` | LLM provider API key for the selected `provider` (runtime-only; env vars are preferred) | No | - |
 | `trigger_phrase` | Phrase to trigger pi | No | `@pi` |
 | `allowed_bots` | Comma-separated list of allowed bot usernames | No | - |
@@ -260,7 +259,7 @@ See [examples/prompt-templates.md](examples/prompt-templates.md) for more templa
 
 #### Session Sharing
 
-By default, pi-action shares the complete session (including tool executions and agent reasoning) as a secret GitHub gist and includes a link in the response comment. This helps with debugging and provides full transparency of what the agent did.
+By default, pi-action uploads the complete session (including tool executions and agent reasoning) as a GitHub Actions artifact and includes a link in the response comment. This helps with debugging and provides full transparency of what the agent did.
 
 ```yaml
 - uses: cv/pi-action@v1
@@ -288,23 +287,7 @@ To disable session sharing:
 - Agent reasoning and decision process
 - Error details when things go wrong
 
-Sessions are uploaded as **secret** (non-public) GitHub gists and are accessible via a viewer at `https://shittycodingagent.ai/session?<gist_id>`.
-
-**Note:** The default `GITHUB_TOKEN` does not have permission to create gists. To enable session sharing, provide a separate Personal Access Token (PAT) with the `gist` scope via the `gist_token` input:
-
-```yaml
-- uses: cv/pi-action@v1
-  with:
-    github_token: ${{ secrets.GITHUB_TOKEN }}  # For issues, PRs, reactions
-    gist_token: ${{ secrets.PAT_WITH_GIST_SCOPE }}  # PAT with gist scope only
-    share_session: true
-  env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-```
-
-This separation follows the principle of least privilege - the PAT only needs `gist` scope, not full repo access.
-
-If gist creation fails (e.g., due to missing permissions), the action will gracefully continue and post the response without a session link.
+Sessions are uploaded as workflow artifacts containing both `session.html` and `session.jsonl`. Artifacts inherit the workflow run's repository visibility and retention settings, and require no extra PAT beyond the standard `GITHUB_TOKEN`.
 
 #### Comments only (no issue/PR creation triggers)
 
@@ -329,7 +312,7 @@ jobs:
 3. An 👀 reaction is added to acknowledge the request
 4. **Git hooks are installed** in the target repository to enforce commit conventions (see [`scripts/install-agent-hooks.sh`](scripts/install-agent-hooks.sh))
 5. The pi SDK is invoked with the issue/PR context and the task from the trigger (see [`src/agent.ts`](src/agent.ts))
-6. **Session is shared** as a secret GitHub gist with a preview URL (if `share_session` is enabled)
+6. **Session is shared** as a GitHub Actions artifact with both HTML and JSONL exports (if `share_session` is enabled)
 7. The response is posted as a new comment with a 🚀 reaction, including the session link
 
 The main orchestration logic is in [`src/run.ts`](src/run.ts), with prompt building in [`src/context.ts`](src/context.ts).

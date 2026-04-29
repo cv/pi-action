@@ -1,66 +1,82 @@
-import { readFileSync, unlinkSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { GitHubClient } from "./github.js";
+import artifactClient, { type ArtifactClient } from "@actions/artifact";
 import type { Session } from "./types.js";
 
 export interface ShareResult {
-	gistUrl: string;
-	previewUrl: string;
+	artifactName: string;
+	artifactUrl: string;
+	artifactId?: number;
+}
+
+export interface ShareSessionOptions {
+	artifactName?: string;
+	artifactClient?: Pick<ArtifactClient, "uploadArtifact">;
+	runUrl?: string;
+}
+
+const GITHUB_REPOSITORY_ENV = "GITHUB_REPOSITORY";
+const GITHUB_RUN_ID_ENV = "GITHUB_RUN_ID";
+const GITHUB_SERVER_URL_ENV = "GITHUB_SERVER_URL";
+
+function getRunUrl(): string | undefined {
+	const serverUrl = process.env[GITHUB_SERVER_URL_ENV] ?? "https://github.com";
+	const repository = process.env[GITHUB_REPOSITORY_ENV];
+	const runId = process.env[GITHUB_RUN_ID_ENV];
+	return repository && runId
+		? `${serverUrl}/${repository}/actions/runs/${runId}`
+		: undefined;
+}
+
+function getArtifactUrl(
+	runUrl: string | undefined,
+	artifactId: number | undefined,
+): string | undefined {
+	if (!(runUrl && artifactId)) {
+		return runUrl;
+	}
+	return `${runUrl}/artifacts/${artifactId}`;
 }
 
 /**
- * Share a session as an HTML gist and return the preview URL.
- * The session is exported to HTML, uploaded as a secret gist, and a preview URL is returned.
- *
- * @param session The agent session to share
- * @param githubClient The GitHub client for gist creation
- * @param description Optional description for the gist
- * @returns ShareResult with URLs, or null if sharing fails
+ * Share a session as a GitHub Actions artifact and return its URL.
+ * The artifact contains both HTML and JSONL exports of the pi session.
  */
 export async function shareSession(
 	session: Session,
-	githubClient: GitHubClient,
-	description = "pi-action session",
+	options: ShareSessionOptions = {},
 ): Promise<ShareResult | null> {
-	const tmpFile = join(tmpdir(), `pi-session-${Date.now()}.html`);
+	const artifactName = options.artifactName ?? `pi-session-${Date.now()}`;
+	const artifactDir = mkdtempSync(join(tmpdir(), `${artifactName}-`));
+	const htmlPath = join(artifactDir, "session.html");
+	const jsonlPath = join(artifactDir, "session.jsonl");
+	const client = options.artifactClient ?? artifactClient;
 
 	try {
-		// Export session to HTML
-		await session.exportToHtml(tmpFile);
+		await session.exportToHtml(htmlPath);
+		await session.exportToJsonl(jsonlPath);
 
-		// Read the HTML content
-		const htmlContent = readFileSync(tmpFile, "utf-8");
-
-		// Create secret gist
-		const gistUrl = await githubClient.createGist(
-			htmlContent,
-			"session.html",
-			description,
-			false, // secret gist
+		const upload = await client.uploadArtifact(
+			artifactName,
+			[htmlPath, jsonlPath],
+			artifactDir,
+		);
+		const artifactUrl = getArtifactUrl(
+			options.runUrl ?? getRunUrl(),
+			upload.id,
 		);
 
-		// Extract gist ID from URL (should be a proper GitHub gist URL)
-		const gistIdMatch = gistUrl.match(/github\.com\/[^/]+\/([a-f0-9]+)$/);
-		if (!gistIdMatch) {
-			return null;
-		}
-		const gistId = gistIdMatch[1];
-
 		return {
-			gistUrl,
-			previewUrl: `https://shittycodingagent.ai/session?${gistId}`,
+			artifactName,
+			...(upload.id === undefined ? {} : { artifactId: upload.id }),
+			artifactUrl: artifactUrl ?? artifactName,
 		};
 	} catch (error) {
 		// Log error but don't fail the action
 		console.warn("Failed to share session:", error);
 		return null;
 	} finally {
-		// Clean up temp file
-		try {
-			unlinkSync(tmpFile);
-		} catch {
-			// Ignore cleanup errors
-		}
+		rmSync(artifactDir, { recursive: true, force: true });
 	}
 }

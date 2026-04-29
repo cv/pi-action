@@ -9,9 +9,6 @@ inputs:
   github_token:
     description: 'GitHub token for API access (issues, PRs, reactions, comments)'
     required: true
-  gist_token:
-    description: 'GitHub token with gist scope for session sharing (optional, falls back to github_token)'
-    required: false
   api_key:
     description: 'LLM provider API key (runtime-only; alternatively set provider-specific env vars like ANTHROPIC_API_KEY)'
     required: false
@@ -117,7 +114,6 @@ runs:
       run: npx --prefix ${{ github.action_path }} tsx ${{ github.action_path }}/src/index.ts
       env:
         INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
-        INPUT_GIST_TOKEN: ${{ inputs.gist_token }}
         INPUT_API_KEY: ${{ inputs.api_key }}
         INPUT_TRIGGER_PHRASE: ${{ inputs.trigger_phrase }}
         INPUT_ALLOWED_BOTS: ${{ inputs.allowed_bots }}

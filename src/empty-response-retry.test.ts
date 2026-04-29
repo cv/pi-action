@@ -53,7 +53,7 @@ describe("runAgentWithEmptyResponseRetry", () => {
 	});
 
 	it("preserves the first session when retry succeeds", async () => {
-		const firstSession = { exportToHtml: vi.fn() };
+		const firstSession = { exportToHtml: vi.fn(), exportToJsonl: vi.fn() };
 		vi.mocked(runAgent)
 			.mockResolvedValueOnce({
 				success: false,
@@ -79,7 +79,7 @@ describe("runAgentWithEmptyResponseRetry", () => {
 	});
 
 	it("preserves the retry session when first session is absent", async () => {
-		const retrySession = { exportToHtml: vi.fn() };
+		const retrySession = { exportToHtml: vi.fn(), exportToJsonl: vi.fn() };
 		vi.mocked(runAgent)
 			.mockResolvedValueOnce({
 				success: false,

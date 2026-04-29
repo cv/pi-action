@@ -36,7 +36,6 @@ export function readActionInputs(
 			model: getInputOrDefault(readInput, "model", DEFAULTS.model),
 		},
 		githubToken: readInput("github_token") || env[GITHUB_TOKEN_ENV],
-		gistToken: readInput("gist_token") || undefined,
 		apiKey: readInput("api_key") || undefined,
 		customProvider: readCustomProviderConfig(readInput),
 		promptTemplate: readInput("prompt_template") || undefined,

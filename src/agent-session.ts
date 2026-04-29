@@ -13,7 +13,7 @@ type CreateAgentSessionResult = Awaited<ReturnType<typeof createAgentSession>>;
 
 type ConfiguredAgentSession = Pick<
 	CreateAgentSessionResult["session"],
-	"exportToHtml" | "prompt" | "subscribe"
+	"exportToHtml" | "exportToJsonl" | "prompt" | "subscribe"
 >;
 
 export async function createConfiguredAgentSession(
