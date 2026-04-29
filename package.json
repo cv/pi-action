@@ -11,9 +11,9 @@
 		"check": "biome check --error-on-warnings . && npm run lint:actions && npm run lint:shell",
 		"fix": "biome check --write .",
 		"lint:actions": "node scripts/lint-actions.mjs",
-		"lint:shell": "shellcheck scripts/*.sh .husky/commit-msg .husky/pre-commit .husky/pre-push .husky/prepare-commit-msg",
+		"lint:shell": "shellcheck scripts/*.sh",
 		"typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
-		"prepare": "husky"
+		"prepare": "prek install --allow-missing-config --hook-type pre-commit --hook-type commit-msg --hook-type prepare-commit-msg --hook-type pre-push"
 	},
 	"keywords": [
 		"github-action",
@@ -44,11 +44,11 @@
 		"@biomejs/biome": "^2.4.13",
 		"@commitlint/cli": "^20.5.2",
 		"@commitlint/config-conventional": "^20.5.0",
+		"@j178/prek": "^0.3.11",
 		"@octokit/webhooks-types": "^7.6.1",
 		"@types/node": "^25.6.0",
 		"@vitest/coverage-v8": "^4.1.5",
 		"actionlint": "^2.0.6",
-		"husky": "^9.1.7",
 		"shellcheck": "^3.1.0",
 		"typescript": "^6.0.3",
 		"vitest": "^4.1.5"

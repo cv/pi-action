@@ -40,14 +40,14 @@ npm run fix
 
 ## Git Hooks
 
-This project uses [Husky](https://typicode.github.io/husky/) to enforce quality checks via git hooks. Hooks are automatically installed when you run `npm install`. See the [`.husky/`](.husky/) directory for hook scripts.
+This project uses [prek](https://github.com/j178/prek) to enforce quality checks via git hooks. Hooks are configured in [`.pre-commit-config.yaml`](.pre-commit-config.yaml) and are automatically installed when you run `npm install`.
 
 | Hook | What it does |
 |------|--------------|
-| [**pre-commit**](.husky/pre-commit) | Runs tests, type checking, linting, builds, and verifies `dist/` is up to date |
-| [**commit-msg**](.husky/commit-msg) | Enforces [Conventional Commits](https://www.conventionalcommits.org/) format via commitlint |
-| [**prepare-commit-msg**](.husky/prepare-commit-msg) | Auto-appends issue number from branch name (e.g., `feat/123-description` → `Refs #123`) |
-| [**pre-push**](.husky/pre-push) | Runs full test suite with coverage thresholds (80% lines/functions, 70% branches) |
+| **pre-commit** | Runs tests, type checking, linting, builds, and verifies `dist/` is up to date via [`scripts/check-dist.sh`](scripts/check-dist.sh) |
+| **commit-msg** | Enforces [Conventional Commits](https://www.conventionalcommits.org/) format via commitlint |
+| **prepare-commit-msg** | Auto-appends issue number from branch name via [`scripts/prepare-commit-msg.sh`](scripts/prepare-commit-msg.sh) (e.g., `feat/123-description` → `Refs #123`) |
+| **pre-push** | Runs full test suite with coverage thresholds from [`vitest.config.ts`](vitest.config.ts) |
 
 ### Commit Message Format
 

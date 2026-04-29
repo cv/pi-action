@@ -1,0 +1,68 @@
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+  - prepare-commit-msg
+  - pre-push
+
+repos:
+  - repo: local
+    hooks:
+      - id: test
+        name: npm test
+        entry: npm test
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: typecheck
+        name: npm run typecheck
+        entry: npm run typecheck
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: check
+        name: npm run check
+        entry: npm run check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: build
+        name: npm run build
+        entry: npm run build
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: check-dist
+        name: verify dist is up to date
+        entry: scripts/check-dist.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: commitlint
+        name: commitlint
+        entry: npx --no -- commitlint --edit
+        language: system
+        stages: [commit-msg]
+
+      - id: prepare-commit-msg
+        name: append issue reference from branch name
+        entry: scripts/prepare-commit-msg.sh
+        language: system
+        stages: [prepare-commit-msg]
+
+      - id: coverage
+        name: npm run coverage
+        entry: npm run coverage
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
