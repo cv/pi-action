@@ -1,5 +1,7 @@
-import { existsSync, writeFileSync } from "node:fs";
-import { describe, expect, it, vi } from "vitest";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { shareSession } from "./share.js";
 import type { Session } from "./types.js";
 
@@ -22,24 +24,35 @@ function createMockSession(): Session {
 	};
 }
 
+const artifactDirs: string[] = [];
+
+function createArtifactDir(name: string): string {
+	const artifactDir = join(tmpdir(), `${name}-${Date.now()}`);
+	artifactDirs.push(artifactDir);
+	return artifactDir;
+}
+
 describe("shareSession", () => {
-	it("uploads HTML and JSONL session exports as an artifact", async () => {
-		const artifactClient = {
-			uploadArtifact: vi.fn().mockResolvedValue({ id: 123 }),
-		};
+	afterEach(() => {
+		for (const artifactDir of artifactDirs.splice(0)) {
+			rmSync(artifactDir, { recursive: true, force: true });
+		}
+	});
+
+	it("exports HTML and JSONL session files for artifact upload", async () => {
+		const artifactDir = createArtifactDir("pi-session-test");
 		const session = createMockSession();
 
 		const result = await shareSession(session, {
 			artifactName: "pi-session-test",
-			artifactClient,
+			artifactDir,
 			runUrl: "https://github.com/cv/pi-action/actions/runs/1",
 		});
 
 		expect(result).toEqual({
 			artifactName: "pi-session-test",
-			artifactId: 123,
-			artifactUrl:
-				"https://github.com/cv/pi-action/actions/runs/1/artifacts/123",
+			artifactDir,
+			artifactUrl: "https://github.com/cv/pi-action/actions/runs/1",
 		});
 		expect(session.exportToHtml).toHaveBeenCalledWith(
 			expect.stringMatching(/session\.html$/),
@@ -47,37 +60,31 @@ describe("shareSession", () => {
 		expect(session.exportToJsonl).toHaveBeenCalledWith(
 			expect.stringMatching(/session\.jsonl$/),
 		);
-		expect(artifactClient.uploadArtifact).toHaveBeenCalledWith(
-			"pi-session-test",
-			[
-				expect.stringMatching(/session\.html$/),
-				expect.stringMatching(/session\.jsonl$/),
-			],
-			expect.stringContaining("pi-session-test-"),
+		expect(readFileSync(join(artifactDir, "session.html"), "utf-8")).toBe(
+			"<html>Mock session HTML</html>",
+		);
+		expect(readFileSync(join(artifactDir, "session.jsonl"), "utf-8")).toBe(
+			'{"type":"session"}\n',
 		);
 	});
 
-	it("falls back to the run URL when artifact id is absent", async () => {
-		const artifactClient = {
-			uploadArtifact: vi.fn().mockResolvedValue({}),
-		};
+	it("falls back to the artifact directory when no run URL is available", async () => {
+		const artifactDir = createArtifactDir("pi-session-test");
 
 		const result = await shareSession(createMockSession(), {
 			artifactName: "pi-session-test",
-			artifactClient,
-			runUrl: "https://github.com/cv/pi-action/actions/runs/1",
+			artifactDir,
 		});
 
 		expect(result).toEqual({
 			artifactName: "pi-session-test",
-			artifactUrl: "https://github.com/cv/pi-action/actions/runs/1",
+			artifactDir,
+			artifactUrl: artifactDir,
 		});
 	});
 
-	it("returns null when session export fails", async () => {
-		const artifactClient = {
-			uploadArtifact: vi.fn(),
-		};
+	it("returns null when HTML export fails and cleans up temp files", async () => {
+		const artifactDir = createArtifactDir("pi-session-test");
 		const session = createMockSession();
 		session.exportToHtml = vi.fn(() => {
 			throw new Error("Export failed");
@@ -85,33 +92,26 @@ describe("shareSession", () => {
 
 		const result = await shareSession(session, {
 			artifactName: "pi-session-test",
-			artifactClient,
+			artifactDir,
 		});
 
 		expect(result).toBeNull();
-		expect(artifactClient.uploadArtifact).not.toHaveBeenCalled();
+		expect(existsSync(artifactDir)).toBe(false);
 	});
 
-	it("returns null when artifact upload fails and cleans up temp files", async () => {
-		const artifactClient = {
-			uploadArtifact: vi.fn().mockRejectedValue(new Error("Upload failed")),
-		};
-		let artifactRoot = "";
-		artifactClient.uploadArtifact.mockImplementationOnce(
-			async (_name: string, files: string[], rootDirectory: string) => {
-				artifactRoot = rootDirectory;
-				expect(files.every((file) => existsSync(file))).toBe(true);
-				throw new Error("Upload failed");
-			},
-		);
+	it("returns null when JSONL export fails and cleans up temp files", async () => {
+		const artifactDir = createArtifactDir("pi-session-test");
+		const session = createMockSession();
+		session.exportToJsonl = vi.fn(() => {
+			throw new Error("Export failed");
+		});
 
-		const result = await shareSession(createMockSession(), {
+		const result = await shareSession(session, {
 			artifactName: "pi-session-test",
-			artifactClient,
+			artifactDir,
 		});
 
 		expect(result).toBeNull();
-		expect(artifactRoot).not.toBe("");
-		expect(existsSync(artifactRoot)).toBe(false);
+		expect(existsSync(artifactDir)).toBe(false);
 	});
 });

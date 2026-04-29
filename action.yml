@@ -70,7 +70,7 @@ inputs:
     description: 'Custom prompt template with placeholder variables'
     required: false
   share_session:
-    description: 'Include a link to the full session HTML in the response comment'
+    description: 'Upload session.html and session.jsonl as a GitHub Actions artifact and link it in the response comment'
     required: false
     default: 'true'
   output_mode:
@@ -94,7 +94,7 @@ outputs:
     description: 'Whether the agent succeeded (true/false) when output_mode is output'
     value: ${{ steps.run-pi-action.outputs.success }}
   share_url:
-    description: 'URL to the shared session HTML, if session sharing is enabled'
+    description: 'URL to the workflow run containing the session artifact, if session sharing is enabled'
     value: ${{ steps.run-pi-action.outputs.share_url }}
 
 runs:
@@ -136,3 +136,11 @@ runs:
         INPUT_OUTPUT_MODE: ${{ inputs.output_mode }}
         INPUT_PROMPT: ${{ inputs.prompt }}
         INPUT_PR_NUMBER: ${{ inputs.pr_number }}
+
+    - name: Upload pi session artifact
+      if: ${{ inputs.share_session == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: pi-session-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/pi-action-session
+        if-no-files-found: ignore

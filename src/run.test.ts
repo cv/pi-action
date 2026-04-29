@@ -472,9 +472,8 @@ describe("run", () => {
 		// Mock shareSession to return a result
 		vi.mocked(shareSession).mockResolvedValue({
 			artifactName: "pi-session-test",
-			artifactId: 123,
-			artifactUrl:
-				"https://github.com/cv/pi-action/actions/runs/1/artifacts/123",
+			artifactDir: "/tmp/pi-session-test",
+			artifactUrl: "https://github.com/cv/pi-action/actions/runs/1",
 		});
 
 		const deps = createMockDeps({
@@ -509,7 +508,7 @@ describe("run", () => {
 		expect(mockClient.createComment).toHaveBeenCalledWith(
 			1,
 			expect.stringContaining(
-				"📎 [Download session artifact](https://github.com/cv/pi-action/actions/runs/1/artifacts/123)",
+				"📎 [Download session artifact](https://github.com/cv/pi-action/actions/runs/1)",
 			),
 		);
 	});
@@ -558,9 +557,8 @@ describe("run", () => {
 		// Mock shareSession to return a result
 		vi.mocked(shareSession).mockResolvedValue({
 			artifactName: "pi-session-error",
-			artifactId: 456,
-			artifactUrl:
-				"https://github.com/cv/pi-action/actions/runs/1/artifacts/456",
+			artifactDir: "/tmp/pi-session-error",
+			artifactUrl: "https://github.com/cv/pi-action/actions/runs/1",
 		});
 
 		const deps = createMockDeps({
@@ -595,7 +593,7 @@ describe("run", () => {
 		expect(mockClient.createComment).toHaveBeenCalledWith(
 			1,
 			expect.stringContaining(
-				"📎 [Download session artifact](https://github.com/cv/pi-action/actions/runs/1/artifacts/456)",
+				"📎 [Download session artifact](https://github.com/cv/pi-action/actions/runs/1)",
 			),
 		);
 		expect(mockClient.createComment).toHaveBeenCalledWith(

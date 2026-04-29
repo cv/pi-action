@@ -14,10 +14,10 @@ describe("formatSuccessComment", () => {
 	it("formats response with session link", () => {
 		const result = formatSuccessComment(
 			"Here is the answer",
-			"https://github.com/cv/pi-action/actions/runs/1/artifacts/123",
+			"https://github.com/cv/pi-action/actions/runs/1",
 		);
 		expect(result).toBe(
-			"### 🤖 pi Response\n\nHere is the answer\n\n---\n📎 [Download session artifact](https://github.com/cv/pi-action/actions/runs/1/artifacts/123)",
+			"### 🤖 pi Response\n\nHere is the answer\n\n---\n📎 [Download session artifact](https://github.com/cv/pi-action/actions/runs/1)",
 		);
 	});
 
@@ -67,10 +67,10 @@ describe("formatErrorComment", () => {
 	it("formats error with session link", () => {
 		const result = formatErrorComment(
 			"Something went wrong",
-			"https://github.com/cv/pi-action/actions/runs/1/artifacts/456",
+			"https://github.com/cv/pi-action/actions/runs/1",
 		);
 		expect(result).toBe(
-			"### ❌ pi Error\n\nFailed to process request: Something went wrong\n\n---\n📎 [Download session artifact](https://github.com/cv/pi-action/actions/runs/1/artifacts/456)",
+			"### ❌ pi Error\n\nFailed to process request: Something went wrong\n\n---\n📎 [Download session artifact](https://github.com/cv/pi-action/actions/runs/1)",
 		);
 	});
 

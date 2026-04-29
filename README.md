@@ -101,7 +101,7 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 | `compat_supports_developer_role` | Whether OpenAI-compatible custom provider supports developer role messages | No | - |
 | `compat_supports_reasoning_effort` | Whether OpenAI-compatible custom provider supports `reasoning_effort` | No | - |
 | `prompt_template` | Custom prompt template with placeholder variables | No | (built-in default) |
-| `share_session` | Include a link to the full session HTML in the response comment | No | `true` |
+| `share_session` | Upload `session.html` and `session.jsonl` as a GitHub Actions artifact and link it in the response comment | No | `true` |
 | `output_mode` | `comment` to post on the issue/PR, or `output` to set action outputs only | No | `comment` |
 | `prompt` | Direct prompt for the agent (use with `output_mode: output`, or with `pr_number`) | No | - |
 | `pr_number` | Pull request number to load explicitly (useful for `workflow_dispatch`) | No | - |
@@ -200,7 +200,7 @@ Use `output_mode: output` with `prompt` when you want pi-action to run in automa
 The action sets these outputs in output mode:
 - `response`
 - `success`
-- `share_url` (when session sharing succeeds)
+- `share_url` (workflow run URL containing the session artifact, when session sharing succeeds)
 
 #### Explicit PR review mode
 
@@ -313,7 +313,7 @@ jobs:
 4. **Git hooks are installed** in the target repository to enforce commit conventions (see [`scripts/install-agent-hooks.sh`](scripts/install-agent-hooks.sh))
 5. The pi SDK is invoked with the issue/PR context and the task from the trigger (see [`src/agent.ts`](src/agent.ts))
 6. **Session is shared** as a GitHub Actions artifact with both HTML and JSONL exports (if `share_session` is enabled)
-7. The response is posted as a new comment with a 🚀 reaction, including the session link
+7. The response is posted as a new comment with a 🚀 reaction, including the session artifact link
 
 The main orchestration logic is in [`src/run.ts`](src/run.ts), with prompt building in [`src/context.ts`](src/context.ts).
 

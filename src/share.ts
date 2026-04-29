@@ -1,24 +1,24 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import artifactClient, { type ArtifactClient } from "@actions/artifact";
 import type { Session } from "./types.js";
-
-export interface ShareResult {
-	artifactName: string;
-	artifactUrl: string;
-	artifactId?: number;
-}
-
-export interface ShareSessionOptions {
-	artifactName?: string;
-	artifactClient?: Pick<ArtifactClient, "uploadArtifact">;
-	runUrl?: string;
-}
 
 const GITHUB_REPOSITORY_ENV = "GITHUB_REPOSITORY";
 const GITHUB_RUN_ID_ENV = "GITHUB_RUN_ID";
 const GITHUB_SERVER_URL_ENV = "GITHUB_SERVER_URL";
+const RUNNER_TEMP_ENV = "RUNNER_TEMP";
+
+export interface ShareResult {
+	artifactName: string;
+	artifactUrl: string;
+	artifactDir: string;
+}
+
+export interface ShareSessionOptions {
+	artifactName?: string;
+	artifactDir?: string;
+	runUrl?: string;
+}
 
 function getRunUrl(): string | undefined {
 	const serverUrl = process.env[GITHUB_SERVER_URL_ENV] ?? "https://github.com";
@@ -29,54 +29,38 @@ function getRunUrl(): string | undefined {
 		: undefined;
 }
 
-function getArtifactUrl(
-	runUrl: string | undefined,
-	artifactId: number | undefined,
-): string | undefined {
-	if (!(runUrl && artifactId)) {
-		return runUrl;
-	}
-	return `${runUrl}/artifacts/${artifactId}`;
+function getArtifactDir(): string {
+	return join(process.env[RUNNER_TEMP_ENV] ?? tmpdir(), "pi-action-session");
 }
 
 /**
- * Share a session as a GitHub Actions artifact and return its URL.
- * The artifact contains both HTML and JSONL exports of the pi session.
+ * Export a session for the composite action's upload-artifact step.
+ * The generated artifact directory contains both HTML and JSONL exports.
  */
 export async function shareSession(
 	session: Session,
 	options: ShareSessionOptions = {},
 ): Promise<ShareResult | null> {
 	const artifactName = options.artifactName ?? `pi-session-${Date.now()}`;
-	const artifactDir = mkdtempSync(join(tmpdir(), `${artifactName}-`));
+	const artifactDir = options.artifactDir ?? getArtifactDir();
 	const htmlPath = join(artifactDir, "session.html");
 	const jsonlPath = join(artifactDir, "session.jsonl");
-	const client = options.artifactClient ?? artifactClient;
 
 	try {
+		rmSync(artifactDir, { recursive: true, force: true });
+		mkdirSync(artifactDir, { recursive: true });
 		await session.exportToHtml(htmlPath);
 		await session.exportToJsonl(jsonlPath);
 
-		const upload = await client.uploadArtifact(
-			artifactName,
-			[htmlPath, jsonlPath],
-			artifactDir,
-		);
-		const artifactUrl = getArtifactUrl(
-			options.runUrl ?? getRunUrl(),
-			upload.id,
-		);
-
 		return {
 			artifactName,
-			...(upload.id === undefined ? {} : { artifactId: upload.id }),
-			artifactUrl: artifactUrl ?? artifactName,
+			artifactDir,
+			artifactUrl: options.runUrl ?? getRunUrl() ?? artifactDir,
 		};
 	} catch (error) {
 		// Log error but don't fail the action
 		console.warn("Failed to share session:", error);
-		return null;
-	} finally {
 		rmSync(artifactDir, { recursive: true, force: true });
+		return null;
 	}
 }
