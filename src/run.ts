@@ -1,26 +1,13 @@
 import type { runAgent } from "./agent.js";
-import type { PIContext } from "./context.js";
-import { extractTask, hasTrigger } from "./context.js";
 import { runAgentWithEmptyResponseRetry } from "./empty-response-retry.js";
-import { formatReviewComments } from "./formatting.js";
-import {
-	addReaction,
-	extractTriggerInfo,
-	type GitHubClient,
-} from "./github.js";
+import { addReaction, type GitHubClient } from "./github.js";
 import {
 	postResult,
 	setResultOutputs,
 	shareSessionForResult,
 } from "./result-delivery.js";
-import type { SecurityContext } from "./security.js";
-import { sanitizeInput, validatePermissions } from "./security.js";
-import type {
-	CustomProviderConfig,
-	ModelConfig,
-	RepoRef,
-	TriggerInfo,
-} from "./types.js";
+import { getRunContext } from "./run-context.js";
+import type { CustomProviderConfig, ModelConfig, RepoRef } from "./types.js";
 
 type OutputMode = "comment" | "output";
 
@@ -60,141 +47,6 @@ export interface ActionDependencies {
 	cwd: string;
 }
 
-function createGitHubClientFromInputs(
-	deps: ActionDependencies,
-): GitHubClient | null {
-	const { inputs, createClient, log } = deps;
-	if (!inputs.githubToken) {
-		log.setFailed("github_token is required");
-		return null;
-	}
-	return createClient(inputs.githubToken);
-}
-
-/**
- * Validates that the trigger is authorized to run the agent.
- * Returns the trigger info if valid, null otherwise.
- */
-function validateTrigger(
-	deps: ActionDependencies,
-): { triggerInfo: TriggerInfo; ghClient: GitHubClient } | null {
-	const { inputs, context, log } = deps;
-
-	// Extract trigger info from payload
-	const triggerInfo = extractTriggerInfo(context.payload);
-	if (!triggerInfo) {
-		log.info("No issue or pull_request in payload, skipping");
-		return null;
-	}
-
-	// Check if trigger phrase is present
-	if (!hasTrigger(triggerInfo.triggerText, inputs.triggerPhrase)) {
-		log.info(`No trigger phrase "${inputs.triggerPhrase}" found, skipping`);
-		return null;
-	}
-
-	// Validate permissions
-	const securityContext: SecurityContext = {
-		authorAssociation: triggerInfo.authorAssociation,
-		authorLogin: triggerInfo.author.login,
-		isBot: triggerInfo.author.type === "Bot",
-		allowedBots: inputs.allowedBots,
-	};
-
-	if (!validatePermissions(securityContext)) {
-		log.warning(
-			`User ${triggerInfo.author.login} (${triggerInfo.authorAssociation}) does not have permission`,
-		);
-		return null;
-	}
-
-	const ghClient = createGitHubClientFromInputs(deps);
-	return ghClient ? { triggerInfo, ghClient } : null;
-}
-
-function createDirectPIContext(prompt: string): PIContext {
-	return {
-		type: "direct",
-		title: "Direct prompt",
-		body: "",
-		number: 0,
-		triggerComment: prompt,
-		task: prompt,
-	};
-}
-
-async function addPullRequestContext(
-	piContext: PIContext,
-	ghClient: GitHubClient,
-	pullNumber: number,
-	log: Logger,
-): Promise<void> {
-	piContext.diff = await ghClient.getPullRequestDiff(pullNumber);
-
-	try {
-		const comments = await ghClient.getPullRequestReviewComments(pullNumber);
-		if (comments.length > 0) {
-			piContext.reviewComments = formatReviewComments(comments);
-		}
-	} catch (error) {
-		log.warning(`Failed to fetch PR review comments: ${error}`);
-	}
-}
-
-async function buildPIContextForPullRequestNumber(
-	ghClient: GitHubClient,
-	pullNumber: number,
-	prompt: string | undefined,
-	log: Logger,
-): Promise<PIContext> {
-	const pullRequest = await ghClient.getPullRequest(pullNumber);
-	const task = prompt?.trim() || "Please review this pull request";
-	const piContext: PIContext = {
-		type: "pull_request",
-		title: pullRequest.title,
-		body: pullRequest.body,
-		number: pullRequest.number,
-		triggerComment: task,
-		task,
-	};
-	await addPullRequestContext(piContext, ghClient, pullRequest.number, log);
-	return piContext;
-}
-
-/**
- * Builds the PI context from trigger info and inputs.
- */
-async function buildPIContext(
-	triggerInfo: TriggerInfo,
-	ghClient: GitHubClient,
-	triggerPhrase: string,
-	log: Logger,
-): Promise<PIContext> {
-	const sanitizedBody = sanitizeInput(triggerInfo.triggerText);
-	const task = extractTask(sanitizedBody, triggerPhrase);
-
-	const piContext: PIContext = {
-		type: triggerInfo.isPullRequest ? "pull_request" : "issue",
-		title: triggerInfo.issueTitle,
-		body: triggerInfo.issueBody,
-		number: triggerInfo.issueNumber,
-		triggerComment: sanitizedBody,
-		task,
-	};
-
-	// Get PR diff and review comments if applicable
-	if (triggerInfo.isPullRequest) {
-		await addPullRequestContext(
-			piContext,
-			ghClient,
-			triggerInfo.issueNumber,
-			log,
-		);
-	}
-
-	return piContext;
-}
-
 function createAgentConfig(
 	inputs: ActionInputs,
 	cwd: string,
@@ -207,57 +59,6 @@ function createAgentConfig(
 		...(inputs.apiKey ? { apiKey: inputs.apiKey } : {}),
 		...(inputs.customProvider ? { customProvider: inputs.customProvider } : {}),
 		...(inputs.promptTemplate ? { promptTemplate: inputs.promptTemplate } : {}),
-	};
-}
-
-async function getRunContext(deps: ActionDependencies): Promise<{
-	piContext: PIContext;
-	ghClient: GitHubClient;
-	triggerInfo?: TriggerInfo;
-} | null> {
-	const { inputs, log } = deps;
-	if (inputs.prNumber) {
-		const ghClient = createGitHubClientFromInputs(deps);
-		return ghClient
-			? {
-					ghClient,
-					piContext: await buildPIContextForPullRequestNumber(
-						ghClient,
-						inputs.prNumber,
-						inputs.prompt,
-						log,
-					),
-				}
-			: null;
-	}
-
-	if (inputs.prompt && inputs.outputMode === "output") {
-		const ghClient = createGitHubClientFromInputs(deps);
-		return ghClient
-			? { ghClient, piContext: createDirectPIContext(inputs.prompt) }
-			: null;
-	}
-
-	if (inputs.prompt && inputs.outputMode !== "output") {
-		log.setFailed(
-			"prompt requires output_mode: output when no PR number is set",
-		);
-		return null;
-	}
-
-	const validated = validateTrigger(deps);
-	if (!validated) {
-		return null;
-	}
-
-	return {
-		...validated,
-		piContext: await buildPIContext(
-			validated.triggerInfo,
-			validated.ghClient,
-			inputs.triggerPhrase,
-			log,
-		),
 	};
 }
 
