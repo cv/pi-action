@@ -357,6 +357,32 @@ describe("createGitHubClient", () => {
 			},
 		]);
 	});
+
+	it("omits optional review comment location fields when absent", async () => {
+		const octokit = createMockOctokit();
+		octokit.rest.pulls.listReviewComments.mockResolvedValue({
+			data: [
+				{
+					id: 2,
+					body: "General comment",
+					user: { login: "reviewer", type: "User" },
+					created_at: "2026-04-29T00:00:00Z",
+				},
+			],
+		});
+		const client = createGitHubClient(octokit, mockContext);
+
+		const comments = await client.getPullRequestReviewComments(99);
+
+		expect(comments).toEqual([
+			{
+				id: 2,
+				body: "General comment",
+				user: { login: "reviewer", type: "User" },
+				created_at: "2026-04-29T00:00:00Z",
+			},
+		]);
+	});
 });
 
 describe("addReaction", () => {

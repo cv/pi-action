@@ -77,6 +77,16 @@ describe("renderTemplate", () => {
 		expect(result).toBe("Issue 42");
 	});
 
+	it("handles direct context template variables", () => {
+		const template = "{{type_display}} {{number}} {{body}} {{trigger_comment}}";
+		const result = renderTemplate(template, {
+			type: "direct",
+			title: "Direct prompt",
+			task: "Do it",
+		});
+		expect(result).toBe("Direct Task 0  Do it");
+	});
+
 	it("handles PR type_display", () => {
 		const template = "{{type_display}} {{number}}";
 		const prContext = { ...context, type: "pull_request" as const };
@@ -115,6 +125,15 @@ describe("renderTemplate", () => {
 });
 
 describe("buildPrompt", () => {
+	it("builds direct task prompt", () => {
+		const prompt = buildPrompt({
+			type: "direct",
+			title: "Direct prompt",
+			task: "Generate release notes",
+		});
+		expect(prompt).toContain("# Direct pi Task");
+		expect(prompt).toContain("Generate release notes");
+	});
 	it("builds default issue prompt when no template provided", () => {
 		const prompt = buildPrompt({
 			type: "issue",
