@@ -1,6 +1,6 @@
 {
 	"name": "pi-action",
-	"version": "1.5.0",
+	"version": "1.6.0",
 	"description": "GitHub Action to invoke the pi coding agent on issues and PRs",
 	"type": "module",
 	"scripts": {
