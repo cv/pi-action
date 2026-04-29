@@ -144,7 +144,7 @@ The [`action.yml`](action.yml) file defines:
 - Input parameters
 - A composite action that:
   1. Installs npm dependencies
-  2. Installs standalone git hooks for conventional commits (see [lines 44-107](action.yml#L44-L107))
+  2. Installs standalone git hooks for conventional commits (see [`scripts/install-agent-hooks.sh`](scripts/install-agent-hooks.sh))
   3. Runs the compiled TypeScript via Node.js
 
 ### Testing
