@@ -15,4 +15,5 @@ export const DEFAULTS = {
 	customModelInput: "text",
 	customModelContextWindow: 128000,
 	customModelMaxTokens: 16384,
+	outputMode: "comment",
 } as const;

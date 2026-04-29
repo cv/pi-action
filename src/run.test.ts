@@ -36,6 +36,9 @@ describe("run", () => {
 				customProvider: undefined,
 				promptTemplate: undefined,
 				shareSession: true,
+				outputMode: "comment",
+				prompt: undefined,
+				prNumber: undefined,
 			},
 			context: {
 				payload: {},
@@ -47,6 +50,7 @@ describe("run", () => {
 				warning: vi.fn(),
 				error: vi.fn(),
 				setFailed: vi.fn(),
+				setOutput: vi.fn(),
 			},
 			cwd: "/test/cwd",
 			...overrides,
@@ -122,6 +126,9 @@ describe("run", () => {
 				customProvider: undefined,
 				promptTemplate: undefined,
 				shareSession: DEFAULTS.shareSession,
+				outputMode: "comment",
+				prompt: undefined,
+				prNumber: undefined,
 			},
 			context: {
 				payload: {
@@ -169,6 +176,9 @@ describe("run", () => {
 				customProvider: undefined,
 				promptTemplate: undefined,
 				shareSession: DEFAULTS.shareSession,
+				outputMode: "comment",
+				prompt: undefined,
+				prNumber: undefined,
 			},
 			context: {
 				payload: {
@@ -247,6 +257,9 @@ describe("run", () => {
 				customProvider: undefined,
 				promptTemplate: undefined,
 				shareSession: DEFAULTS.shareSession,
+				outputMode: "comment",
+				prompt: undefined,
+				prNumber: undefined,
 			},
 			context: {
 				payload: {
@@ -298,6 +311,9 @@ describe("run", () => {
 				customProvider,
 				promptTemplate: undefined,
 				shareSession: DEFAULTS.shareSession,
+				outputMode: "comment",
+				prompt: undefined,
+				prNumber: undefined,
 			},
 			context: {
 				payload: {
@@ -731,6 +747,197 @@ describe("run", () => {
 		expect(mockClient.createComment).toHaveBeenCalledWith(
 			1,
 			"### 🤖 pi Response\n\nTask completed!",
+		);
+	});
+
+	it("in output mode, sets outputs instead of posting comments", async () => {
+		const mockClient = createMockGitHubClient();
+		const deps = createMockDeps({
+			context: {
+				payload: {
+					issue: {
+						number: 42,
+						title: "Test Issue",
+						body: "@pi help me",
+						user: { login: "user", type: "User" },
+						author_association: "OWNER",
+					},
+				},
+				repo: createRepoRef(),
+			},
+			createClient: vi.fn(() => mockClient),
+			inputs: {
+				...createMockDeps().inputs,
+				outputMode: "output",
+			},
+		});
+		vi.mocked(runAgent).mockResolvedValue({
+			success: true,
+			response: "Here is your help!",
+		});
+
+		await run(deps);
+
+		expect(mockClient.createComment).not.toHaveBeenCalled();
+		expect(mockClient.addReactionToIssue).not.toHaveBeenCalled();
+		expect(deps.log.setOutput).toHaveBeenCalledWith("success", "true");
+		expect(deps.log.setOutput).toHaveBeenCalledWith(
+			"response",
+			"Here is your help!",
+		);
+	});
+
+	it("uses direct prompt when output mode has no issue context", async () => {
+		const mockClient = createMockGitHubClient();
+		const deps = createMockDeps({
+			createClient: vi.fn(() => mockClient),
+			inputs: {
+				...createMockDeps().inputs,
+				outputMode: "output",
+				prompt: "Generate release notes",
+			},
+		});
+		vi.mocked(runAgent).mockResolvedValue({
+			success: true,
+			response: "Release notes",
+		});
+
+		await run(deps);
+
+		expect(runAgent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "direct",
+				task: "Generate release notes",
+			}),
+			expect.anything(),
+		);
+		expect(deps.log.setOutput).toHaveBeenCalledWith(
+			"response",
+			"Release notes",
+		);
+	});
+
+	it("loads PR context from pr_number", async () => {
+		const mockClient = createMockGitHubClient();
+		mockClient.getPullRequest = vi.fn().mockResolvedValue({
+			number: 99,
+			title: "Add feature",
+			body: "PR body",
+			user: { login: "author", type: "User" },
+			author_association: "OWNER",
+		});
+		mockClient.getPullRequestDiff = vi.fn().mockResolvedValue("+added");
+		const deps = createMockDeps({
+			createClient: vi.fn(() => mockClient),
+			inputs: {
+				...createMockDeps().inputs,
+				outputMode: "output",
+				prNumber: 99,
+				prompt: "Review this PR",
+			},
+		});
+		vi.mocked(runAgent).mockResolvedValue({
+			success: true,
+			response: "LGTM",
+		});
+
+		await run(deps);
+
+		expect(mockClient.getPullRequest).toHaveBeenCalledWith(99);
+		expect(mockClient.getPullRequestDiff).toHaveBeenCalledWith(99);
+		expect(runAgent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "pull_request",
+				number: 99,
+				task: "Review this PR",
+				diff: "+added",
+			}),
+			expect.anything(),
+		);
+	});
+
+	it("includes PR review comments in PR context", async () => {
+		const mockClient = createMockGitHubClient();
+		mockClient.getPullRequestDiff = vi.fn().mockResolvedValue("+added");
+		mockClient.getPullRequestReviewComments = vi.fn().mockResolvedValue([
+			{
+				id: 1,
+				body: "Please simplify",
+				user: { login: "reviewer", type: "User" },
+				path: "src/file.ts",
+				line: 12,
+				created_at: "2026-04-29T00:00:00Z",
+			},
+		]);
+		const deps = createMockDeps({
+			context: {
+				payload: {
+					pull_request: {
+						number: 42,
+						title: "Test PR",
+						body: "@pi review",
+						user: { login: "user", type: "User" },
+						author_association: "OWNER",
+					},
+				},
+				repo: createRepoRef(),
+			},
+			createClient: vi.fn(() => mockClient),
+		});
+		vi.mocked(runAgent).mockResolvedValue({
+			success: true,
+			response: "Reviewed",
+		});
+
+		await run(deps);
+
+		expect(runAgent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				reviewComments: expect.stringContaining("Please simplify"),
+			}),
+			expect.anything(),
+		);
+	});
+
+	it("retries once when the agent returns an empty response", async () => {
+		const mockClient = createMockGitHubClient();
+		const deps = createMockDeps({
+			context: {
+				payload: {
+					issue: {
+						number: 1,
+						title: "Test Issue",
+						body: "@pi do work",
+						user: { login: "user", type: "User" },
+						author_association: "OWNER",
+					},
+				},
+				repo: createRepoRef(),
+			},
+			createClient: vi.fn(() => mockClient),
+		});
+		vi.mocked(runAgent)
+			.mockResolvedValueOnce({
+				success: false,
+				error: "Agent returned empty response",
+			})
+			.mockResolvedValueOnce({
+				success: true,
+				response: "Summary after retry",
+			});
+
+		await run(deps);
+
+		expect(runAgent).toHaveBeenCalledTimes(2);
+		expect(runAgent).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				task: expect.stringContaining("final text summary"),
+			}),
+			expect.objectContaining({ toolNames: [] }),
+		);
+		expect(mockClient.createComment).toHaveBeenCalledWith(
+			1,
+			"### 🤖 pi Response\n\nSummary after retry",
 		);
 	});
 });

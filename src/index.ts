@@ -14,6 +14,14 @@ import { getErrorMessage } from "./utils.js";
 
 const GITHUB_TOKEN_ENV = "GITHUB_TOKEN";
 
+function getOutputMode(): "comment" | "output" {
+	return core.getInput("output_mode") === "output"
+		? "output"
+		: DEFAULTS.outputMode;
+}
+
+const prNumber = parsePositiveIntegerInput(core.getInput("pr_number"), 0);
+
 run({
 	inputs: {
 		triggerPhrase: getInputOrDefault(
@@ -39,6 +47,9 @@ run({
 			core.getInput("share_session"),
 			DEFAULTS.shareSession,
 		),
+		outputMode: getOutputMode(),
+		prompt: core.getInput("prompt") || undefined,
+		prNumber: prNumber > 0 ? prNumber : undefined,
 	},
 	context: {
 		payload: github.context.payload,
@@ -59,6 +70,7 @@ run({
 		warning: core.warning,
 		error: core.error,
 		setFailed: core.setFailed,
+		setOutput: core.setOutput,
 	},
 	cwd: process.cwd(),
 }).catch((error) => {

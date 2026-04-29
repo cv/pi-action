@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { formatErrorComment, formatSuccessComment } from "./formatting.js";
+import {
+	formatErrorComment,
+	formatReviewComments,
+	formatSuccessComment,
+} from "./formatting.js";
 
 describe("formatSuccessComment", () => {
 	it("formats response with pi emoji header", () => {
@@ -25,6 +29,30 @@ describe("formatSuccessComment", () => {
 	it("handles empty response", () => {
 		const result = formatSuccessComment("");
 		expect(result).toBe("### 🤖 pi Response\n\n");
+	});
+});
+
+describe("formatReviewComments", () => {
+	it("returns empty string when there are no comments", () => {
+		expect(formatReviewComments([])).toBe("");
+	});
+
+	it("formats PR review comments for prompt context", () => {
+		const result = formatReviewComments([
+			{
+				id: 1,
+				body: "Please simplify this",
+				user: { login: "reviewer", type: "User" },
+				path: "src/file.ts",
+				line: 12,
+				created_at: "2026-04-29T00:00:00Z",
+			},
+		]);
+
+		expect(result).toContain("## Existing PR Review Comments");
+		expect(result).toContain("Do not re-fetch them");
+		expect(result).toContain("**reviewer** on 2026-04-29 (src/file.ts:12):");
+		expect(result).toContain("Please simplify this");
 	});
 });
 

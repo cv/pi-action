@@ -4,7 +4,7 @@
 	"description": "GitHub Action to invoke the pi coding agent on issues and PRs",
 	"type": "module",
 	"scripts": {
-		"build": "tsc",
+		"build": "tsc --noEmit",
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"coverage": "vitest run --coverage",
@@ -38,7 +38,8 @@
 	"dependencies": {
 		"@actions/core": "^3.0.1",
 		"@actions/github": "^9.1.1",
-		"@mariozechner/pi-coding-agent": "^0.70.6"
+		"@mariozechner/pi-coding-agent": "^0.70.6",
+		"tsx": "^4.21.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.13",

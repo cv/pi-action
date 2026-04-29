@@ -27,6 +27,7 @@ export interface AgentConfig extends ModelConfig {
 	apiKey?: string;
 	customProvider?: CustomProviderConfig;
 	promptTemplate?: string;
+	toolNames?: string[];
 }
 
 /**
@@ -187,7 +188,7 @@ export async function runAgent(
 			thinkingLevel: "off",
 			authStorage: auth,
 			modelRegistry: models,
-			tools: ["read", "bash", "edit", "write"],
+			tools: config.toolNames ?? ["read", "bash", "edit", "write"],
 			sessionManager: SessionManager.create(config.cwd),
 			settingsManager,
 			resourceLoader,

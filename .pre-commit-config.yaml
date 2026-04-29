@@ -39,14 +39,6 @@ repos:
         always_run: true
         stages: [pre-commit]
 
-      - id: check-dist
-        name: verify dist is up to date
-        entry: scripts/check-dist.sh
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-commit]
-
       - id: commitlint
         name: commitlint
         entry: npx --no -- commitlint --edit

@@ -103,6 +103,9 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 | `compat_supports_reasoning_effort` | Whether OpenAI-compatible custom provider supports `reasoning_effort` | No | - |
 | `prompt_template` | Custom prompt template with placeholder variables | No | (built-in default) |
 | `share_session` | Include a link to the full session HTML in the response comment | No | `true` |
+| `output_mode` | `comment` to post on the issue/PR, or `output` to set action outputs only | No | `comment` |
+| `prompt` | Direct prompt for the agent (use with `output_mode: output`, or with `pr_number`) | No | - |
+| `pr_number` | Pull request number to load explicitly (useful for `workflow_dispatch`) | No | - |
 
 ### Examples
 
@@ -177,6 +180,43 @@ Example: local Ollama/LM Studio/vLLM-style endpoint on a self-hosted runner:
 `provider_api_key` can be a literal key or the name of an environment variable. If you use the action-level `api_key` input, `provider_api_key` is not required. For local servers that ignore authentication, set `provider_api_key` to any dummy value.
 
 **Note:** `localhost` or LAN URLs are resolved from the GitHub runner. Use a self-hosted runner or a reachable internal endpoint for local models.
+
+#### Output mode and direct prompts
+
+Use `output_mode: output` with `prompt` when you want pi-action to run in automation workflows without posting comments or reactions:
+
+```yaml
+- uses: cv/pi-action@v1
+  id: pi
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    output_mode: output
+    prompt: Generate release notes for the current checkout
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+- run: echo "${{ steps.pi.outputs.response }}"
+```
+
+The action sets these outputs in output mode:
+- `response`
+- `success`
+- `share_url` (when session sharing succeeds)
+
+#### Explicit PR review mode
+
+Use `pr_number` to review a PR from `workflow_dispatch` or another workflow event that does not include PR payload context:
+
+```yaml
+- uses: cv/pi-action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    output_mode: output
+    pr_number: ${{ github.event.inputs.pr_number }}
+    prompt: Please review this PR
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
 
 #### Custom Prompt Template
 

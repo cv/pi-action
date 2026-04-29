@@ -61,6 +61,15 @@ export interface CustomProviderConfig {
 	compat?: CustomProviderCompatConfig;
 }
 
+export interface PullRequestReviewComment {
+	id: number;
+	body: string;
+	user: GitHubUser;
+	path?: string;
+	line?: number;
+	created_at: string;
+}
+
 // Updated TriggerInfo interface using proper types
 export interface TriggerInfo {
 	isCommentEvent: boolean;
@@ -109,7 +118,12 @@ export interface OctokitClient {
 				owner: string;
 				repo: string;
 				pull_number: number;
-				mediaType: { format: string };
+				mediaType?: { format: string };
+			}) => Promise<{ data: unknown }>;
+			listReviewComments: (params: {
+				owner: string;
+				repo: string;
+				pull_number: number;
 			}) => Promise<{ data: unknown }>;
 		};
 		gists: {

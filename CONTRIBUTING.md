@@ -44,7 +44,7 @@ This project uses [prek](https://github.com/j178/prek) to enforce quality checks
 
 | Hook | What it does |
 |------|--------------|
-| **pre-commit** | Runs tests, type checking, linting, builds, and verifies `dist/` is up to date via [`scripts/check-dist.sh`](scripts/check-dist.sh) |
+| **pre-commit** | Runs tests, type checking, linting, and build verification |
 | **commit-msg** | Enforces [Conventional Commits](https://www.conventionalcommits.org/) format via commitlint |
 | **prepare-commit-msg** | Auto-appends issue number from branch name via [`scripts/prepare-commit-msg.sh`](scripts/prepare-commit-msg.sh) (e.g., `feat/123-description` → `Refs #123`) |
 | **pre-push** | Runs full test suite with coverage thresholds from [`vitest.config.ts`](vitest.config.ts) |
@@ -145,7 +145,7 @@ The [`action.yml`](action.yml) file defines:
 - A composite action that:
   1. Installs npm dependencies
   2. Installs standalone git hooks for conventional commits (see [`scripts/install-agent-hooks.sh`](scripts/install-agent-hooks.sh))
-  3. Runs the compiled TypeScript via Node.js
+  3. Runs the TypeScript entrypoint via `tsx`
 
 ### Testing
 
@@ -178,9 +178,7 @@ Thresholds and production coverage includes are configured in [`vitest.config.ts
 npm run build
 ```
 
-This compiles TypeScript to `dist/`. The `dist/` directory is committed to the repository (required for GitHub Actions).
-
-**Important:** The pre-commit hook verifies `dist/` is up to date. If you modify source files, you must rebuild and commit the changes to `dist/`.
+This verifies the TypeScript production entrypoint without emitting JavaScript. The action runs TypeScript directly with `tsx`, so generated `dist/` artifacts are not committed.
 
 ## CI/CD
 

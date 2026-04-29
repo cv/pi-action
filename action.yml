@@ -76,6 +76,26 @@ inputs:
     description: 'Include a link to the full session HTML in the response comment'
     required: false
     default: 'true'
+  output_mode:
+    description: 'How to deliver results: comment (post to issue/PR) or output (set action outputs only)'
+    required: false
+    default: 'comment'
+  prompt:
+    description: 'Direct prompt for the agent (requires output_mode: output when no issue/PR context is available)'
+    required: false
+    default: ''
+  pr_number:
+    description: 'Pull request number to load explicitly (useful for workflow_dispatch)'
+    required: false
+    default: ''
+
+outputs:
+  response:
+    description: 'The agent response text when output_mode is output'
+  success:
+    description: 'Whether the agent succeeded (true/false) when output_mode is output'
+  share_url:
+    description: 'URL to the shared session HTML, if session sharing is enabled'
 
 runs:
   using: 'composite'
@@ -90,7 +110,7 @@ runs:
     
     - name: Run pi-action
       shell: bash
-      run: node ${{ github.action_path }}/dist/index.js
+      run: npx --prefix ${{ github.action_path }} tsx ${{ github.action_path }}/src/index.ts
       env:
         INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
         INPUT_GIST_TOKEN: ${{ inputs.gist_token }}
@@ -113,3 +133,6 @@ runs:
         INPUT_COMPAT_SUPPORTS_REASONING_EFFORT: ${{ inputs.compat_supports_reasoning_effort }}
         INPUT_PROMPT_TEMPLATE: ${{ inputs.prompt_template }}
         INPUT_SHARE_SESSION: ${{ inputs.share_session }}
+        INPUT_OUTPUT_MODE: ${{ inputs.output_mode }}
+        INPUT_PROMPT: ${{ inputs.prompt }}
+        INPUT_PR_NUMBER: ${{ inputs.pr_number }}

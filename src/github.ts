@@ -7,6 +7,7 @@ import type {
 import type {
 	GitHubReaction,
 	OctokitClient,
+	PullRequestReviewComment,
 	RepoRef,
 	TriggerInfo,
 } from "./types.js";
@@ -103,7 +104,17 @@ export interface GitHubClient {
 		reaction: GitHubReaction,
 	): Promise<void>;
 	createComment(issueNumber: number, body: string): Promise<void>;
+	getPullRequest(pullNumber: number): Promise<{
+		number: number;
+		title: string;
+		body: string;
+		user: { login: string; type: "User" | "Bot" | "Organization" };
+		author_association: string;
+	}>;
 	getPullRequestDiff(pullNumber: number): Promise<string>;
+	getPullRequestReviewComments(
+		pullNumber: number,
+	): Promise<PullRequestReviewComment[]>;
 	createGist(
 		content: string,
 		filename: string,
@@ -146,6 +157,21 @@ export function createGitHubClient(
 			});
 		},
 
+		async getPullRequest(pullNumber: number) {
+			const { data: pullRequest } = await octokit.rest.pulls.get({
+				owner,
+				repo,
+				pull_number: pullNumber,
+			});
+			return pullRequest as {
+				number: number;
+				title: string;
+				body: string;
+				user: { login: string; type: "User" | "Bot" | "Organization" };
+				author_association: string;
+			};
+		},
+
 		async getPullRequestDiff(pullNumber: number): Promise<string> {
 			const { data: diff } = await octokit.rest.pulls.get({
 				owner,
@@ -154,6 +180,32 @@ export function createGitHubClient(
 				mediaType: { format: "diff" },
 			});
 			return diff as unknown as string;
+		},
+
+		async getPullRequestReviewComments(
+			pullNumber: number,
+		): Promise<PullRequestReviewComment[]> {
+			const { data } = await octokit.rest.pulls.listReviewComments({
+				owner,
+				repo,
+				pull_number: pullNumber,
+			});
+			const comments = data as Array<{
+				id: number;
+				body: string;
+				user: { login: string; type: "User" | "Bot" | "Organization" };
+				path?: string;
+				line?: number;
+				created_at: string;
+			}>;
+			return comments.map((comment) => ({
+				id: comment.id,
+				body: comment.body,
+				user: comment.user,
+				...(comment.path ? { path: comment.path } : {}),
+				...(comment.line ? { line: comment.line } : {}),
+				created_at: comment.created_at,
+			}));
 		},
 
 		async createGist(

@@ -32,7 +32,3 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Verify dist is up to date
-        run: |
-          git diff --exit-code dist/ || (echo "dist/ is out of date. Run 'npm run build' and commit." && exit 1)

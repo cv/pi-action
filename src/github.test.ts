@@ -231,6 +231,7 @@ describe("createGitHubClient", () => {
 				},
 				pulls: {
 					get: vi.fn(),
+					listReviewComments: vi.fn(),
 				},
 				gists: {
 					create: vi.fn(),
@@ -281,6 +282,29 @@ describe("createGitHubClient", () => {
 		});
 	});
 
+	it("getPullRequest calls correct API and returns PR metadata", async () => {
+		const octokit = createMockOctokit();
+		octokit.rest.pulls.get.mockResolvedValue({
+			data: {
+				number: 99,
+				title: "Add feature",
+				body: "PR body",
+				user: { login: "author", type: "User" },
+				author_association: "OWNER",
+			},
+		});
+		const client = createGitHubClient(octokit, mockContext);
+
+		const pullRequest = await client.getPullRequest(99);
+
+		expect(octokit.rest.pulls.get).toHaveBeenCalledWith({
+			owner: "testowner",
+			repo: "testrepo",
+			pull_number: 99,
+		});
+		expect(pullRequest.title).toBe("Add feature");
+	});
+
 	it("getPullRequestDiff calls correct API and returns diff", async () => {
 		const octokit = createMockOctokit();
 		octokit.rest.pulls.get.mockResolvedValue({
@@ -297,6 +321,41 @@ describe("createGitHubClient", () => {
 			mediaType: { format: "diff" },
 		});
 		expect(diff).toBe("+added line\n-removed line");
+	});
+
+	it("getPullRequestReviewComments calls correct API and returns comments", async () => {
+		const octokit = createMockOctokit();
+		octokit.rest.pulls.listReviewComments.mockResolvedValue({
+			data: [
+				{
+					id: 1,
+					body: "Please simplify this",
+					user: { login: "reviewer", type: "User" },
+					path: "src/file.ts",
+					line: 12,
+					created_at: "2026-04-29T00:00:00Z",
+				},
+			],
+		});
+		const client = createGitHubClient(octokit, mockContext);
+
+		const comments = await client.getPullRequestReviewComments(99);
+
+		expect(octokit.rest.pulls.listReviewComments).toHaveBeenCalledWith({
+			owner: "testowner",
+			repo: "testrepo",
+			pull_number: 99,
+		});
+		expect(comments).toEqual([
+			{
+				id: 1,
+				body: "Please simplify this",
+				user: { login: "reviewer", type: "User" },
+				path: "src/file.ts",
+				line: 12,
+				created_at: "2026-04-29T00:00:00Z",
+			},
+		]);
 	});
 });
 
