@@ -1,6 +1,7 @@
-import { runAgent } from "./agent.js";
+import type { runAgent } from "./agent.js";
 import type { PIContext } from "./context.js";
 import { extractTask, hasTrigger } from "./context.js";
+import { runAgentWithEmptyResponseRetry } from "./empty-response-retry.js";
 import { formatReviewComments } from "./formatting.js";
 import {
 	addReaction,
@@ -15,14 +16,11 @@ import {
 import type { SecurityContext } from "./security.js";
 import { sanitizeInput, validatePermissions } from "./security.js";
 import type {
-	AgentResult,
 	CustomProviderConfig,
 	ModelConfig,
 	RepoRef,
 	TriggerInfo,
 } from "./types.js";
-
-const EMPTY_RESPONSE_ERROR = "Agent returned empty response";
 
 type OutputMode = "comment" | "output";
 
@@ -212,62 +210,6 @@ function createAgentConfig(
 	};
 }
 
-function shouldRetryEmptyResponse(
-	result: AgentResult,
-): result is Extract<AgentResult, { success: false }> {
-	return !result.success && result.error === EMPTY_RESPONSE_ERROR;
-}
-
-async function runAgentWithEmptyResponseRetry(
-	piContext: PIContext,
-	inputs: ActionInputs,
-	cwd: string,
-	log: Logger,
-): Promise<AgentResult> {
-	const agentConfig = createAgentConfig(inputs, cwd, log);
-	const result = await runAgent(piContext, agentConfig);
-	if (!shouldRetryEmptyResponse(result)) {
-		return result;
-	}
-
-	log.warning(
-		"Agent returned empty response from first attempt. Re-prompting for a summary.",
-	);
-	const firstError = result.error;
-	const firstSession = result.session;
-	const retryContext: PIContext = {
-		...piContext,
-		task: `IMPORTANT: You completed your work but did not provide a final text summary. This summary is REQUIRED. Please now write a plain-text summary of what you accomplished, including:
-+- What changes were made and why
-+- Which files were modified
-+- Any errors encountered or remaining issues
-+- Confirmation that your work is complete
-+
-+Do NOT call any tools - just provide the text summary.`,
-	};
-	const retryResult = await runAgent(retryContext, {
-		...agentConfig,
-		toolNames: [],
-	});
-
-	if (retryResult.success) {
-		const retrySuccess = {
-			success: true,
-			response: retryResult.response,
-		} as const;
-		const session = firstSession ?? retryResult.session;
-		return session ? { ...retrySuccess, session } : retrySuccess;
-	}
-
-	const retryError = retryResult.error;
-	const retryFailure = {
-		success: false,
-		error: `Agent failed to provide a response after two attempts. First attempt: ${firstError}. Retry attempt: ${retryError}.`,
-	} as const;
-	const session = firstSession ?? retryResult.session;
-	return session ? { ...retryFailure, session } : retryFailure;
-}
-
 async function getRunContext(deps: ActionDependencies): Promise<{
 	piContext: PIContext;
 	ghClient: GitHubClient;
@@ -338,8 +280,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 	log.info(`Running pi agent for: ${piContext.task}`);
 	const result = await runAgentWithEmptyResponseRetry(
 		piContext,
-		inputs,
-		cwd,
+		createAgentConfig(inputs, cwd, log),
 		log,
 	);
 
