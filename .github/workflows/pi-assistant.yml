@@ -35,7 +35,7 @@ jobs:
         uses: ./  # Dogfooding: use the action from this repo
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          gist_token: ${{ secrets.PAT_WITH_GIST_SCOPE }}
+          share_session: false
           provider: nvidia
           model: openai/openai/gpt-5.5
           api_key: ${{ secrets.NVIDIA_API_KEY }}

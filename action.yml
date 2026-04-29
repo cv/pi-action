@@ -92,10 +92,13 @@ inputs:
 outputs:
   response:
     description: 'The agent response text when output_mode is output'
+    value: ${{ steps.run-pi-action.outputs.response }}
   success:
     description: 'Whether the agent succeeded (true/false) when output_mode is output'
+    value: ${{ steps.run-pi-action.outputs.success }}
   share_url:
     description: 'URL to the shared session HTML, if session sharing is enabled'
+    value: ${{ steps.run-pi-action.outputs.share_url }}
 
 runs:
   using: 'composite'
@@ -109,6 +112,7 @@ runs:
       run: bash ${{ github.action_path }}/scripts/install-agent-hooks.sh
     
     - name: Run pi-action
+      id: run-pi-action
       shell: bash
       run: npx --prefix ${{ github.action_path }} tsx ${{ github.action_path }}/src/index.ts
       env:

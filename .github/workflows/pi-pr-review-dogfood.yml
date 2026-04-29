@@ -32,7 +32,7 @@ jobs:
         uses: ./
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          gist_token: ${{ secrets.PAT_WITH_GIST_SCOPE }}
+          share_session: false
           output_mode: output
           pr_number: ${{ github.event.inputs.pr_number }}
           prompt: ${{ github.event.inputs.prompt }}

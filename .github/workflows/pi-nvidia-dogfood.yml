@@ -29,6 +29,7 @@ jobs:
         uses: ./
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          share_session: false
           output_mode: output
           prompt: ${{ github.event.inputs.prompt }}
           provider: nvidia
