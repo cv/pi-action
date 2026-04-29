@@ -1,13 +1,6 @@
-import {
-	AuthStorage,
-	createAgentSession,
-	DefaultResourceLoader,
-	getAgentDir,
-	ModelRegistry,
-	SessionManager,
-	SettingsManager,
-} from "@mariozechner/pi-coding-agent";
+import { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
 import { type AgentLogger, createSessionEventHandler } from "./agent-events.js";
+import { createConfiguredAgentSession } from "./agent-session.js";
 import type { PIContext } from "./context.js";
 import { buildPrompt } from "./context.js";
 import { registerCustomProvider } from "./custom-provider.js";
@@ -67,34 +60,12 @@ export async function runAgent(
 	let session: Session | undefined;
 
 	try {
-		const settingsManager = SettingsManager.inMemory({
-			compaction: { enabled: false },
-			retry: { enabled: true, maxRetries: 2 },
-		});
-		const resourceLoader = new DefaultResourceLoader({
-			cwd: config.cwd,
-			agentDir: getAgentDir(),
-			settingsManager,
-			// Disable discovery for extensions, skills, prompts, themes, and context files in CI.
-			noExtensions: true,
-			noSkills: true,
-			noPromptTemplates: true,
-			noThemes: true,
-			noContextFiles: true,
-		});
-		await resourceLoader.reload();
-
-		const { session: createdSession } = await createAgentSession({
-			cwd: config.cwd,
+		const createdSession = await createConfiguredAgentSession(
+			config,
+			auth,
+			models,
 			model,
-			thinkingLevel: "off",
-			authStorage: auth,
-			modelRegistry: models,
-			tools: config.toolNames ?? ["read", "bash", "edit", "write"],
-			sessionManager: SessionManager.create(config.cwd),
-			settingsManager,
-			resourceLoader,
-		});
+		);
 
 		session = createdSession;
 
