@@ -35,7 +35,6 @@ export function createTriggerInfo(
 		issueNumber: 1,
 		issueTitle: "Test",
 		issueBody: "Body",
-		commentId: undefined,
 		isPullRequest: false,
 		...overrides,
 	};

@@ -122,7 +122,7 @@ export async function run(deps) {
         ...inputs.modelConfig,
         cwd,
         logger: log,
-        promptTemplate: inputs.promptTemplate,
+        ...(inputs.promptTemplate ? { promptTemplate: inputs.promptTemplate } : {}),
     });
     // Post result (use gistClient for session sharing if available)
     await postResult(ghClient, gistClient, triggerInfo, result, inputs.shareSession, log);

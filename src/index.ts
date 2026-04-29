@@ -11,6 +11,8 @@ import {
 import { run } from "./run.js";
 import { getErrorMessage } from "./utils.js";
 
+const GITHUB_TOKEN_ENV = "GITHUB_TOKEN";
+
 run({
 	inputs: {
 		triggerPhrase: getInputOrDefault(
@@ -27,7 +29,7 @@ run({
 			provider: getInputOrDefault(core.getInput, "provider", DEFAULTS.provider),
 			model: getInputOrDefault(core.getInput, "model", DEFAULTS.model),
 		},
-		githubToken: core.getInput("github_token") || process.env.GITHUB_TOKEN,
+		githubToken: core.getInput("github_token") || process.env[GITHUB_TOKEN_ENV],
 		gistToken: core.getInput("gist_token") || undefined,
 		piAuthJson: core.getInput("pi_auth_json"),
 		promptTemplate: core.getInput("prompt_template"),

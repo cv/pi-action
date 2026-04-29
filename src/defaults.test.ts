@@ -25,10 +25,11 @@ function getActionInputDefault(inputName: string): string {
 			? ACTION_YML.slice(inputStart)
 			: ACTION_YML.slice(inputStart, inputStart + 1 + nextInputStart);
 	const defaultMatch = inputBlock.match(/\n {4}default: ['"]?([^'"\n]+)['"]?/);
-	if (!defaultMatch) {
+	const defaultValue = defaultMatch?.[1];
+	if (defaultValue === undefined) {
 		throw new Error(`Input ${inputName} has no default in action.yml`);
 	}
-	return defaultMatch[1];
+	return defaultValue;
 }
 
 function getReadmeInputDefault(inputName: string): string {
@@ -36,10 +37,11 @@ function getReadmeInputDefault(inputName: string): string {
 	const defaultMatch = README.match(
 		new RegExp(`\\| \`${escapedInputName}\` \\|[^\\n]*\\| \`([^\`]+)\` \\|`),
 	);
-	if (!defaultMatch) {
+	const defaultValue = defaultMatch?.[1];
+	if (defaultValue === undefined) {
 		throw new Error(`Input ${inputName} not found in README inputs table`);
 	}
-	return defaultMatch[1];
+	return defaultValue;
 }
 
 describe("input defaults", () => {

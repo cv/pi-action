@@ -63,7 +63,6 @@ describe("renderTemplate", () => {
 		number: 42,
 		triggerComment: "@pi help me",
 		task: "help me",
-		diff: undefined,
 	};
 
 	it("replaces all template variables", () => {

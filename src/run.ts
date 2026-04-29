@@ -213,7 +213,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		...inputs.modelConfig,
 		cwd,
 		logger: log,
-		promptTemplate: inputs.promptTemplate,
+		...(inputs.promptTemplate ? { promptTemplate: inputs.promptTemplate } : {}),
 	});
 
 	// Post result (use gistClient for session sharing if available)

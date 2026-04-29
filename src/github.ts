@@ -88,7 +88,7 @@ export function extractTriggerInfo(
 		issueNumber: subject.number,
 		issueTitle: subject.title,
 		issueBody: subject.body ?? "",
-		commentId: comment?.id,
+		...(comment ? { commentId: comment.id } : {}),
 		isPullRequest: isPullRequestTrigger(payload, subject),
 	};
 }

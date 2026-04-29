@@ -14,21 +14,24 @@ function createSessionEventHandler(log, onTextDelta) {
             case "turn_end":
                 log.info("✅ Turn completed");
                 break;
-            case "tool_execution_start":
+            case "tool_execution_start": {
                 log.info(`🔧 Tool: ${event.toolName}`);
-                if (event.toolName === "bash" && event.args?.command) {
-                    log.info(`   $ ${event.args.command}`);
+                const command = event.args?.command;
+                const path = event.args?.path;
+                if (event.toolName === "bash" && command) {
+                    log.info(`   $ ${command}`);
                 }
-                else if (event.toolName === "read" && event.args?.path) {
-                    log.info(`   📖 ${event.args.path}`);
+                else if (event.toolName === "read" && path) {
+                    log.info(`   📖 ${path}`);
                 }
-                else if (event.toolName === "write" && event.args?.path) {
-                    log.info(`   ✏️ ${event.args.path}`);
+                else if (event.toolName === "write" && path) {
+                    log.info(`   ✏️ ${path}`);
                 }
-                else if (event.toolName === "edit" && event.args?.path) {
-                    log.info(`   📝 ${event.args.path}`);
+                else if (event.toolName === "edit" && path) {
+                    log.info(`   📝 ${path}`);
                 }
                 break;
+            }
             case "tool_execution_end":
                 if (event.isError) {
                     log.info(`   ❌ Tool error: ${event.toolName}`);
@@ -106,6 +109,10 @@ export async function runAgent(piContext, config, authStorage, modelRegistry) {
         return { success: true, response: trimmedResponse, session };
     }
     catch (error) {
-        return { success: false, error: getErrorMessage(error), session };
+        const errorResult = {
+            success: false,
+            error: getErrorMessage(error),
+        };
+        return session ? { ...errorResult, session } : errorResult;
     }
 }

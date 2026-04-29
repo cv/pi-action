@@ -332,7 +332,6 @@ describe("addReaction", () => {
 		const triggerInfo = createTriggerInfo({
 			isCommentEvent: true, // This shouldn't happen in practice, but test the fallback
 			issueNumber: 42,
-			commentId: undefined,
 		});
 
 		await addReaction(client, triggerInfo, "confused");
