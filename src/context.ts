@@ -10,16 +10,33 @@ export function extractTask(comment: string, trigger: string): string {
 	return comment.slice(idx + trigger.length).trim();
 }
 
-export interface PIContext {
+interface BasePIContext {
 	type: "issue" | "pull_request" | "direct";
 	title: string;
+	task: string;
+}
+
+export interface IssuePIContext extends BasePIContext {
+	type: "issue";
 	body: string;
 	number: number;
 	triggerComment: string;
-	task: string;
+}
+
+export interface PullRequestPIContext extends BasePIContext {
+	type: "pull_request";
+	body: string;
+	number: number;
+	triggerComment: string;
 	diff?: string;
 	reviewComments?: string;
 }
+
+export interface DirectPIContext extends BasePIContext {
+	type: "direct";
+}
+
+export type PIContext = IssuePIContext | PullRequestPIContext | DirectPIContext;
 
 function getTypeDisplay(type: PIContext["type"]): string {
 	if (type === "pull_request") {
@@ -33,16 +50,18 @@ function getTypeDisplay(type: PIContext["type"]): string {
 
 export function renderTemplate(template: string, context: PIContext): string {
 	// Template variables that can be used in the custom template
+	const isDirect = context.type === "direct";
 	const variables = {
 		type: context.type,
 		type_display: getTypeDisplay(context.type),
-		number: context.number.toString(),
+		number: isDirect ? "0" : context.number.toString(),
 		title: context.title,
-		body: context.body,
+		body: isDirect ? "" : context.body,
 		task: context.task,
-		diff: context.diff || "",
-		reviewComments: context.reviewComments || "",
-		trigger_comment: context.triggerComment,
+		diff: context.type === "pull_request" ? context.diff || "" : "",
+		reviewComments:
+			context.type === "pull_request" ? context.reviewComments || "" : "",
+		trigger_comment: isDirect ? context.task : context.triggerComment,
 	};
 
 	// Replace all template variables
@@ -91,7 +110,7 @@ ${context.title}
 ## Description
 ${context.body}
 
-${context.reviewComments || ""}
+${context.type === "pull_request" ? context.reviewComments || "" : ""}
 ## Task
 ${context.task}
 
@@ -106,7 +125,7 @@ ${context.task}
 3. **Commit and push all work** - Always end your work by committing and pushing changes to ensure they persist beyond the GitHub Action execution.
 `;
 
-	if (context.diff) {
+	if (context.type === "pull_request" && context.diff) {
 		prompt += `\n## PR Diff\n\`\`\`diff\n${context.diff}\n\`\`\`\n`;
 	}
 

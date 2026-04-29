@@ -61,18 +61,20 @@ function createDirectPIContext(prompt: string): PIContext {
 	return {
 		type: "direct",
 		title: "Direct prompt",
-		body: "",
-		number: 0,
-		triggerComment: prompt,
 		task: prompt,
 	};
+}
+
+interface PullRequestContextDetails {
+	diff: string;
+	reviewComments?: string;
 }
 
 async function getPullRequestContext(
 	ghClient: GitHubClient,
 	pullNumber: number,
 	log: Logger,
-): Promise<Pick<PIContext, "diff" | "reviewComments">> {
+): Promise<PullRequestContextDetails> {
 	const diff = await ghClient.getPullRequestDiff(pullNumber);
 
 	try {

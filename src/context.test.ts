@@ -92,7 +92,11 @@ describe("renderTemplate", () => {
 
 	it("handles diff with content", () => {
 		const template = "Changes:\n{{diff}}";
-		const contextWithDiff = { ...context, diff: "+ added line" };
+		const contextWithDiff = {
+			...context,
+			type: "pull_request" as const,
+			diff: "+ added line",
+		};
 		const result = renderTemplate(template, contextWithDiff);
 		expect(result).toBe("Changes:\n+ added line");
 	});
