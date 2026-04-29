@@ -1,32 +1,39 @@
+function isSupportedWebhookPayload(payload) {
+    return (typeof payload === "object" &&
+        payload !== null &&
+        ("issue" in payload || "pull_request" in payload));
+}
+function getTriggerSubject(payload) {
+    return "pull_request" in payload ? payload.pull_request : payload.issue;
+}
+function getTriggerComment(payload) {
+    return "comment" in payload ? payload.comment : undefined;
+}
+function isPullRequestTrigger(payload, subject) {
+    return "pull_request" in payload || "pull_request" in subject;
+}
 export function extractTriggerInfo(payload) {
-    const comment = payload.comment;
-    const issue = (payload.issue || payload.pull_request);
-    if (!issue) {
+    if (!isSupportedWebhookPayload(payload)) {
         return null;
     }
-    const isCommentEvent = !!comment;
-    const triggerText = isCommentEvent
-        ? comment?.body
-        : issue.body;
-    const author = isCommentEvent
-        ? comment?.user
-        : issue.user;
-    const authorAssociation = isCommentEvent
-        ? comment?.author_association
-        : issue.author_association;
+    const subject = getTriggerSubject(payload);
+    const comment = getTriggerComment(payload);
+    const triggerText = comment?.body ?? subject.body ?? "";
+    const author = comment?.user ?? subject.user;
+    const authorAssociation = comment?.author_association ?? subject.author_association;
     if (!(triggerText && author)) {
         return null;
     }
     return {
-        isCommentEvent,
+        isCommentEvent: !!comment,
         triggerText,
         author,
         authorAssociation,
-        issueNumber: issue.number,
-        issueTitle: issue.title,
-        issueBody: issue.body || "",
+        issueNumber: subject.number,
+        issueTitle: subject.title,
+        issueBody: subject.body ?? "",
         commentId: comment?.id,
-        isPullRequest: !!payload.pull_request,
+        isPullRequest: isPullRequestTrigger(payload, subject),
     };
 }
 export function createGitHubClient(octokit, context) {

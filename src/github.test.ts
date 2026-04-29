@@ -40,7 +40,7 @@ describe("extractTriggerInfo", () => {
 			});
 		});
 
-		it("extracts info from PR comment", () => {
+		it("extracts info from PR review comment", () => {
 			const payload = {
 				comment: {
 					id: 456,
@@ -69,6 +69,37 @@ describe("extractTriggerInfo", () => {
 				commentId: 456,
 				isPullRequest: true,
 			});
+		});
+
+		it("treats issue comments on pull requests as pull request triggers", () => {
+			const payload = {
+				comment: {
+					id: 789,
+					body: "@pi review this PR",
+					user: { login: "reviewer", type: "User" },
+					author_association: "MEMBER",
+				},
+				issue: {
+					number: 100,
+					title: "PR as issue",
+					body: "PR body",
+					user: { login: "prauthor", type: "User" },
+					author_association: "CONTRIBUTOR",
+					pull_request: {
+						url: "https://api.github.com/repos/test/repo/pulls/100",
+					},
+				},
+			};
+
+			const result = extractTriggerInfo(payload);
+
+			expect(result).toEqual(
+				expect.objectContaining({
+					isCommentEvent: true,
+					issueNumber: 100,
+					isPullRequest: true,
+				}),
+			);
 		});
 	});
 

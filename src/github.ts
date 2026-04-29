@@ -1,6 +1,11 @@
 import type {
+	IssueCommentCreatedEvent,
+	IssuesOpenedEvent,
+	PullRequestOpenedEvent,
+	PullRequestReviewCommentCreatedEvent,
+} from "@octokit/webhooks-types";
+import type {
 	GitHubReaction,
-	GitHubUser,
 	OctokitClient,
 	RepoRef,
 	TriggerInfo,
@@ -10,43 +15,81 @@ export interface GitHubContext {
 	repo: RepoRef;
 }
 
+type SupportedWebhookPayload =
+	| IssueCommentCreatedEvent
+	| IssuesOpenedEvent
+	| PullRequestOpenedEvent
+	| PullRequestReviewCommentCreatedEvent;
+
+type TriggerSubject = SupportedWebhookPayload extends infer Payload
+	? Payload extends { issue: infer Issue }
+		? Issue
+		: Payload extends { pull_request: infer PullRequest }
+			? PullRequest
+			: never
+	: never;
+
+type TriggerComment = SupportedWebhookPayload extends infer Payload
+	? Payload extends { comment: infer Comment }
+		? Comment
+		: never
+	: never;
+
+function isSupportedWebhookPayload(
+	payload: unknown,
+): payload is SupportedWebhookPayload {
+	return (
+		typeof payload === "object" &&
+		payload !== null &&
+		("issue" in payload || "pull_request" in payload)
+	);
+}
+
+function getTriggerSubject(payload: SupportedWebhookPayload): TriggerSubject {
+	return "pull_request" in payload ? payload.pull_request : payload.issue;
+}
+
+function getTriggerComment(
+	payload: SupportedWebhookPayload,
+): TriggerComment | undefined {
+	return "comment" in payload ? payload.comment : undefined;
+}
+
+function isPullRequestTrigger(
+	payload: SupportedWebhookPayload,
+	subject: TriggerSubject,
+): boolean {
+	return "pull_request" in payload || "pull_request" in subject;
+}
+
 export function extractTriggerInfo(
 	payload: Record<string, unknown>,
 ): TriggerInfo | null {
-	const comment = payload.comment as Record<string, unknown> | undefined;
-	const issue = (payload.issue || payload.pull_request) as
-		| Record<string, unknown>
-		| undefined;
-
-	if (!issue) {
+	if (!isSupportedWebhookPayload(payload)) {
 		return null;
 	}
 
-	const isCommentEvent = !!comment;
-	const triggerText = isCommentEvent
-		? (comment?.body as string)
-		: (issue.body as string);
-	const author = isCommentEvent
-		? (comment?.user as GitHubUser)
-		: (issue.user as GitHubUser);
-	const authorAssociation = isCommentEvent
-		? (comment?.author_association as string)
-		: (issue.author_association as string);
+	const subject = getTriggerSubject(payload);
+	const comment = getTriggerComment(payload);
+	const triggerText = comment?.body ?? subject.body ?? "";
+	const author = comment?.user ?? subject.user;
+	const authorAssociation =
+		comment?.author_association ?? subject.author_association;
 
 	if (!(triggerText && author)) {
 		return null;
 	}
 
 	return {
-		isCommentEvent,
+		isCommentEvent: !!comment,
 		triggerText,
 		author,
 		authorAssociation,
-		issueNumber: issue.number as number,
-		issueTitle: issue.title as string,
-		issueBody: (issue.body as string) || "",
-		commentId: comment?.id as number | undefined,
-		isPullRequest: !!payload.pull_request,
+		issueNumber: subject.number,
+		issueTitle: subject.title,
+		issueBody: subject.body ?? "",
+		commentId: comment?.id,
+		isPullRequest: isPullRequestTrigger(payload, subject),
 	};
 }
 
