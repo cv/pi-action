@@ -1,0 +1,52 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { DEFAULTS } from "./defaults.js";
+
+const ACTION_YML = readFileSync("action.yml", "utf-8");
+const README = readFileSync("README.md", "utf-8");
+
+const DEFAULT_CASES = [
+	["trigger_phrase", DEFAULTS.triggerPhrase],
+	["timeout", String(DEFAULTS.timeout)],
+	["provider", DEFAULTS.provider],
+	["model", DEFAULTS.model],
+	["share_session", String(DEFAULTS.shareSession)],
+] as const;
+
+function getActionInputDefault(inputName: string): string {
+	const inputStart = ACTION_YML.indexOf(`  ${inputName}:`);
+	if (inputStart === -1) {
+		throw new Error(`Input ${inputName} not found in action.yml`);
+	}
+
+	const nextInputStart = ACTION_YML.slice(inputStart + 1).search(/\n {2}\w/);
+	const inputBlock =
+		nextInputStart === -1
+			? ACTION_YML.slice(inputStart)
+			: ACTION_YML.slice(inputStart, inputStart + 1 + nextInputStart);
+	const defaultMatch = inputBlock.match(/\n {4}default: ['"]?([^'"\n]+)['"]?/);
+	if (!defaultMatch) {
+		throw new Error(`Input ${inputName} has no default in action.yml`);
+	}
+	return defaultMatch[1];
+}
+
+function getReadmeInputDefault(inputName: string): string {
+	const escapedInputName = inputName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const defaultMatch = README.match(
+		new RegExp(`\\| \`${escapedInputName}\` \\|[^\\n]*\\| \`([^\`]+)\` \\|`),
+	);
+	if (!defaultMatch) {
+		throw new Error(`Input ${inputName} not found in README inputs table`);
+	}
+	return defaultMatch[1];
+}
+
+describe("input defaults", () => {
+	it.each(
+		DEFAULT_CASES,
+	)("keeps %s default in sync across source, action.yml, and README", (inputName, expectedDefault) => {
+		expect(getActionInputDefault(inputName)).toBe(expectedDefault);
+		expect(getReadmeInputDefault(inputName)).toBe(expectedDefault);
+	});
+});
