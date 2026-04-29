@@ -1,56 +1,12 @@
 import * as core from "@actions/core";
 import * as github from "@actions/github";
-import { readCustomProviderConfig } from "./custom-provider.js";
-import { DEFAULTS } from "./defaults.js";
+import { readActionInputs } from "./action-inputs.js";
 import { createGitHubClient } from "./github.js";
-import {
-	getInputOrDefault,
-	parseBooleanInput,
-	parseCsvInput,
-	parsePositiveIntegerInput,
-} from "./inputs.js";
 import { run } from "./run.js";
 import { getErrorMessage } from "./utils.js";
 
-const GITHUB_TOKEN_ENV = "GITHUB_TOKEN";
-
-function getOutputMode(): "comment" | "output" {
-	return core.getInput("output_mode") === "output"
-		? "output"
-		: DEFAULTS.outputMode;
-}
-
-const prNumber = parsePositiveIntegerInput(core.getInput("pr_number"), 0);
-
 run({
-	inputs: {
-		triggerPhrase: getInputOrDefault(
-			core.getInput,
-			"trigger_phrase",
-			DEFAULTS.triggerPhrase,
-		),
-		allowedBots: parseCsvInput(core.getInput("allowed_bots")),
-		modelConfig: {
-			timeout: parsePositiveIntegerInput(
-				core.getInput("timeout"),
-				DEFAULTS.timeout,
-			),
-			provider: getInputOrDefault(core.getInput, "provider", DEFAULTS.provider),
-			model: getInputOrDefault(core.getInput, "model", DEFAULTS.model),
-		},
-		githubToken: core.getInput("github_token") || process.env[GITHUB_TOKEN_ENV],
-		gistToken: core.getInput("gist_token") || undefined,
-		apiKey: core.getInput("api_key") || undefined,
-		customProvider: readCustomProviderConfig(core.getInput),
-		promptTemplate: core.getInput("prompt_template"),
-		shareSession: parseBooleanInput(
-			core.getInput("share_session"),
-			DEFAULTS.shareSession,
-		),
-		outputMode: getOutputMode(),
-		prompt: core.getInput("prompt") || undefined,
-		prNumber: prNumber > 0 ? prNumber : undefined,
-	},
+	inputs: readActionInputs(core.getInput),
 	context: {
 		payload: github.context.payload,
 		repo: {
