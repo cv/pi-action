@@ -44,7 +44,7 @@ This project uses [prek](https://github.com/j178/prek) to enforce quality checks
 
 | Hook | What it does |
 |------|--------------|
-| **pre-commit** | Runs tests, type checking, linting, and build verification |
+| **pre-commit** | Runs tests, type checking, and linting |
 | **commit-msg** | Enforces [Conventional Commits](https://www.conventionalcommits.org/) format via commitlint |
 | **prepare-commit-msg** | Auto-appends issue number from branch name via [`scripts/prepare-commit-msg.sh`](scripts/prepare-commit-msg.sh) (e.g., `feat/123-description` → `Refs #123`) |
 | **pre-push** | Runs full test suite with coverage thresholds from [`vitest.config.ts`](vitest.config.ts) |
@@ -184,7 +184,7 @@ This verifies the TypeScript production entrypoint without emitting JavaScript. 
 
 ### GitHub Actions Workflows
 
-- [**CI (`ci.yml`)**](.github/workflows/ci.yml): Runs on push/PR to main - type checking, linting, tests, build verification
+- [**CI (`ci.yml`)**](.github/workflows/ci.yml): Runs on push/PR to main - type checking, linting, and tests
 - [**pi Assistant (`pi-assistant.yml`)**](.github/workflows/pi-assistant.yml): Dogfooding - uses the action from this repo to respond to `@pi` triggers
 
 ### Release Process

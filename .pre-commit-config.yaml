@@ -31,14 +31,6 @@ repos:
         always_run: true
         stages: [pre-commit]
 
-      - id: build
-        name: npm run build
-        entry: npm run build
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-commit]
-
       - id: commitlint
         name: commitlint
         entry: npx --no -- commitlint --edit
