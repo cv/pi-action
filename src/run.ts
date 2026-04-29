@@ -1,19 +1,19 @@
 import { runAgent } from "./agent.js";
 import type { PIContext } from "./context.js";
 import { extractTask, hasTrigger } from "./context.js";
-import {
-	formatErrorComment,
-	formatReviewComments,
-	formatSuccessComment,
-} from "./formatting.js";
+import { formatReviewComments } from "./formatting.js";
 import {
 	addReaction,
 	extractTriggerInfo,
 	type GitHubClient,
 } from "./github.js";
+import {
+	postResult,
+	setResultOutputs,
+	shareSessionForResult,
+} from "./result-delivery.js";
 import type { SecurityContext } from "./security.js";
 import { sanitizeInput, validatePermissions } from "./security.js";
-import { shareSession } from "./share.js";
 import type {
 	AgentResult,
 	CustomProviderConfig,
@@ -195,83 +195,6 @@ async function buildPIContext(
 	}
 
 	return piContext;
-}
-
-async function shareSessionForResult(
-	ghClient: GitHubClient,
-	gistClient: GitHubClient | undefined,
-	issueTitle: string,
-	result: AgentResult,
-	shareSessionEnabled: boolean,
-	log: Logger,
-): Promise<string | undefined> {
-	if (!(shareSessionEnabled && result.session)) {
-		return undefined;
-	}
-
-	const clientForGist = gistClient ?? ghClient;
-	try {
-		const shareResult = await shareSession(
-			result.session,
-			clientForGist,
-			`pi-action session for ${result.success ? "success" : "error"}: ${issueTitle}`,
-		);
-		if (shareResult) {
-			log.info(`Session shared: ${shareResult.previewUrl}`);
-			return shareResult.previewUrl;
-		}
-	} catch (error) {
-		log.warning(`Failed to share session: ${error}`);
-	}
-	return undefined;
-}
-
-/**
- * Posts the agent result as a comment with appropriate reaction.
- */
-async function postResult(
-	ghClient: GitHubClient,
-	gistClient: GitHubClient | undefined,
-	triggerInfo: TriggerInfo,
-	result: AgentResult,
-	shareSessionEnabled: boolean,
-	log: Logger,
-): Promise<void> {
-	const shareUrl = await shareSessionForResult(
-		ghClient,
-		gistClient,
-		triggerInfo.issueTitle,
-		result,
-		shareSessionEnabled,
-		log,
-	);
-
-	if (result.success) {
-		await addReaction(ghClient, triggerInfo, "rocket");
-		await ghClient.createComment(
-			triggerInfo.issueNumber,
-			formatSuccessComment(result.response, shareUrl),
-		);
-	} else {
-		log.error(`pi execution failed: ${result.error}`);
-		await addReaction(ghClient, triggerInfo, "confused");
-		await ghClient.createComment(
-			triggerInfo.issueNumber,
-			formatErrorComment(result.error, shareUrl),
-		);
-	}
-}
-
-function setResultOutputs(
-	log: Logger,
-	result: AgentResult,
-	shareUrl: string | undefined,
-): void {
-	log.setOutput("success", result.success ? "true" : "false");
-	log.setOutput("response", result.success ? result.response : result.error);
-	if (shareUrl) {
-		log.setOutput("share_url", shareUrl);
-	}
 }
 
 function createAgentConfig(
