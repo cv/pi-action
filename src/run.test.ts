@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULTS } from "./defaults.js";
 import { type ActionDependencies, run } from "./run.js";
 import {
+	createActionInputs,
+	createIssuePayload,
 	createMockGitHubClient,
 	createModelConfig,
+	createPullRequestPayload,
 	createRepoRef,
 } from "./test-helpers.js";
 
@@ -26,20 +29,7 @@ describe("run", () => {
 		overrides: Partial<ActionDependencies> = {},
 	): ActionDependencies {
 		return {
-			inputs: {
-				triggerPhrase: DEFAULTS.triggerPhrase,
-				allowedBots: [],
-				modelConfig: createModelConfig(),
-				githubToken: "test-token",
-				gistToken: undefined,
-				apiKey: undefined,
-				customProvider: undefined,
-				promptTemplate: undefined,
-				shareSession: true,
-				outputMode: "comment",
-				prompt: undefined,
-				prNumber: undefined,
-			},
+			inputs: createActionInputs(),
 			context: {
 				payload: {},
 				repo: createRepoRef(),
@@ -202,15 +192,7 @@ describe("run", () => {
 		const mockClient = createMockGitHubClient();
 		const deps = createMockDeps({
 			context: {
-				payload: {
-					issue: {
-						number: 42,
-						title: "Test Issue",
-						body: "@pi help me",
-						user: { login: "user", type: "User" },
-						author_association: "OWNER",
-					},
-				},
+				payload: createIssuePayload({ number: 42, body: "@pi help me" }),
 				repo: createRepoRef(),
 			},
 			createClient: vi.fn(() => mockClient),
@@ -871,15 +853,7 @@ describe("run", () => {
 		]);
 		const deps = createMockDeps({
 			context: {
-				payload: {
-					pull_request: {
-						number: 42,
-						title: "Test PR",
-						body: "@pi review",
-						user: { login: "user", type: "User" },
-						author_association: "OWNER",
-					},
-				},
+				payload: createPullRequestPayload({ number: 42 }),
 				repo: createRepoRef(),
 			},
 			createClient: vi.fn(() => mockClient),

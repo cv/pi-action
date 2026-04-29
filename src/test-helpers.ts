@@ -6,6 +6,7 @@ import type { AgentConfig } from "./agent.js";
 import type { PIContext } from "./context.js";
 import { DEFAULTS } from "./defaults.js";
 import type { GitHubClient } from "./github.js";
+import type { ActionInputs } from "./run.js";
 import type { ModelConfig, RepoRef, TriggerInfo } from "./types.js";
 
 /**
@@ -89,6 +90,65 @@ export function createModelConfig(
 		model: DEFAULTS.model,
 		timeout: DEFAULTS.timeout,
 		...overrides,
+	};
+}
+
+/**
+ * Creates ActionInputs with sensible defaults and optional overrides.
+ */
+export function createActionInputs(
+	overrides: Partial<ActionInputs> = {},
+): ActionInputs {
+	return {
+		triggerPhrase: DEFAULTS.triggerPhrase,
+		allowedBots: [],
+		modelConfig: createModelConfig(),
+		githubToken: "test-token",
+		gistToken: undefined,
+		apiKey: undefined,
+		customProvider: undefined,
+		promptTemplate: undefined,
+		shareSession: DEFAULTS.shareSession,
+		outputMode: DEFAULTS.outputMode,
+		prompt: undefined,
+		prNumber: undefined,
+		...overrides,
+	};
+}
+
+/**
+ * Creates a minimal issue payload for run tests.
+ */
+export function createIssuePayload(
+	overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+	return {
+		issue: {
+			number: 1,
+			title: "Test Issue",
+			body: "@pi do something",
+			user: { login: "user", type: "User" },
+			author_association: "OWNER",
+			...overrides,
+		},
+	};
+}
+
+/**
+ * Creates a minimal pull_request payload for run tests.
+ */
+export function createPullRequestPayload(
+	overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+	return {
+		pull_request: {
+			number: 1,
+			title: "Test PR",
+			body: "@pi review",
+			user: { login: "user", type: "User" },
+			author_association: "OWNER",
+			...overrides,
+		},
 	};
 }
 
