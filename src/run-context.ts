@@ -68,22 +68,25 @@ function createDirectPIContext(prompt: string): PIContext {
 	};
 }
 
-async function addPullRequestContext(
-	piContext: PIContext,
+async function getPullRequestContext(
 	ghClient: GitHubClient,
 	pullNumber: number,
 	log: Logger,
-): Promise<void> {
-	piContext.diff = await ghClient.getPullRequestDiff(pullNumber);
+): Promise<Pick<PIContext, "diff" | "reviewComments">> {
+	const diff = await ghClient.getPullRequestDiff(pullNumber);
 
 	try {
 		const comments = await ghClient.getPullRequestReviewComments(pullNumber);
-		if (comments.length > 0) {
-			piContext.reviewComments = formatReviewComments(comments);
-		}
+		return {
+			diff,
+			...(comments.length > 0
+				? { reviewComments: formatReviewComments(comments) }
+				: {}),
+		};
 	} catch (error) {
 		log.warning(`Failed to fetch PR review comments: ${error}`);
 	}
+	return { diff };
 }
 
 async function buildPIContextForPullRequestNumber(
@@ -94,16 +97,15 @@ async function buildPIContextForPullRequestNumber(
 ): Promise<PIContext> {
 	const pullRequest = await ghClient.getPullRequest(pullNumber);
 	const task = prompt?.trim() || "Please review this pull request";
-	const piContext: PIContext = {
+	return {
 		type: "pull_request",
 		title: pullRequest.title,
 		body: pullRequest.body,
 		number: pullRequest.number,
 		triggerComment: task,
 		task,
+		...(await getPullRequestContext(ghClient, pullRequest.number, log)),
 	};
-	await addPullRequestContext(piContext, ghClient, pullRequest.number, log);
-	return piContext;
 }
 
 async function buildPIContext(
@@ -124,16 +126,14 @@ async function buildPIContext(
 		task,
 	};
 
-	if (triggerInfo.isPullRequest) {
-		await addPullRequestContext(
-			piContext,
-			ghClient,
-			triggerInfo.issueNumber,
-			log,
-		);
+	if (!triggerInfo.isPullRequest) {
+		return piContext;
 	}
 
-	return piContext;
+	return {
+		...piContext,
+		...(await getPullRequestContext(ghClient, triggerInfo.issueNumber, log)),
+	};
 }
 
 export async function getRunContext(
