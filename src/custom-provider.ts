@@ -1,3 +1,4 @@
+import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
 import { DEFAULTS } from "./defaults.js";
 import {
 	getInputOrDefault,
@@ -11,6 +12,7 @@ import type {
 	CustomProviderCompatConfig,
 	CustomProviderConfig,
 } from "./types.js";
+import { getErrorMessage } from "./utils.js";
 
 function createCompatConfig(
 	readInput: InputReader,
@@ -28,6 +30,48 @@ function createCompatConfig(
 			: { supportsReasoningEffort }),
 	};
 	return Object.keys(compat).length > 0 ? compat : undefined;
+}
+
+export function registerCustomProvider(
+	modelRegistry: ModelRegistry,
+	provider: string,
+	model: string,
+	apiKey: string | undefined,
+	customProvider: CustomProviderConfig | undefined,
+): string | undefined {
+	if (!customProvider) {
+		return undefined;
+	}
+
+	const providerApiKey =
+		customProvider.apiKey ?? (apiKey ? provider : undefined);
+	if (!providerApiKey) {
+		return "api_key or provider_api_key is required when provider_base_url is set";
+	}
+
+	try {
+		modelRegistry.registerProvider(provider, {
+			baseUrl: customProvider.baseUrl,
+			api: customProvider.api,
+			apiKey: providerApiKey,
+			authHeader: customProvider.authHeader,
+			models: [
+				{
+					id: model,
+					name: customProvider.modelName ?? model,
+					reasoning: customProvider.reasoning,
+					input: customProvider.input,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: customProvider.contextWindow,
+					maxTokens: customProvider.maxTokens,
+					...(customProvider.compat ? { compat: customProvider.compat } : {}),
+				},
+			],
+		});
+	} catch (error) {
+		return getErrorMessage(error);
+	}
+	return undefined;
 }
 
 export function readCustomProviderConfig(
