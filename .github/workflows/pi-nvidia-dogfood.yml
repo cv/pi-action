@@ -44,8 +44,9 @@ jobs:
           model_max_tokens: 16384
 
       - name: Print model response
+        env:
+          PI_SUCCESS: ${{ steps.pi.outputs.success }}
+          PI_RESPONSE: ${{ steps.pi.outputs.response }}
         run: |
-          echo "success=${{ steps.pi.outputs.success }}"
-          echo "response<<EOF"
-          echo "${{ steps.pi.outputs.response }}"
-          echo "EOF"
+          printf 'success=%s\n' "$PI_SUCCESS"
+          printf 'response<<EOF\n%s\nEOF\n' "$PI_RESPONSE"

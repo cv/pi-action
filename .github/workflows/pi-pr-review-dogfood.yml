@@ -48,9 +48,11 @@ jobs:
           model_max_tokens: 16384
 
       - name: Print review summary
+        env:
+          PI_SUCCESS: ${{ steps.pi.outputs.success }}
+          PI_SHARE_URL: ${{ steps.pi.outputs.share_url }}
+          PI_RESPONSE: ${{ steps.pi.outputs.response }}
         run: |
-          echo "success=${{ steps.pi.outputs.success }}"
-          echo "share_url=${{ steps.pi.outputs.share_url }}"
-          echo "response<<EOF"
-          echo "${{ steps.pi.outputs.response }}"
-          echo "EOF"
+          printf 'success=%s\n' "$PI_SUCCESS"
+          printf 'share_url=%s\n' "$PI_SHARE_URL"
+          printf 'response<<EOF\n%s\nEOF\n' "$PI_RESPONSE"
