@@ -3,14 +3,11 @@
 echo "🔍 Running pre-push checks..."
 
 # Run tests with coverage and enforce threshold
-npm run coverage -- --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=70 || {
+npm run coverage || {
     echo ""
     echo "❌ ERROR: Tests failed or coverage threshold not met!"
     echo ""
-    echo "Ensure all tests pass and coverage meets minimums:"
-    echo "  - Lines: 80%"
-    echo "  - Functions: 80%"
-    echo "  - Branches: 70%"
+    echo "Ensure all tests pass and coverage meets the thresholds in vitest.config.ts."
     echo ""
     exit 1
 }

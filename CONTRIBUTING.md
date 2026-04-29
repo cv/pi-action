@@ -165,9 +165,12 @@ npm run coverage            # With coverage report
 - Use [`test-helpers.ts`](src/test-helpers.ts) for common mock factories
 
 **Coverage thresholds (enforced by pre-push hook):**
-- Lines: 80%
-- Functions: 80%
-- Branches: 70%
+- Statements: 90%
+- Lines: 90%
+- Functions: 90%
+- Branches: 85%
+
+Thresholds and production coverage includes are configured in [`vitest.config.ts`](vitest.config.ts).
 
 ### Building
 
