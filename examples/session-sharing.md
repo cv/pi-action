@@ -18,8 +18,9 @@ By default, session sharing is **enabled**:
 - uses: cv/pi-action@v1
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
-    pi_auth_json: ${{ secrets.PI_AUTH_JSON }}
     # share_session defaults to true
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
 When a session is shared, the comment will include a link like this:
@@ -46,8 +47,9 @@ To disable session sharing:
 - uses: cv/pi-action@v1
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
-    pi_auth_json: ${{ secrets.PI_AUTH_JSON }}
     share_session: false
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
 ## Privacy and Security
@@ -65,8 +67,9 @@ To disable session sharing:
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}  # For issues, PRs, reactions
     gist_token: ${{ secrets.PAT_WITH_GIST_SCOPE }}  # PAT with gist scope only
-    pi_auth_json: ${{ secrets.PI_AUTH_JSON }}
     share_session: true
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
 This separation follows the principle of least privilege - the PAT only needs `gist` scope, not full repo access.

@@ -1,6 +1,3 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { runAgent } from "./agent.js";
 import type { PIContext } from "./context.js";
 import { extractTask, hasTrigger } from "./context.js";
@@ -21,7 +18,7 @@ export interface ActionInputs {
 	modelConfig: ModelConfig;
 	githubToken: string | undefined;
 	gistToken: string | undefined;
-	piAuthJson: string | undefined;
+	apiKey: string | undefined;
 	promptTemplate: string | undefined;
 	shareSession: boolean;
 }
@@ -44,14 +41,6 @@ export interface ActionDependencies {
 	createClient: (token: string) => GitHubClient;
 	log: Logger;
 	cwd: string;
-}
-
-export function setupAuth(piAuthJson: string | undefined): void {
-	if (piAuthJson) {
-		const authDir = join(homedir(), ".pi", "agent");
-		mkdirSync(authDir, { recursive: true });
-		writeFileSync(join(authDir, "auth.json"), piAuthJson);
-	}
 }
 
 /**
@@ -181,8 +170,6 @@ async function postResult(
 export async function run(deps: ActionDependencies): Promise<void> {
 	const { inputs, log, cwd, createClient } = deps;
 
-	setupAuth(inputs.piAuthJson);
-
 	// Validate and extract trigger info
 	const validated = validateTrigger(deps);
 	if (!validated) {
@@ -213,6 +200,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		...inputs.modelConfig,
 		cwd,
 		logger: log,
+		...(inputs.apiKey ? { apiKey: inputs.apiKey } : {}),
 		...(inputs.promptTemplate ? { promptTemplate: inputs.promptTemplate } : {}),
 	});
 

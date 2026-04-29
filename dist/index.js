@@ -17,7 +17,7 @@ run({
         },
         githubToken: core.getInput("github_token") || process.env[GITHUB_TOKEN_ENV],
         gistToken: core.getInput("gist_token") || undefined,
-        piAuthJson: core.getInput("pi_auth_json"),
+        apiKey: core.getInput("api_key") || undefined,
         promptTemplate: core.getInput("prompt_template"),
         shareSession: parseBooleanInput(core.getInput("share_session"), DEFAULTS.shareSession),
     },

@@ -47,9 +47,12 @@ function createSessionEventHandler(log, onTextDelta) {
 }
 export async function runAgent(piContext, config, authStorage, modelRegistry) {
     const prompt = buildPrompt(piContext, config.promptTemplate);
-    // Use provided auth/models or the SDK defaults (~/.pi/agent/auth.json and models.json)
-    const auth = authStorage ?? AuthStorage.create();
-    const models = modelRegistry ?? ModelRegistry.create(auth);
+    // Use in-memory auth/model state so CI configuration comes only from env vars and inputs.
+    const auth = authStorage ?? AuthStorage.inMemory();
+    if (config.apiKey) {
+        auth.setRuntimeApiKey(config.provider, config.apiKey);
+    }
+    const models = modelRegistry ?? ModelRegistry.inMemory(auth);
     // Find the model
     const model = models.find(config.provider, config.model);
     if (!model) {

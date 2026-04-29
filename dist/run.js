@@ -1,19 +1,9 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { runAgent } from "./agent.js";
 import { extractTask, hasTrigger } from "./context.js";
 import { formatErrorComment, formatSuccessComment } from "./formatting.js";
 import { addReaction, extractTriggerInfo, } from "./github.js";
 import { sanitizeInput, validatePermissions } from "./security.js";
 import { shareSession } from "./share.js";
-export function setupAuth(piAuthJson) {
-    if (piAuthJson) {
-        const authDir = join(homedir(), ".pi", "agent");
-        mkdirSync(authDir, { recursive: true });
-        writeFileSync(join(authDir, "auth.json"), piAuthJson);
-    }
-}
 /**
  * Validates that the trigger is authorized to run the agent.
  * Returns the trigger info if valid, null otherwise.
@@ -101,7 +91,6 @@ async function postResult(ghClient, gistClient, triggerInfo, result, shareSessio
 }
 export async function run(deps) {
     const { inputs, log, cwd, createClient } = deps;
-    setupAuth(inputs.piAuthJson);
     // Validate and extract trigger info
     const validated = validateTrigger(deps);
     if (!validated) {
@@ -122,6 +111,7 @@ export async function run(deps) {
         ...inputs.modelConfig,
         cwd,
         logger: log,
+        ...(inputs.apiKey ? { apiKey: inputs.apiKey } : {}),
         ...(inputs.promptTemplate ? { promptTemplate: inputs.promptTemplate } : {}),
     });
     // Post result (use gistClient for session sharing if available)

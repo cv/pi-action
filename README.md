@@ -53,18 +53,28 @@ jobs:
         uses: cv/pi-action@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          pi_auth_json: ${{ secrets.PI_AUTH_JSON }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
 ### Authentication
 
-pi requires authentication with your LLM provider. Set up the `PI_AUTH_JSON` secret in your repository:
+pi requires authentication with your LLM provider. Prefer provider-specific environment variables because they match pi's normal API-key resolution and avoid copying local pi state into CI:
 
-1. Run `pi` locally and complete OAuth authentication
-2. Copy the contents of `~/.pi/agent/auth.json`
-3. Add it as a repository secret named `PI_AUTH_JSON`
+```yaml
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
 
-Alternatively, you can set provider-specific environment variables (e.g., `ANTHROPIC_API_KEY`).
+Common variables include `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, and `OPENROUTER_API_KEY`. For the full list, see pi's provider documentation.
+
+If you prefer configuring credentials through action inputs, use `api_key`. The value is applied only for this action run and is mapped to the selected `provider`:
+
+```yaml
+with:
+  provider: anthropic
+  api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
 
 ### Inputs
 
@@ -74,7 +84,7 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 |-------|-------------|----------|---------|
 | `github_token` | GitHub token for API access (issues, PRs, reactions, comments) | Yes | - |
 | `gist_token` | GitHub token with gist scope for session sharing (optional) | No | - |
-| `pi_auth_json` | Contents of `~/.pi/agent/auth.json` | No | - |
+| `api_key` | LLM provider API key for the selected `provider` (runtime-only; env vars are preferred) | No | - |
 | `trigger_phrase` | Phrase to trigger pi | No | `@pi` |
 | `allowed_bots` | Comma-separated list of allowed bot usernames | No | - |
 | `timeout` | Execution timeout in seconds | No | `1800` |
@@ -102,6 +112,8 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
     github_token: ${{ secrets.GITHUB_TOKEN }}
     provider: 'openai'
     model: 'gpt-4o'
+  env:
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
 
 #### Custom trigger phrase
@@ -161,8 +173,9 @@ By default, pi-action shares the complete session (including tool executions and
 - uses: cv/pi-action@v1
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
-    pi_auth_json: ${{ secrets.PI_AUTH_JSON }}
     share_session: true  # Default: true
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
 To disable session sharing:
@@ -171,8 +184,9 @@ To disable session sharing:
 - uses: cv/pi-action@v1
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
-    pi_auth_json: ${{ secrets.PI_AUTH_JSON }}
     share_session: false  # Disable session links
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
 **Session sharing includes:**
@@ -190,8 +204,9 @@ Sessions are uploaded as **secret** (non-public) GitHub gists and are accessible
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}  # For issues, PRs, reactions
     gist_token: ${{ secrets.PAT_WITH_GIST_SCOPE }}  # PAT with gist scope only
-    pi_auth_json: ${{ secrets.PI_AUTH_JSON }}
     share_session: true
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
 This separation follows the principle of least privilege - the PAT only needs `gist` scope, not full repo access.

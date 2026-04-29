@@ -6,7 +6,7 @@ export interface ActionInputs {
     modelConfig: ModelConfig;
     githubToken: string | undefined;
     gistToken: string | undefined;
-    piAuthJson: string | undefined;
+    apiKey: string | undefined;
     promptTemplate: string | undefined;
     shareSession: boolean;
 }
@@ -27,5 +27,4 @@ export interface ActionDependencies {
     log: Logger;
     cwd: string;
 }
-export declare function setupAuth(piAuthJson: string | undefined): void;
 export declare function run(deps: ActionDependencies): Promise<void>;

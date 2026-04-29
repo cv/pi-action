@@ -105,7 +105,7 @@ Pure helpers for parsing GitHub Actions inputs (CSV allowlists, booleans, and po
 
 #### [`run.ts`](src/run.ts)
 Main orchestration that:
-1. Sets up authentication from `PI_AUTH_JSON`
+1. Uses provider credentials from environment variables or the runtime-only `api_key` input
 2. Extracts trigger information from the GitHub payload
 3. Validates permissions
 4. Builds the pi context/prompt

@@ -32,4 +32,5 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           gist_token: ${{ secrets.PAT_WITH_GIST_SCOPE }}
-          pi_auth_json: ${{ secrets.PI_AUTH_JSON }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

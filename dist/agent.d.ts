@@ -7,6 +7,7 @@ export interface AgentLogger {
 export interface AgentConfig extends ModelConfig {
     cwd: string;
     logger?: AgentLogger;
+    apiKey?: string;
     promptTemplate?: string;
 }
 export declare function runAgent(piContext: PIContext, config: AgentConfig, authStorage?: AuthStorage, modelRegistry?: ModelRegistry): Promise<AgentResult>;

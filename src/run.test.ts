@@ -1,7 +1,6 @@
-import * as fs from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULTS } from "./defaults.js";
-import { type ActionDependencies, run, setupAuth } from "./run.js";
+import { type ActionDependencies, run } from "./run.js";
 import {
 	createMockGitHubClient,
 	createModelConfig,
@@ -21,47 +20,6 @@ vi.mock("./share.js", () => ({
 import { runAgent } from "./agent.js";
 import { shareSession } from "./share.js";
 
-// Mock fs and os for setupAuth tests
-vi.mock("node:fs", () => ({
-	mkdirSync: vi.fn(),
-	writeFileSync: vi.fn(),
-}));
-
-vi.mock("node:os", () => ({
-	homedir: vi.fn(() => "/home/testuser"),
-}));
-
-describe("setupAuth", () => {
-	beforeEach(() => {
-		vi.clearAllMocks();
-	});
-
-	it("does nothing when piAuthJson is undefined", () => {
-		setupAuth(undefined);
-		expect(fs.mkdirSync).not.toHaveBeenCalled();
-		expect(fs.writeFileSync).not.toHaveBeenCalled();
-	});
-
-	it("does nothing when piAuthJson is empty string", () => {
-		setupAuth("");
-		expect(fs.mkdirSync).not.toHaveBeenCalled();
-		expect(fs.writeFileSync).not.toHaveBeenCalled();
-	});
-
-	it("writes auth.json when piAuthJson is provided", () => {
-		const authJson = '{"anthropic": {"key": "test"}}';
-		setupAuth(authJson);
-
-		expect(fs.mkdirSync).toHaveBeenCalledWith("/home/testuser/.pi/agent", {
-			recursive: true,
-		});
-		expect(fs.writeFileSync).toHaveBeenCalledWith(
-			"/home/testuser/.pi/agent/auth.json",
-			authJson,
-		);
-	});
-});
-
 describe("run", () => {
 	function createMockDeps(
 		overrides: Partial<ActionDependencies> = {},
@@ -73,7 +31,7 @@ describe("run", () => {
 				modelConfig: createModelConfig(),
 				githubToken: "test-token",
 				gistToken: undefined,
-				piAuthJson: undefined,
+				apiKey: undefined,
 				promptTemplate: undefined,
 				shareSession: true,
 			},
@@ -158,7 +116,7 @@ describe("run", () => {
 				modelConfig: createModelConfig(),
 				githubToken: "test-token",
 				gistToken: undefined,
-				piAuthJson: undefined,
+				apiKey: undefined,
 				promptTemplate: undefined,
 				shareSession: DEFAULTS.shareSession,
 			},
@@ -204,7 +162,7 @@ describe("run", () => {
 				modelConfig: createModelConfig(),
 				githubToken: undefined,
 				gistToken: undefined,
-				piAuthJson: undefined,
+				apiKey: undefined,
 				promptTemplate: undefined,
 				shareSession: DEFAULTS.shareSession,
 			},
@@ -269,6 +227,47 @@ describe("run", () => {
 		expect(mockClient.createComment).toHaveBeenCalledWith(
 			42,
 			"### 🤖 pi Response\n\nHere is your help!",
+		);
+	});
+
+	it("passes api_key through to the agent config", async () => {
+		const mockClient = createMockGitHubClient();
+		const deps = createMockDeps({
+			inputs: {
+				triggerPhrase: DEFAULTS.triggerPhrase,
+				allowedBots: [],
+				modelConfig: createModelConfig(),
+				githubToken: "test-token",
+				gistToken: undefined,
+				apiKey: "sk-test",
+				promptTemplate: undefined,
+				shareSession: DEFAULTS.shareSession,
+			},
+			context: {
+				payload: {
+					issue: {
+						number: 42,
+						title: "Test Issue",
+						body: "@pi help me",
+						user: { login: "user", type: "User" },
+						author_association: "OWNER",
+					},
+				},
+				repo: createRepoRef(),
+			},
+			createClient: vi.fn(() => mockClient),
+		});
+
+		vi.mocked(runAgent).mockResolvedValue({
+			success: true,
+			response: "Done",
+		});
+
+		await run(deps);
+
+		expect(runAgent).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({ apiKey: "sk-test" }),
 		);
 	});
 
