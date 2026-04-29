@@ -34,6 +34,7 @@ function createArtifactDir(name: string): string {
 
 describe("shareSession", () => {
 	afterEach(() => {
+		vi.unstubAllEnvs();
 		for (const artifactDir of artifactDirs.splice(0)) {
 			rmSync(artifactDir, { recursive: true, force: true });
 		}
@@ -69,6 +70,8 @@ describe("shareSession", () => {
 	});
 
 	it("falls back to the artifact directory when no run URL is available", async () => {
+		vi.stubEnv("GITHUB_REPOSITORY", "");
+		vi.stubEnv("GITHUB_RUN_ID", "");
 		const artifactDir = createArtifactDir("pi-session-test");
 
 		const result = await shareSession(createMockSession(), {
