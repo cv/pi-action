@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest";
 
 const ACTION_YML = readFileSync("action.yml", "utf-8");
 const README = readFileSync("README.md", "utf-8");
+const ACTION_INPUT_NAME_PATTERN = /^ {2}(\w+):$/gmu;
+const README_INPUT_NAME_PATTERN = /^\| `([^`]+)` \|/gmu;
+
+function compareStrings(left: string, right: string): number {
+	return left.localeCompare(right);
+}
 
 function getActionInputNames(): string[] {
 	const inputsBlock = ACTION_YML.slice(
@@ -11,8 +17,8 @@ function getActionInputNames(): string[] {
 			? ACTION_YML.indexOf("runs:")
 			: ACTION_YML.indexOf("outputs:"),
 	);
-	return [...inputsBlock.matchAll(/^ {2}(\w+):$/gm)].flatMap((match) =>
-		match[1] ? [match[1]] : [],
+	return [...inputsBlock.matchAll(ACTION_INPUT_NAME_PATTERN)].flatMap(
+		(match) => (match[1] ? [match[1]] : []),
 	);
 }
 
@@ -28,13 +34,15 @@ function getReadmeInputNames(): string[] {
 		inputTableStart,
 		nextHeading === -1 ? undefined : inputTableStart + nextHeading,
 	);
-	return [...inputTable.matchAll(/^\| `([^`]+)` \|/gm)].flatMap((match) =>
+	return [...inputTable.matchAll(README_INPUT_NAME_PATTERN)].flatMap((match) =>
 		match[1] ? [match[1]] : [],
 	);
 }
 
 describe("action input documentation", () => {
 	it("documents every action.yml input in the README inputs table", () => {
-		expect(getReadmeInputNames().sort()).toEqual(getActionInputNames().sort());
+		expect(getReadmeInputNames().sort(compareStrings)).toEqual(
+			getActionInputNames().sort(compareStrings),
+		);
 	});
 });

@@ -40,11 +40,10 @@ export function registerCustomProvider(
 	customProvider: CustomProviderConfig | undefined,
 ): string | undefined {
 	if (!customProvider) {
-		return undefined;
+		return;
 	}
 
-	const providerApiKey =
-		customProvider.apiKey ?? (apiKey ? provider : undefined);
+	const providerApiKey = customProvider.apiKey ?? (apiKey ? provider : "");
 	if (!providerApiKey) {
 		return "api_key or provider_api_key is required when provider_base_url is set";
 	}
@@ -71,7 +70,7 @@ export function registerCustomProvider(
 	} catch (error) {
 		return getErrorMessage(error);
 	}
-	return undefined;
+	return;
 }
 
 export function readCustomProviderConfig(
@@ -79,7 +78,7 @@ export function readCustomProviderConfig(
 ): CustomProviderConfig | undefined {
 	const baseUrl = readInput("provider_base_url").trim();
 	if (!baseUrl) {
-		return undefined;
+		return;
 	}
 
 	const apiKey = readInput("provider_api_key").trim();

@@ -38,8 +38,8 @@ describe("readCustomProviderConfig", () => {
 			modelName: "GPT-5.5 (OpenAI)",
 			reasoning: true,
 			input: ["text", "image"],
-			contextWindow: 1050000,
-			maxTokens: 16384,
+			contextWindow: 1_050_000,
+			maxTokens: 16_384,
 			compat: {
 				supportsDeveloperRole: false,
 				supportsReasoningEffort: false,

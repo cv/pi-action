@@ -11,7 +11,7 @@ export async function shareSessionForResult(
 	log: Logger,
 ): Promise<string | undefined> {
 	if (!(shareSessionEnabled && result.session)) {
-		return undefined;
+		return;
 	}
 
 	try {
@@ -27,7 +27,7 @@ export async function shareSessionForResult(
 	} catch (error) {
 		log.warning(`Failed to share session: ${error}`);
 	}
-	return undefined;
+	return;
 }
 
 export async function postResult(

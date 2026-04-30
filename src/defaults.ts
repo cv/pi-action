@@ -14,7 +14,7 @@ export const DEFAULTS = {
 	customProviderAuthHeader: false,
 	customModelReasoning: false,
 	customModelInput: "text",
-	customModelContextWindow: 128000,
-	customModelMaxTokens: 16384,
+	customModelContextWindow: 128_000,
+	customModelMaxTokens: 16_384,
 	outputMode: "comment",
 } as const;

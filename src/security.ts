@@ -7,8 +7,12 @@ export interface SecurityContext {
 	allowedAssociations: string[];
 }
 
+const LEADING_AT_PATTERN = /^@/u;
+const HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/gu;
+const INVISIBLE_CHARACTERS_PATTERN = /\u200B|\u200C|\u200D|\uFEFF|\u00AD/gu;
+
 function normalizeLogin(login: string): string {
-	return login.trim().replace(/^@/, "").toLowerCase();
+	return login.trim().replace(LEADING_AT_PATTERN, "").toLowerCase();
 }
 
 function normalizeAssociation(association: string): string {
@@ -37,7 +41,7 @@ export function validatePermissions(ctx: SecurityContext): boolean {
 
 export function sanitizeInput(text: string): string {
 	return text
-		.replace(/<!--[\s\S]*?-->/g, "") // Remove HTML comments
-		.replace(/\u200B|\u200C|\u200D|\uFEFF|\u00AD/g, "") // Remove invisible characters
+		.replace(HTML_COMMENT_PATTERN, "") // Remove HTML comments
+		.replace(INVISIBLE_CHARACTERS_PATTERN, "") // Remove invisible characters
 		.trim();
 }

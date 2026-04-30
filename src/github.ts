@@ -82,7 +82,7 @@ export function extractTriggerInfo(
 	}
 
 	return {
-		isCommentEvent: !!comment,
+		isCommentEvent: Boolean(comment),
 		triggerText,
 		author,
 		authorAssociation,

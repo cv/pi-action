@@ -324,8 +324,8 @@ describe("runAgent", () => {
 				modelName: "GPT-5.5 (OpenAI)",
 				reasoning: true,
 				input: ["text", "image"],
-				contextWindow: 1050000,
-				maxTokens: 16384,
+				contextWindow: 1_050_000,
+				maxTokens: 16_384,
 				compat: {
 					supportsDeveloperRole: false,
 					supportsReasoningEffort: false,
@@ -345,8 +345,8 @@ describe("runAgent", () => {
 					reasoning: true,
 					input: ["text", "image"],
 					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-					contextWindow: 1050000,
-					maxTokens: 16384,
+					contextWindow: 1_050_000,
+					maxTokens: 16_384,
 					compat: {
 						supportsDeveloperRole: false,
 						supportsReasoningEffort: false,
@@ -371,8 +371,8 @@ describe("runAgent", () => {
 				authHeader: false,
 				reasoning: true,
 				input: ["text"],
-				contextWindow: 1050000,
-				maxTokens: 16384,
+				contextWindow: 1_050_000,
+				maxTokens: 16_384,
 			},
 		});
 

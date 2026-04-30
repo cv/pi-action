@@ -5,6 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { shareSession } from "./share.js";
 import type { Session } from "./types.js";
 
+const SESSION_HTML_PATH_PATTERN = /session\.html$/u;
+const SESSION_JSONL_PATH_PATTERN = /session\.jsonl$/u;
+
 function createMockSession(): Session {
 	return {
 		exportToHtml: vi.fn((path?: string) => {
@@ -56,10 +59,10 @@ describe("shareSession", () => {
 			artifactUrl: "https://github.com/cv/pi-action/actions/runs/1",
 		});
 		expect(session.exportToHtml).toHaveBeenCalledWith(
-			expect.stringMatching(/session\.html$/),
+			expect.stringMatching(SESSION_HTML_PATH_PATTERN),
 		);
 		expect(session.exportToJsonl).toHaveBeenCalledWith(
-			expect.stringMatching(/session\.jsonl$/),
+			expect.stringMatching(SESSION_JSONL_PATH_PATTERN),
 		);
 		expect(readFileSync(join(artifactDir, "session.html"), "utf-8")).toBe(
 			"<html>Mock session HTML</html>",

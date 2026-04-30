@@ -4,6 +4,9 @@ import { DEFAULTS } from "./defaults.js";
 
 const ACTION_YML = readFileSync("action.yml", "utf-8");
 const README = readFileSync("README.md", "utf-8");
+const NEXT_ACTION_INPUT_PATTERN = /\n {2}\w/u;
+const ACTION_DEFAULT_PATTERN = /\n {4}default: ['"]?([^'"\n]+)['"]?/u;
+const REGEXP_SPECIAL_CHARS_PATTERN = /[.*+?^${}()|[\]\\]/gu;
 
 const DEFAULT_CASES = [
 	["trigger_phrase", DEFAULTS.triggerPhrase],
@@ -27,12 +30,14 @@ function getActionInputDefault(inputName: string): string {
 		throw new Error(`Input ${inputName} not found in action.yml`);
 	}
 
-	const nextInputStart = ACTION_YML.slice(inputStart + 1).search(/\n {2}\w/);
+	const nextInputStart = ACTION_YML.slice(inputStart + 1).search(
+		NEXT_ACTION_INPUT_PATTERN,
+	);
 	const inputBlock =
 		nextInputStart === -1
 			? ACTION_YML.slice(inputStart)
 			: ACTION_YML.slice(inputStart, inputStart + 1 + nextInputStart);
-	const defaultMatch = inputBlock.match(/\n {4}default: ['"]?([^'"\n]+)['"]?/);
+	const defaultMatch = inputBlock.match(ACTION_DEFAULT_PATTERN);
 	const defaultValue = defaultMatch?.[1];
 	if (defaultValue === undefined) {
 		throw new Error(`Input ${inputName} has no default in action.yml`);
@@ -41,9 +46,15 @@ function getActionInputDefault(inputName: string): string {
 }
 
 function getReadmeInputDefault(inputName: string): string {
-	const escapedInputName = inputName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const escapedInputName = inputName.replace(
+		REGEXP_SPECIAL_CHARS_PATTERN,
+		"\\$&",
+	);
 	const defaultMatch = README.match(
-		new RegExp(`\\| \`${escapedInputName}\` \\|[^\\n]*\\| \`([^\`]+)\` \\|`),
+		new RegExp(
+			`\\| \`${escapedInputName}\` \\|[^\\n]*\\| \`([^\`]+)\` \\|`,
+			"u",
+		),
 	);
 	const defaultValue = defaultMatch?.[1];
 	if (defaultValue === undefined) {

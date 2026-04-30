@@ -1,34 +1,41 @@
-import * as core from "@actions/core";
-import * as github from "@actions/github";
+import {
+	getInput,
+	info,
+	error as logError,
+	setFailed,
+	setOutput,
+	warning,
+} from "@actions/core";
+import { context, getOctokit } from "@actions/github";
 import { readActionInputs } from "./action-inputs.js";
 import { createGitHubClient } from "./github.js";
 import { run } from "./run.js";
 import { getErrorMessage } from "./utils.js";
 
 run({
-	inputs: readActionInputs(core.getInput),
+	inputs: readActionInputs(getInput),
 	context: {
-		payload: github.context.payload,
+		payload: context.payload,
 		repo: {
-			owner: github.context.repo.owner,
-			name: github.context.repo.repo,
+			owner: context.repo.owner,
+			name: context.repo.repo,
 		},
 	},
 	createClient: (token: string) =>
-		createGitHubClient(github.getOctokit(token), {
+		createGitHubClient(getOctokit(token), {
 			repo: {
-				owner: github.context.repo.owner,
-				name: github.context.repo.repo,
+				owner: context.repo.owner,
+				name: context.repo.repo,
 			},
 		}),
 	log: {
-		info: core.info,
-		warning: core.warning,
-		error: core.error,
-		setFailed: core.setFailed,
-		setOutput: core.setOutput,
+		info,
+		warning,
+		error: logError,
+		setFailed,
+		setOutput,
 	},
 	cwd: process.cwd(),
-}).catch((error) => {
-	core.setFailed(getErrorMessage(error));
+}).catch((caughtError) => {
+	setFailed(getErrorMessage(caughtError));
 });

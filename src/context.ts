@@ -58,16 +58,16 @@ export function renderTemplate(template: string, context: PIContext): string {
 		title: context.title,
 		body: isDirect ? "" : context.body,
 		task: context.task,
-		diff: context.type === "pull_request" ? context.diff || "" : "",
+		diff: context.type === "pull_request" ? (context.diff ?? "") : "",
 		reviewComments:
-			context.type === "pull_request" ? context.reviewComments || "" : "",
+			context.type === "pull_request" ? (context.reviewComments ?? "") : "",
 		trigger_comment: isDirect ? context.task : context.triggerComment,
 	};
 
 	// Replace all template variables
 	let rendered = template;
 	for (const [key, value] of Object.entries(variables)) {
-		const placeholder = new RegExp(`\\{\\{${key}\\}\\}`, "g");
+		const placeholder = new RegExp(`\\{\\{${key}\\}\\}`, "gu");
 		rendered = rendered.replace(placeholder, value);
 	}
 
@@ -110,7 +110,7 @@ ${context.title}
 ## Description
 ${context.body}
 
-${context.type === "pull_request" ? context.reviewComments || "" : ""}
+${context.type === "pull_request" ? (context.reviewComments ?? "") : ""}
 ## Task
 ${context.task}
 

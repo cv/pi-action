@@ -308,8 +308,8 @@ describe("run", () => {
 			authHeader: false,
 			reasoning: true,
 			input: ["text", "image"],
-			contextWindow: 1050000,
-			maxTokens: 16384,
+			contextWindow: 1_050_000,
+			maxTokens: 16_384,
 		};
 		const deps = createMockDeps({
 			inputs: {

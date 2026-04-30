@@ -43,7 +43,7 @@ export function formatReviewComments(
 
 	for (const comment of comments) {
 		const author = comment.user.login;
-		const date = new Date(comment.created_at).toISOString().split("T")[0];
+		const [date = ""] = new Date(comment.created_at).toISOString().split("T");
 		const location =
 			comment.path && comment.line ? ` (${comment.path}:${comment.line})` : "";
 

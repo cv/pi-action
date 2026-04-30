@@ -54,6 +54,8 @@ export function createSessionEventHandler(
 					onTextDelta(event.assistantMessageEvent.delta ?? "");
 				}
 				break;
+			default:
+				break;
 		}
 	};
 }
