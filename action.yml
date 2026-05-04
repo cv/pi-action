@@ -79,6 +79,10 @@ inputs:
     description: 'Upload session.html and session.jsonl as a GitHub Actions artifact and link it in the response comment'
     required: false
     default: 'true'
+  session_artifact_name:
+    description: 'GitHub Actions artifact name for shared session files; defaults to pi-session-<run_id>-<run_attempt>'
+    required: false
+    default: ''
   output_mode:
     description: 'How to deliver results: comment (post to issue/PR) or output (set action outputs only)'
     required: false
@@ -149,6 +153,6 @@ runs:
       if: ${{ inputs.share_session == 'true' }}
       uses: actions/upload-artifact@v7
       with:
-        name: pi-session-${{ github.run_id }}-${{ github.run_attempt }}
+        name: ${{ inputs.session_artifact_name || format('pi-session-{0}-{1}', github.run_id, github.run_attempt) }}
         path: ${{ runner.temp }}/pi-action-session
         if-no-files-found: ignore

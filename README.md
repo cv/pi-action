@@ -104,6 +104,7 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 | `compat_supports_reasoning_effort` | Whether OpenAI-compatible custom provider supports `reasoning_effort` | No | - |
 | `prompt_template` | Custom prompt template with placeholder variables | No | (built-in default) |
 | `share_session` | Upload `session.html` and `session.jsonl` as a GitHub Actions artifact and link it in the response comment | No | `true` |
+| `session_artifact_name` | Artifact name for shared session files; useful when invoking pi-action multiple times in one workflow run | No | `pi-session-<run_id>-<run_attempt>` |
 | `output_mode` | `comment` to post on the issue/PR, or `output` to set action outputs only | No | `comment` |
 | `prompt` | Direct prompt for the agent (use with `output_mode: output`, or with `pr_number`) | No | - |
 | `pr_number` | Pull request number to load explicitly (useful for `workflow_dispatch`) | No | - |
