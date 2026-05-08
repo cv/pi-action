@@ -1,4 +1,4 @@
-import { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
+import { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import { type AgentLogger, createSessionEventHandler } from "./agent-events.js";
 import { createConfiguredAgentSession } from "./agent-session.js";
 import type { PIContext } from "./context.js";
