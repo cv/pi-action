@@ -8,7 +8,7 @@ import {
 import type { AgentResult } from "./types.js";
 
 // Mock the pi-coding-agent SDK
-vi.mock("@mariozechner/pi-coding-agent", () => {
+vi.mock("@earendil-works/pi-coding-agent", () => {
 	const mockSession = {
 		subscribe: vi.fn(),
 		prompt: vi.fn(),
@@ -52,7 +52,7 @@ import {
 	createAgentSession,
 	DefaultResourceLoader,
 	ModelRegistry,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 
 const mockAuthStorageInMemory = AuthStorage.inMemory as Mock;
 const mockCreateAgentSession = createAgentSession as Mock;

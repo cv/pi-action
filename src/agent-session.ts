@@ -6,7 +6,7 @@ import {
 	type ModelRegistry,
 	SessionManager,
 	SettingsManager,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import type { AgentConfig } from "./agent.js";
 
 type CreateAgentSessionResult = Awaited<ReturnType<typeof createAgentSession>>;
