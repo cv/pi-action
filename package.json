@@ -9,11 +9,10 @@
 		"test:watch": "vitest",
 		"coverage": "vitest run --coverage",
 		"check": "npm run typecheck && npm run lint && npm run coverage && npm run analyze",
-		"lint": "biome check --error-on-warnings . && npm run lint:actions && npm run lint:shell",
+		"lint": "biome check --error-on-warnings . && npm run lint:actions",
 		"analyze": "knip --treat-config-hints-as-errors && jscpd --config .jscpd.json src",
 		"fix": "biome check --write .",
 		"lint:actions": "node scripts/lint-actions.mjs",
-		"lint:shell": "shellcheck scripts/*.sh",
 		"typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
 		"prepare": "prek install --allow-missing-config --hook-type pre-commit --hook-type commit-msg --hook-type prepare-commit-msg --hook-type pre-push"
 	},
@@ -55,7 +54,6 @@
 		"actionlint": "^2.0.6",
 		"jscpd": "^5.0.16",
 		"knip": "^6.32.2",
-		"shellcheck": "^4.1.0",
 		"typescript": "^7.0.2",
 		"vitest": "^4.1.10"
 	}

@@ -333,7 +333,7 @@ jobs:
 1. When a comment or issue/PR containing the trigger phrase is posted, the action is triggered
 2. The action validates the author against configured user, association, and bot allowlists (see [`src/security.ts`](src/security.ts))
 3. An 👀 reaction is added to acknowledge the request
-4. **Git hooks are installed** in the target repository to enforce commit conventions (see [`scripts/install-agent-hooks.sh`](scripts/install-agent-hooks.sh))
+4. **Git hooks are installed** in the target repository to enforce commit conventions (see [`scripts/install-agent-hooks.js`](scripts/install-agent-hooks.js))
 5. The pi SDK is invoked with the issue/PR context and the task from the trigger (see [`src/agent.ts`](src/agent.ts))
 6. **Session is shared** as a GitHub Actions artifact with both HTML and JSONL exports (if `share_session` is enabled)
 7. The response is posted as a new comment with a 🚀 reaction, including the session artifact link
@@ -342,7 +342,7 @@ The main orchestration logic is in [`src/run.ts`](src/run.ts), with prompt build
 
 ### Git Hooks for the Agent
 
-The action automatically installs **lightweight, standalone git hooks** ([defined in `scripts/install-agent-hooks.sh`](scripts/install-agent-hooks.sh)) in your repository before running the agent. These hooks have no dependencies and work with any language/stack:
+The action automatically installs **lightweight, self-contained Node.js git hooks** ([defined in `scripts/install-agent-hooks.js`](scripts/install-agent-hooks.js)) in your repository before running the agent. These hooks have no package dependencies and work with any project stack as long as Node.js is available:
 
 - **commit-msg**: Enforces [Conventional Commits](https://www.conventionalcommits.org/) format
 - **prepare-commit-msg**: Auto-appends issue numbers from branch names

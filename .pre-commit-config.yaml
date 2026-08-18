@@ -31,7 +31,7 @@ repos:
 
       - id: prepare-commit-msg
         name: append issue reference from branch name
-        entry: scripts/prepare-commit-msg.sh
+        entry: node scripts/prepare-commit-msg.js
         language: system
         stages: [prepare-commit-msg]
 

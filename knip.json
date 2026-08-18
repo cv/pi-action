@@ -1,6 +1,11 @@
 {
 	"$schema": "https://unpkg.com/knip@6/schema.json",
-	"entry": ["src/index.ts", "src/**/*.test.ts", "scripts/*.mjs"],
+	"entry": [
+		"src/index.ts",
+		"src/**/*.test.ts",
+		"scripts/*.mjs",
+		"scripts/**/*.test.js"
+	],
 	"project": ["src/**/*.ts", "*.config.{js,ts}"],
 	"ignoreDependencies": ["@commitlint/cli", "tsx"]
 }

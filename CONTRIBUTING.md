@@ -52,7 +52,7 @@ This project uses [prek](https://github.com/j178/prek) to enforce quality checks
 |------|--------------|
 | **pre-commit** | Runs fast tests and linting |
 | **commit-msg** | Enforces [Conventional Commits](https://www.conventionalcommits.org/) format via commitlint |
-| **prepare-commit-msg** | Auto-appends issue number from branch name via [`scripts/prepare-commit-msg.sh`](scripts/prepare-commit-msg.sh) (e.g., `feat/123-description` → `Refs #123`) |
+| **prepare-commit-msg** | Auto-appends issue number from branch name via [`scripts/prepare-commit-msg.js`](scripts/prepare-commit-msg.js) (e.g., `feat/123-description` → `Refs #123`) |
 | **pre-push** | Runs the test suite with coverage thresholds from [`vitest.config.ts`](vitest.config.ts) |
 
 ### Commit Message Format
@@ -150,7 +150,7 @@ The [`action.yml`](action.yml) file defines:
 - Input parameters
 - A composite action that:
   1. Installs npm dependencies
-  2. Installs standalone git hooks for conventional commits (see [`scripts/install-agent-hooks.sh`](scripts/install-agent-hooks.sh))
+  2. Installs standalone git hooks for conventional commits (see [`scripts/install-agent-hooks.js`](scripts/install-agent-hooks.js))
   3. Runs the TypeScript entrypoint via `tsx`
 
 ### Testing
