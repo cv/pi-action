@@ -27,5 +27,5 @@ jobs:
       - name: Lint and format check
         run: npm run check
 
-      - name: Run tests
-        run: npm test
+      - name: Run tests with coverage
+        run: npm run coverage
