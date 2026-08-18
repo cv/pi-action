@@ -1,4 +1,5 @@
-import { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
+import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
+import { ModelRegistry, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { type AgentLogger, createSessionEventHandler } from "./agent-events.js";
 import { createConfiguredAgentSession } from "./agent-session.js";
 import type { PIContext } from "./context.js";
@@ -24,17 +25,23 @@ export interface AgentConfig extends ModelConfig {
 export async function runAgent(
 	piContext: PIContext,
 	config: AgentConfig,
-	authStorage?: AuthStorage,
+	modelRuntime?: ModelRuntime,
 	modelRegistry?: ModelRegistry,
 ): Promise<AgentResult> {
 	const prompt = buildPrompt(piContext, config.promptTemplate);
 
 	// Use in-memory auth/model state so CI configuration comes only from env vars and inputs.
-	const auth = authStorage ?? AuthStorage.inMemory();
+	const runtime =
+		modelRuntime ??
+		(await ModelRuntime.create({
+			credentials: new InMemoryCredentialStore(),
+			modelsPath: null,
+			refreshOnCreate: false,
+		}));
 	if (config.apiKey) {
-		auth.setRuntimeApiKey(config.provider, config.apiKey);
+		await runtime.setRuntimeApiKey(config.provider, config.apiKey);
 	}
-	const models = modelRegistry ?? ModelRegistry.inMemory(auth);
+	const models = modelRegistry ?? new ModelRegistry(runtime);
 	const customProviderError = registerCustomProvider(
 		models,
 		config.provider,
@@ -62,8 +69,7 @@ export async function runAgent(
 	try {
 		const createdSession = await createConfiguredAgentSession(
 			config,
-			auth,
-			models,
+			runtime,
 			model,
 		);
 

@@ -1,12 +1,12 @@
 import {
-	type AuthStorage,
 	createAgentSession,
 	DefaultResourceLoader,
 	getAgentDir,
 	type ModelRegistry,
+	type ModelRuntime,
 	SessionManager,
 	SettingsManager,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import type { AgentConfig } from "./agent.js";
 
 type CreateAgentSessionResult = Awaited<ReturnType<typeof createAgentSession>>;
@@ -18,8 +18,7 @@ type ConfiguredAgentSession = Pick<
 
 export async function createConfiguredAgentSession(
 	config: AgentConfig,
-	auth: AuthStorage,
-	models: ModelRegistry,
+	modelRuntime: ModelRuntime,
 	model: NonNullable<ReturnType<ModelRegistry["find"]>>,
 ): Promise<ConfiguredAgentSession> {
 	const settingsManager = SettingsManager.inMemory({
@@ -43,8 +42,7 @@ export async function createConfiguredAgentSession(
 		cwd: config.cwd,
 		model,
 		thinkingLevel: "off",
-		authStorage: auth,
-		modelRegistry: models,
+		modelRuntime,
 		tools: config.toolNames ?? ["read", "bash", "edit", "write"],
 		sessionManager: SessionManager.create(config.cwd),
 		settingsManager,

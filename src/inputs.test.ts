@@ -36,27 +36,19 @@ describe("parseCsvInput", () => {
 });
 
 describe("parseBooleanInput", () => {
-	it.each([
-		"true",
-		"TRUE",
-		"1",
-		"yes",
-		"y",
-		"on",
-	])("parses %s as true", (value) => {
-		expect(parseBooleanInput(value, false)).toBe(true);
-	});
+	it.each(["true", "TRUE", "1", "yes", "y", "on"])(
+		"parses %s as true",
+		(value) => {
+			expect(parseBooleanInput(value, false)).toBe(true);
+		},
+	);
 
-	it.each([
-		"false",
-		"FALSE",
-		"0",
-		"no",
-		"n",
-		"off",
-	])("parses %s as false", (value) => {
-		expect(parseBooleanInput(value, true)).toBe(false);
-	});
+	it.each(["false", "FALSE", "0", "no", "n", "off"])(
+		"parses %s as false",
+		(value) => {
+			expect(parseBooleanInput(value, true)).toBe(false);
+		},
+	);
 
 	it("returns the default for empty input", () => {
 		expect(parseBooleanInput("", true)).toBe(true);
@@ -87,16 +79,12 @@ describe("parsePositiveIntegerInput", () => {
 		expect(parsePositiveIntegerInput("001", 300)).toBe(1);
 	});
 
-	it.each([
-		"",
-		"0",
-		"-1",
-		"1.5",
-		"10s",
-		"abc",
-	])("returns the default for invalid value %s", (value) => {
-		expect(parsePositiveIntegerInput(value, 300)).toBe(300);
-	});
+	it.each(["", "0", "-1", "1.5", "10s", "abc"])(
+		"returns the default for invalid value %s",
+		(value) => {
+			expect(parsePositiveIntegerInput(value, 300)).toBe(300);
+		},
+	);
 });
 
 describe("parseModelInputModes", () => {

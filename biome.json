@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.5.9/schema.json",
 	"assist": {
 		"actions": {
 			"source": {
@@ -31,48 +31,24 @@
 			"types": "all"
 		},
 		"rules": {
-			"recommended": true,
+			"preset": "recommended",
 			"a11y": {
-				"recommended": true
+				"preset": "recommended"
 			},
 			"nursery": {
-				"recommended": true,
+				"preset": "recommended",
 				"noFloatingPromises": "error",
 				"noMisusedPromises": "error",
-				"noUnnecessaryConditions": "error",
 				"noUnsafePlusOperands": "error",
 				"useAwaitThenable": "error",
 				"useExhaustiveSwitchCases": "error",
 				"noConditionalExpect": "error",
-				"noContinue": "error",
-				"noDuplicateArgumentNames": "error",
-				"noDuplicateEnumValueNames": "error",
-				"noDuplicateEnumValues": "error",
-				"noDuplicateVariableNames": "error",
-				"noEqualsToNull": "error",
-				"noForIn": "error",
 				"noIdenticalTestTitle": "error",
 				"noImpliedEval": "error",
-				"noIncrementDecrement": "error",
 				"noLoopFunc": "error",
-				"noMultiAssign": "error",
-				"noMultiStr": "error",
-				"noNestedPromises": "error",
-				"noParametersOnlyUsedInRecursion": "error",
-				"noProto": "error",
-				"noRedundantDefaultExport": "error",
-				"noReturnAssign": "error",
-				"noScriptUrl": "error",
-				"noShadow": "error",
-				"noSyncScripts": "error",
 				"noUnnecessaryTemplateExpression": "error",
 				"useArraySome": "error",
-				"useArraySortCompare": "error",
 				"useConsistentTestIt": "error",
-				"useDestructuring": "error",
-				"useErrorCause": "error",
-				"useFind": "error",
-				"useGlobalThis": "error",
 				"useNullishCoalescing": "error",
 				"useRegexpExec": "error",
 				"useRegexpTest": "error",
@@ -120,7 +96,10 @@
 					}
 				},
 				"useParseIntRadix": "error",
-				"useSingleJsDocAsterisk": "error"
+				"useSingleJsDocAsterisk": "error",
+				"noDuplicateArgumentNames": "error",
+				"noDuplicateEnumValueNames": "error",
+				"noDuplicateVariableNames": "error"
 			},
 			"suspicious": {
 				"noExplicitAny": "error",
@@ -211,7 +190,17 @@
 				"useGuardForIn": "error",
 				"useIterableCallbackReturn": "error",
 				"useStaticResponseMethods": "error",
-				"useStrictMode": "error"
+				"useStrictMode": "error",
+				"noUnnecessaryConditions": "error",
+				"noDuplicateEnumValues": "error",
+				"noEqualsToNull": "error",
+				"noForIn": "error",
+				"noNestedPromises": "error",
+				"noParametersOnlyUsedInRecursion": "error",
+				"noProto": "error",
+				"noReturnAssign": "error",
+				"noShadow": "error",
+				"useArraySortCompare": "error"
 			},
 			"style": {
 				"noNonNullAssertion": "error",
@@ -268,7 +257,14 @@
 				"useSymbolDescription": "error",
 				"useThrowOnlyError": "error",
 				"useTrimStartEnd": "error",
-				"useUnifiedTypeSignatures": "error"
+				"useUnifiedTypeSignatures": "error",
+				"noContinue": "error",
+				"noIncrementDecrement": "error",
+				"noMultiAssign": "error",
+				"noMultilineString": "error",
+				"useDestructuring": "error",
+				"useErrorCause": "error",
+				"useGlobalThis": "error"
 			},
 			"complexity": {
 				"noForEach": "error",
@@ -312,7 +308,9 @@
 				"noUselessUndefinedInitialization": "error",
 				"useDateNow": "error",
 				"useNumericLiterals": "error",
-				"useWhile": "error"
+				"useWhile": "error",
+				"noRedundantDefaultExport": "error",
+				"useArrayFind": "error"
 			},
 			"performance": {
 				"noAccumulatingSpread": "error",
@@ -323,10 +321,11 @@
 				"noDynamicNamespaceImportAccess": "error",
 				"noNamespaceImport": "error",
 				"noUnwantedPolyfillio": "error",
-				"useTopLevelRegex": "error"
+				"useTopLevelRegex": "error",
+				"noSyncScripts": "error"
 			},
 			"security": {
-				"recommended": true,
+				"preset": "recommended",
 				"noBlankTarget": "error",
 				"noDangerouslySetInnerHtml": "error",
 				"noDangerouslySetInnerHtmlWithChildren": "error",
@@ -336,7 +335,8 @@
 					"options": {
 						"entropyThreshold": 50
 					}
-				}
+				},
+				"noScriptUrl": "error"
 			}
 		}
 	},

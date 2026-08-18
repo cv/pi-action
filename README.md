@@ -1,6 +1,6 @@
 # pi-action
 
-A GitHub Action that invokes the [pi coding agent](https://github.com/mariozechner/pi-coding-agent) on issues and pull requests via comment triggers.
+A GitHub Action that invokes the [pi coding agent](https://github.com/earendil-works/pi-mono) on issues and pull requests via comment triggers.
 
 ## Features
 

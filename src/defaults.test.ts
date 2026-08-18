@@ -64,10 +64,11 @@ function getReadmeInputDefault(inputName: string): string {
 }
 
 describe("input defaults", () => {
-	it.each(
-		DEFAULT_CASES,
-	)("keeps %s default in sync across source, action.yml, and README", (inputName, expectedDefault) => {
-		expect(getActionInputDefault(inputName)).toBe(expectedDefault);
-		expect(getReadmeInputDefault(inputName)).toBe(expectedDefault);
-	});
+	it.each(DEFAULT_CASES)(
+		"keeps %s default in sync across source, action.yml, and README",
+		(inputName, expectedDefault) => {
+			expect(getActionInputDefault(inputName)).toBe(expectedDefault);
+			expect(getReadmeInputDefault(inputName)).toBe(expectedDefault);
+		},
+	);
 });

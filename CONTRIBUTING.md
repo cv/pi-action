@@ -82,7 +82,7 @@ Use branch names like `feat/123-description` or `fix/456-bug-name` to automatica
 
 ## Architecture
 
-The action is built with TypeScript and uses the [pi-coding-agent SDK](https://github.com/mariozechner/pi-coding-agent) directly.
+The action is built with TypeScript and uses the [pi-coding-agent SDK](https://github.com/earendil-works/pi-mono) directly.
 
 ### Source Files
 
