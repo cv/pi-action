@@ -1,7 +1,7 @@
 {
-	"minTokens": 60,
-	"minLines": 6,
-	"mode": "mild",
+	"minTokens": 40,
+	"minLines": 4,
+	"mode": "strict",
 	"format": ["typescript"],
 	"pattern": "**/*.ts",
 	"ignore": ["**/*.test.ts", "**/test-helpers.ts"],

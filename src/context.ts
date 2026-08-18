@@ -16,14 +16,14 @@ interface BasePIContext {
 	task: string;
 }
 
-export interface IssuePIContext extends BasePIContext {
+interface IssuePIContext extends BasePIContext {
 	type: "issue";
 	body: string;
 	number: number;
 	triggerComment: string;
 }
 
-export interface PullRequestPIContext extends BasePIContext {
+interface PullRequestPIContext extends BasePIContext {
 	type: "pull_request";
 	body: string;
 	number: number;
@@ -32,7 +32,7 @@ export interface PullRequestPIContext extends BasePIContext {
 	reviewComments?: string;
 }
 
-export interface DirectPIContext extends BasePIContext {
+interface DirectPIContext extends BasePIContext {
 	type: "direct";
 }
 

@@ -27,7 +27,7 @@ export interface ActionInputs {
 	prNumber: number | undefined;
 }
 
-export interface ActionContext {
+interface ActionContext {
 	payload: Record<string, unknown>;
 	repo: RepoRef;
 }

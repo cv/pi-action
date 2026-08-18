@@ -220,7 +220,7 @@
 				"noInferrableTypes": "error",
 				"noNamespace": "error",
 				"noNegationElse": "error",
-				"noParameterProperties": "off",
+				"noParameterProperties": "error",
 				"noRestrictedGlobals": "error",
 				"noUselessElse": "error",
 				"useBlockStatements": "error",

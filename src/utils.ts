@@ -18,12 +18,12 @@ export function getErrorMessage(error: unknown): string {
  * Wraps a promise with a timeout. Rejects with TimeoutError if the timeout is exceeded.
  */
 export class TimeoutError extends Error {
-	constructor(
-		message: string,
-		public readonly timeoutMs: number,
-	) {
+	readonly timeoutMs: number;
+
+	constructor(message: string, timeoutMs: number) {
 		super(message);
 		this.name = "TimeoutError";
+		this.timeoutMs = timeoutMs;
 	}
 }
 

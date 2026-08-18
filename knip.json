@@ -2,6 +2,5 @@
 	"$schema": "https://unpkg.com/knip@6/schema.json",
 	"entry": ["src/index.ts", "src/**/*.test.ts", "scripts/*.mjs"],
 	"project": ["src/**/*.ts", "*.config.{js,ts}"],
-	"ignoreDependencies": ["@commitlint/cli", "tsx"],
-	"exclude": ["types"]
+	"ignoreDependencies": ["@commitlint/cli", "tsx"]
 }

@@ -9,7 +9,7 @@ export type GitHubReaction =
 	| "rocket"
 	| "eyes";
 
-export interface GitHubUser {
+interface GitHubUser {
 	login: string;
 	type: "User" | "Bot" | "Organization";
 }
