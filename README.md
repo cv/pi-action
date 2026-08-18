@@ -5,7 +5,7 @@ A GitHub Action that invokes the [pi coding agent](https://github.com/mariozechn
 ## Features
 
 - 🤖 Trigger pi agent with customizable phrases (default: `@pi`)
-- 🔒 Security-first: Only allows repo owners, members, and collaborators
+- 🔒 Security-first: Allows repository owners and organization members by default, with configurable user, association, and bot allowlists
 - 🤝 Bot allowlist for automation workflows
 - 📝 Works on both issues and pull requests
 - 🆕 Trigger on issue/PR creation, not just comments
@@ -331,7 +331,7 @@ jobs:
 ## How It Works
 
 1. When a comment or issue/PR containing the trigger phrase is posted, the action is triggered
-2. The action validates that the author has write access to the repository (see [`src/security.ts`](src/security.ts))
+2. The action validates the author against configured user, association, and bot allowlists (see [`src/security.ts`](src/security.ts))
 3. An 👀 reaction is added to acknowledge the request
 4. **Git hooks are installed** in the target repository to enforce commit conventions (see [`scripts/install-agent-hooks.sh`](scripts/install-agent-hooks.sh))
 5. The pi SDK is invoked with the issue/PR context and the task from the trigger (see [`src/agent.ts`](src/agent.ts))

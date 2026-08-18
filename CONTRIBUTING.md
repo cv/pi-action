@@ -135,7 +135,7 @@ Handles prompt construction:
 
 #### [`security.ts`](src/security.ts)
 Permission and input validation:
-- `validatePermissions()`: Checks if user has write access or is an allowed bot
+- `validatePermissions()`: Checks the author against configured user, association, and bot allowlists
 - `sanitizeInput()`: Removes HTML comments and invisible Unicode characters
 
 ### Action Configuration
