@@ -31,8 +31,14 @@ npm run build
 # Type check
 npm run typecheck
 
-# Lint and format check
+# Run the complete quality gate
 npm run check
+
+# Run formatting and lint checks only
+npm run lint
+
+# Run dead-code and duplication analysis only
+npm run analyze
 
 # Apply safe lint/format fixes
 npm run fix
@@ -44,10 +50,10 @@ This project uses [prek](https://github.com/j178/prek) to enforce quality checks
 
 | Hook | What it does |
 |------|--------------|
-| **pre-commit** | Runs tests, type checking, and linting |
+| **pre-commit** | Runs fast tests and linting |
 | **commit-msg** | Enforces [Conventional Commits](https://www.conventionalcommits.org/) format via commitlint |
 | **prepare-commit-msg** | Auto-appends issue number from branch name via [`scripts/prepare-commit-msg.sh`](scripts/prepare-commit-msg.sh) (e.g., `feat/123-description` → `Refs #123`) |
-| **pre-push** | Runs full test suite with coverage thresholds from [`vitest.config.ts`](vitest.config.ts) |
+| **pre-push** | Runs the test suite with coverage thresholds from [`vitest.config.ts`](vitest.config.ts) |
 
 ### Commit Message Format
 

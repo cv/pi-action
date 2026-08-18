@@ -15,17 +15,9 @@ repos:
         always_run: true
         stages: [pre-commit]
 
-      - id: typecheck
-        name: npm run typecheck
-        entry: npm run typecheck
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-commit]
-
-      - id: check
-        name: npm run check
-        entry: npm run check
+      - id: lint
+        name: npm run lint
+        entry: npm run lint
         language: system
         pass_filenames: false
         always_run: true

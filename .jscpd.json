@@ -1,0 +1,12 @@
+{
+	"minTokens": 60,
+	"minLines": 6,
+	"mode": "mild",
+	"format": ["typescript"],
+	"pattern": "**/*.ts",
+	"ignore": ["**/*.test.ts", "**/test-helpers.ts"],
+	"reporters": ["console"],
+	"exitCode": 1,
+	"noColors": true,
+	"noTips": true
+}
