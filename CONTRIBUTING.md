@@ -6,7 +6,7 @@ This document covers development setup, architecture details, and contribution g
 
 ### Prerequisites
 
-- Node.js 25+
+- Node.js 24+ (LTS)
 - npm
 
 ### Getting Started
