@@ -6,7 +6,7 @@ Each issue or pull request is one conversation (a **thread**). The thread contin
 
 ## Features
 
-- **One conversation per issue or pull request.** A later `@pi` comment continues the thread. pi keeps everything it saw and did before. See [Durable threads](docs/threads.md).
+- **One conversation per issue or pull request.** A later `@pi` comment continues the thread. pi keeps everything it saw and did before. The workflow log shows the git commands that [read the thread](docs/threads.md#read-a-thread). See [Durable threads](docs/threads.md).
 - **Made for teams.** Comments that people post while pi works join the running conversation. The next run answers comments that a cancelled or queued run did not answer.
 - **Safe by default.** Only repository owners and organization members can start pi. You can change this with allowlists for users, author associations, and bots. See [Security](docs/security.md).
 - **Any model.** Use a built-in pi provider, a custom OpenAI- or Anthropic-compatible endpoint, or a provider from a pi extension. See [Models and authentication](docs/models.md).

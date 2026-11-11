@@ -22,7 +22,7 @@ The action is a composite action ([`action.yml`](../action.yml)). Its steps are:
 6. **Collect the requests** ([`src/triggers.ts`](../src/triggers.ts)). In `comment` mode, pi-action collects all `@pi` comments on the thread that have no answer, not only the comment of the event. The first request of a new thread gets the full context of the issue or pull request. Later requests are follow-ups. See [Prompts](prompts.md).
 7. **Work** ([`src/conversation.ts`](../src/conversation.ts)). While pi works, pi-action adds new `@pi` comments to the conversation, and pushes the thread after each model response and tool result. At `timeout`, pi-action stops pi and reports the timeout.
 8. **Report.** For each request, pi-action posts a `🤖 pi Response` comment (or `❌ pi Error`), and adds 🚀 (or 😕) to the request. If pi gives an empty answer, pi-action asks one time for a summary. In `output` mode, pi-action sets the `response` and `success` outputs and posts nothing.
-9. **Save.** pi-action pushes the thread.
+9. **Save.** pi-action pushes the thread. Then it writes the git commands that read the thread to the log and the job summary. See [Read a thread](threads.md#read-a-thread).
 
 When a tool from a pi-durable extension asks a question, the run ends after step 7 without a `pi Response` comment. See [Questions on GitHub](extensions.md#questions-on-github).
 

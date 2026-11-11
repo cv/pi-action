@@ -1,9 +1,11 @@
 import {
 	getInput,
+	endGroup,
 	info,
 	error as logError,
 	setFailed,
 	setOutput,
+	startGroup,
 	summary,
 	warning,
 } from "@actions/core";
@@ -22,7 +24,15 @@ run({
 			owner: context.repo.owner,
 			name: context.repo.repo,
 		}),
-	log: { info, warning, error: logError, setFailed, setOutput },
+	log: {
+		info,
+		warning,
+		error: logError,
+		setFailed,
+		setOutput,
+		startGroup,
+		endGroup,
+	},
 	cwd: process.cwd(),
 	summary: async (markdown) => {
 		await summary.addRaw(markdown).write();
