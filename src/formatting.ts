@@ -47,11 +47,11 @@ export function formatReviewComments(
 		const author = comment.user.login;
 		const [date = ""] = new Date(comment.created_at).toISOString().split("T");
 		const location =
-			comment.path && comment.line ? ` (${comment.path}:${comment.line})` : "";
+			comment.path && comment.line !== undefined
+				? ` (${comment.path}:${comment.line})`
+				: "";
 
-		sections.push(`**${author}** on ${date}${location}:`);
-		sections.push(comment.body);
-		sections.push("");
+		sections.push(`**${author}** on ${date}${location}:`, comment.body, "");
 	}
 
 	return sections.join("\n");

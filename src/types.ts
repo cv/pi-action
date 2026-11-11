@@ -102,6 +102,15 @@ interface ListParams {
 	page?: number;
 }
 
+/** The fields of Octokit's pull request object that pi-action reads. */
+interface OctokitPullRequest {
+	number: number;
+	title: string;
+	body: string | null;
+	user: { login: string; type: string };
+	author_association: string;
+}
+
 // Minimal Octokit interface to replace 'any' type
 export interface OctokitClient {
 	rest: {
@@ -122,7 +131,7 @@ export interface OctokitClient {
 			) => Promise<{ data: { id: number; html_url: string } }>;
 			listComments: (
 				params: Params<{ issue_number: number } & ListParams>,
-			) => Promise<{ data: unknown }>;
+			) => Promise<{ data: GitHubComment[] }>;
 		};
 		pulls: {
 			get: (
@@ -130,10 +139,10 @@ export interface OctokitClient {
 					pull_number: number;
 					mediaType?: { format: string };
 				}>,
-			) => Promise<{ data: unknown }>;
+			) => Promise<{ data: OctokitPullRequest }>;
 			listReviewComments: (
 				params: Params<{ pull_number: number } & ListParams>,
-			) => Promise<{ data: unknown }>;
+			) => Promise<{ data: GitHubComment[] }>;
 		};
 	};
 }

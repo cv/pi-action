@@ -17,8 +17,10 @@ import {
 } from "@earendil-works/pi-durable";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
+
 import { GitStorage } from "./storage/git-storage.ts";
 import { GitSync, isTurnBoundary, runGit } from "./storage/sync.ts";
+import { getErrorMessage } from "./utils.ts";
 
 const context: Context = BACKGROUND_CONTEXT;
 
@@ -82,7 +84,9 @@ async function openPersistence(
 		},
 		onCommit: ({ tip, batches }) => {
 			if (isTurnBoundary(batches)) {
-				sync.schedule(tip).catch((error: Error) => log.warning(error.message));
+				sync.schedule(tip).catch((error: unknown) => {
+					log.warning(getErrorMessage(error));
+				});
 			}
 		},
 	});
@@ -160,7 +164,7 @@ export class Thread {
 	}
 
 	/** Comments arriving while a run works join it (steer); otherwise they start one. */
-	submit(input: ThreadInput): Promise<Submission> {
+	async submit(input: ThreadInput): Promise<Submission> {
 		return this.root.submit(
 			{
 				type: "input",
@@ -175,7 +179,7 @@ export class Thread {
 
 	async answerText(answer: EntryId): Promise<string> {
 		const entry = await this.root.commit(
-			(tx) => tx.entry(AssistantEntry, answer),
+			async (tx) => tx.entry(AssistantEntry, answer),
 			context,
 		);
 		const message = entry?.model?.[0];
@@ -192,7 +196,7 @@ export class Thread {
 		const all: EntryRecord[] = [];
 		let cursor: Parameters<Conversation["entries"]>[2];
 		do {
-			// biome-ignore lint/performance/noAwaitInLoops: pages follow each other
+			// oxlint-disable-next-line eslint/no-await-in-loop -- pages follow each other
 			const page = await this.root.entries(
 				{ order: "ascending" },
 				500,
@@ -209,10 +213,17 @@ export class Thread {
 	async postedResults(): Promise<Map<string, string>> {
 		const posted = new Map<string, string>();
 		for (const entry of await this.entries()) {
-			const data = entry.data as Record<string, unknown> | undefined;
-			const key = data?.[KEY_FIELD];
-			if (entry.kind === POSTED_KIND && typeof key === "string") {
-				posted.set(key, String(data?.[URL_FIELD] ?? ""));
+			const { data } = entry;
+			if (
+				entry.kind === POSTED_KIND &&
+				typeof data === "object" &&
+				data !== null
+			) {
+				const key: unknown = Reflect.get(data, KEY_FIELD);
+				const url: unknown = Reflect.get(data, URL_FIELD);
+				if (typeof key === "string") {
+					posted.set(key, typeof url === "string" ? url : "");
+				}
 			}
 		}
 		return posted;
@@ -239,7 +250,6 @@ export class Thread {
 	}
 
 	async close(): Promise<void> {
-		// biome-ignore lint/suspicious/noUnnecessaryConditions: close() may be called twice
 		if (this.closed) {
 			return;
 		}
@@ -262,6 +272,6 @@ async function rootCommitTime(
 		);
 		return new Date(time.trim());
 	} catch {
-		return;
+		return undefined;
 	}
 }

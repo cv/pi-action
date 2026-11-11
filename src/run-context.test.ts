@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ActionDependencies, ActionInputs } from "./run.ts";
+
 import { getRunContext } from "./run-context.ts";
-import { createActionInputs, createMockGitHubClient } from "./test-helpers.ts";
+import type { ActionDependencies, ActionInputs } from "./run.ts";
+import {
+	createActionInputs,
+	createLogger,
+	createMockGitHubClient,
+} from "./test-helpers.ts";
 
 function deps(
 	inputs: Partial<ActionInputs>,
@@ -12,13 +17,7 @@ function deps(
 		inputs: createActionInputs(inputs),
 		context: { payload, repo: { owner: "o", name: "r" } },
 		createClient: () => gh,
-		log: {
-			info: vi.fn(),
-			warning: vi.fn(),
-			error: vi.fn(),
-			setFailed: vi.fn(),
-			setOutput: vi.fn(),
-		},
+		log: createLogger(),
 		cwd: "/tmp",
 	};
 }
@@ -105,7 +104,7 @@ describe("getRunContext", () => {
 		const context = await getRunContext(
 			deps({ prompt: "Hello", outputMode: "output" }),
 		);
-		expect(context?.piContext).toEqual({
+		expect(context?.piContext).toStrictEqual({
 			type: "direct",
 			title: "Direct prompt",
 			task: "Hello",
@@ -114,7 +113,7 @@ describe("getRunContext", () => {
 
 	it("rejects a direct prompt in comment mode", async () => {
 		const d = deps({ prompt: "Hello" });
-		expect(await getRunContext(d)).toBeNull();
+		await expect(getRunContext(d)).resolves.toBeNull();
 		expect(d.log.setFailed).toHaveBeenCalledWith(
 			"prompt requires output_mode: output when no PR number is set",
 		);
@@ -127,17 +126,18 @@ describe("getRunContext", () => {
 			{ githubToken: undefined, prompt: "x", outputMode: "output" as const },
 		]) {
 			const d = deps(inputs, issue("@pi go"));
-			// biome-ignore lint/performance/noAwaitInLoops: one case at a time
-			expect(await getRunContext(d)).toBeNull();
+			// oxlint-disable-next-line eslint/no-await-in-loop -- one case at a time
+			await expect(getRunContext(d)).resolves.toBeNull();
 			expect(d.log.setFailed).toHaveBeenCalledWith("github_token is required");
 		}
 	});
 
 	it("skips payloads without a trigger, without the phrase, or from users without permission", async () => {
-		expect(await getRunContext(deps({}, {}))).toBeNull();
-		expect(await getRunContext(deps({}, issue("no mention")))).toBeNull();
+		await expect(getRunContext(deps({}, {}))).resolves.toBeNull();
+		const noMention = deps({}, issue("no mention"));
+		await expect(getRunContext(noMention)).resolves.toBeNull();
 		const d = deps({}, issue("@pi go", { author_association: "NONE" }));
-		expect(await getRunContext(d)).toBeNull();
+		await expect(getRunContext(d)).resolves.toBeNull();
 		expect(d.log.warning).toHaveBeenCalledWith(
 			expect.stringContaining("does not have permission"),
 		);

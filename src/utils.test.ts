@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { getErrorMessage, TimeoutError, withTimeout } from "./utils.ts";
 
 describe("getErrorMessage", () => {
@@ -61,19 +62,25 @@ describe("withTimeout", () => {
 	});
 
 	it("rejects with TimeoutError when promise takes too long", async () => {
-		const promise = new Promise((resolve) => setTimeout(resolve, 1000));
+		const promise = new Promise((resolve) => {
+			setTimeout(resolve, 1000);
+		});
 		await expect(withTimeout(promise, 10)).rejects.toThrow(TimeoutError);
 	});
 
 	it("includes custom message in TimeoutError", async () => {
-		const promise = new Promise((resolve) => setTimeout(resolve, 1000));
+		const promise = new Promise((resolve) => {
+			setTimeout(resolve, 1000);
+		});
 		await expect(
 			withTimeout(promise, 10, "custom timeout message"),
 		).rejects.toThrow("custom timeout message");
 	});
 
 	it("uses default message if none provided", async () => {
-		const promise = new Promise((resolve) => setTimeout(resolve, 1000));
+		const promise = new Promise((resolve) => {
+			setTimeout(resolve, 1000);
+		});
 		await expect(withTimeout(promise, 10)).rejects.toThrow(
 			"Operation timed out after 10ms",
 		);
@@ -87,17 +94,13 @@ describe("withTimeout", () => {
 	it("clears timeout when promise resolves", async () => {
 		// This test verifies no timer leaks
 		const promise = Promise.resolve("done");
-		await withTimeout(promise, 100);
+		await expect(withTimeout(promise, 100)).resolves.toBe("done");
 		// If the timeout wasn't cleared, the test would hang or leak
 	});
 
 	it("clears timeout when promise rejects", async () => {
 		const promise = Promise.reject(new Error("error"));
-		try {
-			await withTimeout(promise, 100);
-		} catch {
-			// Expected
-		}
+		await expect(withTimeout(promise, 100)).rejects.toThrow("error");
 		// If the timeout wasn't cleared, the test would hang or leak
 	});
 });

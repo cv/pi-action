@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import {
 	createCustomProvider,
 	readCustomProviderConfig,
@@ -35,7 +36,7 @@ describe("readCustomProviderConfig", () => {
 			}),
 		);
 
-		expect(config).toEqual({
+		expect(config).toStrictEqual({
 			baseUrl: "https://inference-api.nvidia.com",
 			api: "openai-responses",
 			apiKey: "NVIDIA_API_KEY",
@@ -58,7 +59,7 @@ describe("readCustomProviderConfig", () => {
 			createInputReader({ provider_base_url: "http://localhost:11434/v1" }),
 		);
 
-		expect(config).toEqual({
+		expect(config).toStrictEqual({
 			baseUrl: "http://localhost:11434/v1",
 			api: DEFAULTS.customProviderApi,
 			authHeader: DEFAULTS.customProviderAuthHeader,
@@ -93,14 +94,14 @@ describe("createCustomProvider", () => {
 		compat: { supportsDeveloperRole: false },
 	};
 	const ctx = {
-		env: () => Promise.resolve(undefined),
-		fileExists: () => Promise.resolve(false),
+		env: async () => undefined,
+		fileExists: async () => false,
 	};
 	const { signal } = new AbortController();
 
 	it("describes one model with the configured API and limits", () => {
 		const provider = createCustomProvider("nvidia", "gpt", true, config);
-		expect(provider.getModels()).toEqual([
+		expect(provider.getModels()).toStrictEqual([
 			expect.objectContaining({
 				id: "gpt",
 				name: "gpt",
@@ -123,20 +124,20 @@ describe("createCustomProvider", () => {
 			{ NV_KEY: "from-env" },
 		);
 		const resolve = provider.auth.apiKey?.resolve;
-		expect(await resolve?.({ ctx, signal })).toEqual({
+		await expect(resolve?.({ ctx, signal })).resolves.toStrictEqual({
 			auth: {
 				apiKey: "from-env",
 				headers: { Authorization: "Bearer from-env" },
 			},
 			source: "action inputs",
 		});
-		expect(
-			await resolve?.({
+		await expect(
+			resolve?.({
 				ctx,
 				signal,
 				credential: { type: "api_key", key: "stored" },
 			}),
-		).toMatchObject({ auth: { apiKey: "stored" } });
+		).resolves.toMatchObject({ auth: { apiKey: "stored" } });
 		const unset = createCustomProvider(
 			"nvidia",
 			"gpt",
@@ -144,7 +145,9 @@ describe("createCustomProvider", () => {
 			{ ...config, apiKey: "NV_KEY" },
 			{},
 		);
-		expect(await unset.auth.apiKey?.resolve({ ctx, signal })).toBeUndefined();
+		await expect(
+			unset.auth.apiKey?.resolve({ ctx, signal }),
+		).resolves.toBeUndefined();
 	});
 
 	it("omits the header unless provider_auth_header is set", async () => {
@@ -155,7 +158,9 @@ describe("createCustomProvider", () => {
 			{ ...config, authHeader: false, apiKey: "lit-key" },
 			{},
 		);
-		expect(await provider.auth.apiKey?.resolve({ ctx, signal })).toEqual({
+		await expect(
+			provider.auth.apiKey?.resolve({ ctx, signal }),
+		).resolves.toStrictEqual({
 			auth: { apiKey: "lit-key" },
 			source: "action inputs",
 		});

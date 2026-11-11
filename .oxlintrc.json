@@ -1,0 +1,163 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	// Every category is an error (run with --type-aware --deny-warnings). Rules are turned off below only when they
+	// contradict another rule, forbid features this codebase relies on, or are cosmetic choices the formatter owns.
+	"plugins": [
+		"eslint",
+		"typescript",
+		"unicorn",
+		"oxc",
+		"import",
+		"node",
+		"promise",
+		"jsdoc"
+	],
+	"categories": {
+		"correctness": "error",
+		"suspicious": "error",
+		"pedantic": "error",
+		"perf": "error",
+		"style": "error",
+		"restriction": "error"
+	},
+	"env": { "node": true, "es2024": true },
+	"ignorePatterns": ["coverage/**", "node_modules/**"],
+	"rules": {
+		// Language features this codebase uses on purpose.
+		"oxc/no-async-await": "off",
+		"oxc/no-optional-chaining": "off",
+		"oxc/no-rest-spread-properties": "off",
+		"eslint/no-undefined": "off",
+		"eslint/no-ternary": "off",
+		"eslint/init-declarations": "off",
+		"unicorn/no-null": "off", // GitHub's API and JSON use null
+		"unicorn/no-await-expression-member": "off",
+		"promise/avoid-new": "off", // wrapping child processes and timers
+		"promise/prefer-await-to-callbacks": "off", // Node's callback APIs
+		"promise/prefer-await-to-then": "off", // .catch() on fire-and-forget work; typescript/no-floating-promises keeps it honest
+		"import/no-nodejs-modules": "off", // this is a Node action
+		"node/no-process-env": "off", // GitHub Actions configures the action through the environment
+		"node/no-sync": "off",
+		"node/no-top-level-await": "off",
+		"unicorn/prefer-top-level-await": "off",
+
+		// Contradictory pairs and layout preferences.
+		"eslint/one-var": "off",
+		"eslint/func-style": "off",
+		"eslint/sort-keys": "off",
+		"eslint/sort-imports": "off", // oxfmt sorts imports
+		"eslint/capitalized-comments": "off",
+		"eslint/no-inline-comments": "off",
+		"eslint/id-length": "off",
+		"eslint/prefer-named-capture-group": "off",
+		"import/no-named-export": "off",
+		"import/prefer-default-export": "off",
+		"import/group-exports": "off",
+		"import/exports-last": "off",
+		"import/no-relative-parent-imports": "off",
+		"import/consistent-type-specifier-style": "off", // verbatimModuleSyntax keeps inline type imports
+		"unicorn/import-style": "off",
+		"typescript/explicit-member-accessibility": "off",
+		"typescript/explicit-function-return-type": "off", // explicit-module-boundary-types covers exports
+		"jsdoc/require-param": "off",
+		"jsdoc/require-returns": "off",
+
+		// Size limits: the formatter and review handle these better than fixed numbers.
+		"eslint/no-magic-numbers": "off",
+		"eslint/max-statements": "off",
+		"eslint/max-lines": "off",
+		"eslint/max-lines-per-function": "off",
+		"eslint/max-params": "off",
+		"eslint/max-classes-per-file": "off",
+		"import/max-dependencies": "off",
+
+		// Too noisy against library types, and unreachable without wrapping them.
+		"typescript/prefer-readonly-parameter-types": "off",
+
+		// From the nursery category (otherwise off): Biome enforced this one.
+		"typescript/no-unnecessary-condition": "error",
+
+		// promise-function-async makes every promise-returning function async, including callbacks that must return
+		// a promise but have nothing to await (`async () => models`); both require-await rules would flag those.
+		"eslint/require-await": "off",
+		"typescript/require-await": "off",
+
+		// `return undefined` is how exactOptionalPropertyTypes code says "absent".
+		"unicorn/no-useless-undefined": "off",
+
+		// `||` on strings deliberately treats "" as absent; parseInt deliberately accepts "15s" and rejects "".
+		"typescript/prefer-nullish-coalescing": [
+			"error",
+			{ "ignorePrimitives": { "string": true } }
+		],
+		"unicorn/prefer-number-coercion": "off",
+
+		// Hoisted declarations and classes referenced from function bodies are fine; variables are not.
+		// `if (name)` on an optional string means "set and non-empty" here; nullable numbers, booleans, objects, and any
+		// still have to be compared explicitly.
+		"typescript/strict-boolean-expressions": [
+			"error",
+			{ "allowNullableString": true }
+		],
+
+		"eslint/no-use-before-define": [
+			"error",
+			{ "functions": false, "classes": false, "variables": true }
+		],
+
+		// oxfmt prints hex digits in lowercase.
+		"unicorn/number-literal-case": "off"
+	},
+	"overrides": [
+		{
+			// Plain JavaScript: no type annotations to add.
+			"files": ["**/*.js", "**/*.mjs"],
+			"rules": {
+				"typescript/use-unknown-in-catch-callback-variable": "off",
+				"typescript/explicit-module-boundary-types": "off",
+				// Untyped values are everywhere in plain JavaScript; the type-aware unsafe-* rules only see `any`.
+				"typescript/no-unsafe-argument": "off",
+				"typescript/no-unsafe-assignment": "off",
+				"typescript/no-unsafe-call": "off",
+				"typescript/no-unsafe-member-access": "off",
+				"typescript/no-unsafe-return": "off",
+				"typescript/strict-boolean-expressions": "off"
+			}
+		},
+		{
+			"files": ["*.config.ts", "*.config.js"],
+			"rules": {
+				"import/no-default-export": "off", // the tools require a default export
+				"import/no-anonymous-default-export": "off"
+			}
+		},
+		{
+			"files": [
+				"**/*.test.ts",
+				"**/*.test.js",
+				"src/test-helpers.ts",
+				"src/test-setup.ts"
+			],
+			"plugins": ["vitest"],
+			"rules": {
+				"vitest/require-top-level-describe": "off", // file-level afterEach cleanup
+				"vitest/prefer-lowercase-title": "off", // titles name the class under test
+				"unicorn/consistent-function-scoping": "off", // helpers live next to the tests that use them
+				"typescript/no-unsafe-assignment": "off", // expect.any() and friends are typed any
+				"vitest/prefer-expect-assertions": "off",
+				"vitest/require-test-timeout": "off", // vitest.config.ts sets one
+				"vitest/no-importing-vitest-globals": "off", // explicit imports, no globals
+				"vitest/require-mock-type-parameters": "off",
+				"vitest/prefer-to-be-truthy": "off", // toBe(true) is stricter
+				"vitest/prefer-to-be-falsy": "off",
+				"vitest/padding-around-test-blocks": "off", // the formatter owns blank lines
+				"vitest/max-expects": "off",
+				"vitest/no-hooks": "off",
+				"vitest/require-hook": "off",
+				"vitest/prefer-describe-function-title": "off",
+				"typescript/unbound-method": "off", // vi.mocked(deps.log.info) and friends
+				"typescript/no-unsafe-type-assertion": "off" // fixtures are partial objects by design
+			}
+		}
+	]
+}

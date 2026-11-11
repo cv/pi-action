@@ -41,7 +41,7 @@ export function validatePermissions(ctx: SecurityContext): boolean {
 
 export function sanitizeInput(text: string): string {
 	return text
-		.replace(HTML_COMMENT_PATTERN, "") // Remove HTML comments
-		.replace(INVISIBLE_CHARACTERS_PATTERN, "") // Remove invisible characters
+		.replaceAll(HTML_COMMENT_PATTERN, "") // Remove HTML comments
+		.replaceAll(INVISIBLE_CHARACTERS_PATTERN, "") // Remove invisible characters
 		.trim();
 }

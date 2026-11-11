@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import {
 	getInputOrDefault,
 	parseBooleanInput,
@@ -24,14 +25,14 @@ describe("getInputOrDefault", () => {
 
 describe("parseCsvInput", () => {
 	it("splits, trims, and removes empty values", () => {
-		expect(parseCsvInput("dependabot[bot], renovate[bot],,  ")).toEqual([
+		expect(parseCsvInput("dependabot[bot], renovate[bot],,  ")).toStrictEqual([
 			"dependabot[bot]",
 			"renovate[bot]",
 		]);
 	});
 
 	it("returns an empty array for empty input", () => {
-		expect(parseCsvInput("")).toEqual([]);
+		expect(parseCsvInput("")).toStrictEqual([]);
 	});
 });
 
@@ -89,13 +90,13 @@ describe("parsePositiveIntegerInput", () => {
 
 describe("parseModelInputModes", () => {
 	it("parses valid model input modes", () => {
-		expect(parseModelInputModes("text,image", ["text"])).toEqual([
+		expect(parseModelInputModes("text,image", ["text"])).toStrictEqual([
 			"text",
 			"image",
 		]);
 	});
 
 	it("returns default when no valid modes are present", () => {
-		expect(parseModelInputModes("audio", ["text"])).toEqual(["text"]);
+		expect(parseModelInputModes("audio", ["text"])).toStrictEqual(["text"]);
 	});
 });

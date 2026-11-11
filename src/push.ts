@@ -2,6 +2,7 @@
 // timed out, or crashed). Pushes are fast-forward only, so this never overwrites another run's history.
 import { info, warning } from "@actions/core";
 import { context } from "@actions/github";
+
 import { GitSync, runGit } from "./storage/sync.ts";
 import { threadRef } from "./thread.ts";
 import { getErrorMessage } from "./utils.ts";
@@ -16,10 +17,12 @@ interface PushLogger {
 }
 
 function threadNumber(payload: Record<string, unknown>): number | undefined {
-	const subject = (payload[ISSUE_KEY] ?? payload[PULL_REQUEST_KEY]) as
-		| { number?: unknown }
-		| undefined;
-	return typeof subject?.number === "number" ? subject.number : undefined;
+	const subject: unknown = payload[ISSUE_KEY] ?? payload[PULL_REQUEST_KEY];
+	const number: unknown =
+		typeof subject === "object" && subject !== null
+			? Reflect.get(subject, "number")
+			: undefined;
+	return typeof number === "number" ? number : undefined;
 }
 
 export async function pushThread(
@@ -58,11 +61,13 @@ export async function pushThread(
 }
 
 const dispatchedPr = Number.parseInt(process.env[PR_NUMBER_ENV] ?? "", 10);
-if (process.argv[1]?.endsWith("push.ts")) {
+if (process.argv[1]?.endsWith("push.ts") === true) {
 	pushThread(
 		context.payload,
 		process.cwd(),
 		{ info, warning },
 		Number.isNaN(dispatchedPr) ? undefined : dispatchedPr,
-	).catch((error: unknown) => warning(getErrorMessage(error)));
+	).catch((error: unknown) => {
+		warning(getErrorMessage(error));
+	});
 }

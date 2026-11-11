@@ -1,9 +1,7 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import {
-	registerStorageConformance,
-	type StorageConformanceRunner,
-} from "@earendil-works/pi-durable/testing";
+import { registerStorageConformance } from "@earendil-works/pi-durable/testing";
 import { describe, expect, it } from "vitest";
+
 import { tempRepo } from "../test-helpers.ts";
 import { GitStorage } from "./git-storage.ts";
 
@@ -16,14 +14,14 @@ function snapshot(storage: GitStorage): string {
 	};
 	return JSON.stringify(
 		{ state: memory.state, nextSeq: memory.nextSeq },
-		(_key, value) =>
+		(_key, value: unknown) =>
 			value instanceof Map || value instanceof Set ? [...value] : value,
 	);
 }
 
 const replays: { before: string; after: string }[] = [];
 registerStorageConformance(
-	{ describe, expect, it } as unknown as StorageConformanceRunner,
+	{ describe, expect, it },
 	"GitStorage",
 	async (use) => {
 		const repo = tempRepo();
@@ -33,7 +31,7 @@ registerStorageConformance(
 			// Replay fidelity: whatever the case committed, reopening the ref rebuilds the same state.
 			let before: string | undefined;
 			try {
-				(storage as unknown as { assertUsable(): void }).assertUsable();
+				(storage as unknown as { assertUsable: () => void }).assertUsable();
 				before = snapshot(storage);
 			} catch {
 				before = undefined; // the case closed or poisoned it
@@ -54,6 +52,8 @@ registerStorageConformance(
 describe("replay coverage", () => {
 	it("reopened most conformance cases", () => {
 		expect(replays.length).toBeGreaterThan(10);
-		expect(replays.filter(({ before, after }) => before !== after)).toEqual([]);
+		expect(
+			replays.filter(({ before, after }) => before !== after),
+		).toStrictEqual([]);
 	});
 });

@@ -2,7 +2,6 @@
 import { execFileSync } from "node:child_process";
 import { chmod, mkdir, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 export const COMMIT_MSG_HOOK = `#!/usr/bin/env node
 import { readFileSync } from "node:fs";
@@ -81,7 +80,7 @@ export async function installAgentHooks(cwd = process.cwd()) {
 				const path = join(absoluteHooksDirectory, name);
 				if (await exists(path)) {
 					process.stdout.write(`  ⏭️ ${name} hook already exists, skipping\n`);
-					return;
+					return undefined;
 				}
 				await writeFile(path, hookContent, { mode: 0o755 });
 				await chmod(path, 0o755);
@@ -95,10 +94,7 @@ export async function installAgentHooks(cwd = process.cwd()) {
 	return installed;
 }
 
-if (
-	process.argv[1] &&
-	resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
 	installAgentHooks().catch((error) => {
 		process.stderr.write(
 			`${error instanceof Error ? error.message : String(error)}\n`,

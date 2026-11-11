@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AssistantMessage } from "@earendil-works/pi-ai";
+
 import { createModels } from "@earendil-works/pi-ai/models";
 import {
 	type FauxResponseStep,
@@ -11,10 +11,12 @@ import {
 	fauxToolCall,
 } from "@earendil-works/pi-ai/providers/faux";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
 import { pushThread } from "./push.ts";
 import { type ActionDependencies, type ActionInputs, run } from "./run.ts";
 import {
 	createActionInputs,
+	createLogger,
 	createComment,
 	createMockGitHubClient,
 } from "./test-helpers.ts";
@@ -102,15 +104,9 @@ function world() {
 			repo: { owner: "o", name: "r" },
 		},
 		createClient: () => gh,
-		log: {
-			info: vi.fn(),
-			warning: vi.fn(),
-			error: vi.fn(),
-			setFailed: vi.fn(),
-			setOutput: vi.fn(),
-		},
+		log: createLogger(),
 		cwd: checkout(),
-		createModels: () => Promise.resolve(models),
+		createModels: async () => models,
 		env: {
 			GITHUB_REPOSITORY: "o/r",
 			GITHUB_RUN_ID: "777",
@@ -161,7 +157,7 @@ describe("run (durable)", () => {
 		const w = world();
 		let seen: string[] = [];
 		const remember: FauxResponseStep = (context) => {
-			seen = userTexts(context.messages as never);
+			seen = userTexts(context.messages);
 			return fauxAssistantMessage(`I remember ${seen.length} requests.`);
 		};
 		w.faux.setResponses([fauxAssistantMessage("First answer."), remember]);
@@ -173,7 +169,7 @@ describe("run (durable)", () => {
 		expect(seen[0]).toContain("first task");
 		expect(seen[0]).toContain("Fix the thing"); // the first message carries the issue context
 		expect(seen[1]).toBe(
-			`**@user** commented (https://github.com/o/r/issues/42#issuecomment-${102}):\n\nand now the second`,
+			`**@user** commented (https://github.com/o/r/issues/42#issuecomment-102):\n\nand now the second`,
 		);
 	});
 
@@ -194,7 +190,9 @@ describe("run (durable)", () => {
 			.mocked(w.gh.addReactionToComment)
 			.mock.calls.filter(([, reaction]) => reaction === "rocket")
 			.map(([id]) => id);
-		expect(rockets).toEqual(expect.arrayContaining([missed.id, current.id]));
+		expect(rockets).toStrictEqual(
+			expect.arrayContaining([missed.id, current.id]),
+		);
 		expect(w.gh.posted.length).toBeGreaterThanOrEqual(2);
 		// Nothing is answered twice: the first comment was already handled.
 		expect(w.gh.posted.filter((p) => p.includes("one"))).toHaveLength(1);
@@ -215,7 +213,7 @@ describe("run (durable)", () => {
 				);
 			},
 			(context) => {
-				contextAtEnd = userTexts(context.messages as never);
+				contextAtEnd = userTexts(context.messages);
 				return fauxAssistantMessage("Done, docs too.");
 			},
 			fauxAssistantMessage("Docs were already handled."),
@@ -261,14 +259,13 @@ describe("run (durable)", () => {
 		const w = world();
 		// The provider fails until someone asks again.
 		const flaky: FauxResponseStep = (context) =>
-			userTexts(context.messages as never)
-				.at(-1)
-				?.includes("again")
+			// oxlint-disable-next-line vitest/no-conditional-in-test -- the fake provider's behavior
+			userTexts(context.messages).at(-1)?.includes("again") === true
 				? fauxAssistantMessage("recovered")
-				: (fauxAssistantMessage("", {
+				: fauxAssistantMessage("", {
 						stopReason: "error",
 						errorMessage: "provider exploded",
-					}) as AssistantMessage);
+					});
 		w.faux.setResponses(Array.from({ length: 10 }, () => flaky));
 		await run(w.deps(w.comment("@pi try")));
 		expect(w.gh.posted).toHaveLength(1);
@@ -311,13 +308,15 @@ describe("pushThread (the always() step)", () => {
 		const parent = git(deps.cwd, "rev-parse", `${REF}~3`).trim();
 		git(w.remote, "update-ref", REF, parent);
 
-		expect(await pushThread(payload, deps.cwd, log)).toBe("pushed");
+		await expect(pushThread(payload, deps.cwd, log)).resolves.toBe("pushed");
 		expect(git(w.remote, "rev-parse", REF).trim()).toBe(tip);
-		expect(await pushThread(payload, deps.cwd, log)).toBe("up-to-date");
-		expect(await pushThread({ issue: { number: 7 } }, deps.cwd, log)).toBe(
-			"nothing",
+		await expect(pushThread(payload, deps.cwd, log)).resolves.toBe(
+			"up-to-date",
 		);
-		expect(await pushThread({}, deps.cwd, log)).toBe("nothing");
+		await expect(
+			pushThread({ issue: { number: 7 } }, deps.cwd, log),
+		).resolves.toBe("nothing");
+		await expect(pushThread({}, deps.cwd, log)).resolves.toBe("nothing");
 
 		// Another run moved the remote on: never overwrite it.
 		git(
@@ -326,8 +325,10 @@ describe("pushThread (the always() step)", () => {
 			REF,
 			git(w.remote, "commit-tree", "-m", "other", `${REF}^{tree}`).trim(),
 		);
-		expect(await pushThread(payload, deps.cwd, log)).toBe("failed");
-		expect(log.warning).toHaveBeenCalled();
+		await expect(pushThread(payload, deps.cwd, log)).resolves.toBe("failed");
+		expect(log.warning).toHaveBeenCalledWith(
+			expect.stringContaining("was rejected"),
+		);
 	});
 });
 
@@ -342,7 +343,10 @@ describe("run (durable) with main's modes", () => {
 
 		await run(deps);
 
-		expect(outputs(deps)).toEqual({ success: "true", response: "All good." });
+		expect(outputs(deps)).toStrictEqual({
+			success: "true",
+			response: "All good.",
+		});
 		expect(w.gh.posted).toHaveLength(0);
 		expect(w.gh.addReactionToComment).not.toHaveBeenCalled();
 		expect(git(w.remote, "rev-parse", REF).trim()).toMatch(COMMIT_ID);
@@ -378,7 +382,7 @@ describe("run (durable) with main's modes", () => {
 		let first: string[] = [];
 		w.faux.setResponses([
 			(context) => {
-				first = userTexts(context.messages as never);
+				first = userTexts(context.messages);
 				return fauxAssistantMessage("Looks fine.");
 			},
 			fauxAssistantMessage("Still fine."),

@@ -1,8 +1,9 @@
-import type { Api, Model } from "@earendil-works/pi-ai";
+import type { Model } from "@earendil-works/pi-ai";
 import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
 import { createProvider, type Provider } from "@earendil-works/pi-ai/models";
+
 import { DEFAULTS } from "./defaults.ts";
 import {
 	getInputOrDefault,
@@ -59,7 +60,7 @@ export function resolveApiKey(
 	env: Record<string, string | undefined> = process.env,
 ): string | undefined {
 	if (!value) {
-		return;
+		return undefined;
 	}
 	return ENV_VAR_NAME_PATTERN.test(value) ? env[value] : value;
 }
@@ -105,24 +106,24 @@ export function createCustomProvider(
 		auth: {
 			apiKey: {
 				name: `${provider} API key`,
-				resolve: ({ credential }) => {
+				resolve: async ({ credential }) => {
 					const apiKey = credential?.key ?? resolveApiKey(config.apiKey, env);
 					if (!apiKey) {
-						return Promise.resolve(undefined);
+						return undefined;
 					}
 					const headers = config.authHeader
 						? { Authorization: `Bearer ${apiKey}` }
 						: undefined;
-					return Promise.resolve({
+					return {
 						auth: { apiKey, ...(headers ? { headers } : {}) },
 						source: "action inputs",
-					});
+					};
 				},
 			},
 		},
 		models: [customModel],
 		api: { [api]: CUSTOM_APIS[api]() },
-	}) as Provider<Api>;
+	});
 }
 
 export function readCustomProviderConfig(
@@ -130,7 +131,7 @@ export function readCustomProviderConfig(
 ): CustomProviderConfig | undefined {
 	const baseUrl = readInput("provider_base_url").trim();
 	if (!baseUrl) {
-		return;
+		return undefined;
 	}
 
 	const apiKey = readInput("provider_api_key").trim();

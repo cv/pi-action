@@ -7,6 +7,7 @@ import {
 	warning,
 } from "@actions/core";
 import { context, getOctokit } from "@actions/github";
+
 import { readActionInputs } from "./action-inputs.ts";
 import { createGitHubClient } from "./github.ts";
 import { run } from "./run.ts";
@@ -36,6 +37,6 @@ run({
 		setOutput,
 	},
 	cwd: process.cwd(),
-}).catch((caughtError) => {
+}).catch((caughtError: unknown) => {
 	setFailed(getErrorMessage(caughtError));
 });

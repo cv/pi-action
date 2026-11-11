@@ -11,9 +11,10 @@ import {
 	Harness,
 } from "@earendil-works/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
+
 import { tempRepo } from "../test-helpers.ts";
-import { GitRepo, RefConflictError } from "./git.ts";
 import { GitStorage } from "./git-storage.ts";
+import { GitRepo, RefConflictError } from "./git.ts";
 
 const context = BACKGROUND_CONTEXT;
 const REF = "refs/pi/threads/42";
@@ -62,7 +63,7 @@ async function ask(
 		throw new Error(`unanswered: ${JSON.stringify(settled)}`);
 	}
 	const entry = await root.commit(
-		(tx) => tx.entry(AssistantEntry, settled.answer),
+		async (tx) => tx.entry(AssistantEntry, settled.answer),
 		context,
 	);
 	const message = entry?.model?.[0];
@@ -83,7 +84,7 @@ describe("GitStorage with a Harness", () => {
 		]);
 
 		const first = await open();
-		expect(await ask(first.root, "Capital of France?")).toBe("Paris");
+		await expect(ask(first.root, "Capital of France?")).resolves.toBe("Paris");
 		const { tip } = first.storage;
 		await first.harness.close(context);
 
@@ -94,7 +95,7 @@ describe("GitStorage with a Harness", () => {
 		repo.git("fsck", "--strict", "--no-dangling");
 
 		const second = await open();
-		expect(await ask(second.root, "Second city?")).toBe("Lyon");
+		await expect(ask(second.root, "Second city?")).resolves.toBe("Lyon");
 		const { items } = await second.root.entries(
 			{ order: "ascending" },
 			100,
@@ -104,10 +105,10 @@ describe("GitStorage with a Harness", () => {
 		const users = items
 			.filter((e) => e.kind === "pi.user")
 			.map((e) => e.model?.[0]?.content);
-		expect(users).toEqual(["Capital of France?", "Second city?"]);
+		expect(users).toStrictEqual(["Capital of France?", "Second city?"]);
 		await second.harness.close(context);
 		// The second session extended the same chain.
-		expect(repo.git("merge-base", "--is-ancestor", tip ?? "", REF)).toBe("");
+		expect(repo.git("merge-base", "--is-ancestor", String(tip), REF)).toBe("");
 	});
 
 	it("reopens after git gc packs objects and refs", async () => {
@@ -125,7 +126,7 @@ describe("GitStorage with a Harness", () => {
 		expect(repo.git("show-ref")).toContain(REF);
 
 		const second = await open();
-		expect(await ask(second.root, "2")).toBe("two");
+		await expect(ask(second.root, "2")).resolves.toBe("two");
 		await second.harness.close(context);
 		repo.git("fsck", "--strict", "--no-dangling");
 	});

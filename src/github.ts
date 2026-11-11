@@ -4,6 +4,7 @@ import type {
 	PullRequestOpenedEvent,
 	PullRequestReviewCommentCreatedEvent,
 } from "@octokit/webhooks-types";
+
 import type {
 	GitHubComment,
 	GitHubReaction,
@@ -39,13 +40,28 @@ type TriggerComment = SupportedWebhookPayload extends infer Payload
 		: never
 	: never;
 
+/** The payload comes from outside: check the parts we read instead of trusting the webhook types. */
 function isSupportedWebhookPayload(
 	payload: unknown,
 ): payload is SupportedWebhookPayload {
+	if (typeof payload !== "object" || payload === null) {
+		return false;
+	}
+	const subject: unknown =
+		Reflect.get(payload, "pull_request") ?? Reflect.get(payload, "issue");
+	const comment: unknown = Reflect.get(payload, "comment");
+	return hasAuthor(subject) && (comment === undefined || hasAuthor(comment));
+}
+
+function hasAuthor(value: unknown): boolean {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+	const user: unknown = Reflect.get(value, "user");
 	return (
-		typeof payload === "object" &&
-		payload !== null &&
-		("issue" in payload || "pull_request" in payload)
+		typeof user === "object" &&
+		user !== null &&
+		typeof Reflect.get(user, "login") === "string"
 	);
 }
 
@@ -91,7 +107,7 @@ export function extractTriggerInfo(
 	const authorAssociation =
 		comment?.author_association ?? subject.author_association;
 
-	if (!(triggerText && author)) {
+	if (triggerText === "") {
 		return null;
 	}
 
@@ -126,42 +142,51 @@ interface PullRequestSummary {
 }
 
 export interface GitHubClient {
-	addReactionToComment(
+	addReactionToComment: (
 		commentId: number,
 		reaction: GitHubReaction,
 		source?: TriggerSource,
-	): Promise<void>;
-	addReactionToIssue(
+	) => Promise<void>;
+	addReactionToIssue: (
 		issueNumber: number,
 		reaction: GitHubReaction,
-	): Promise<void>;
-	createComment(issueNumber: number, body: string): Promise<PostedComment>;
-	getPullRequest(pullNumber: number): Promise<PullRequestSummary>;
-	getPullRequestDiff(pullNumber: number): Promise<string>;
-	getPullRequestReviewComments(
+	) => Promise<void>;
+	createComment: (issueNumber: number, body: string) => Promise<PostedComment>;
+	getPullRequest: (pullNumber: number) => Promise<PullRequestSummary>;
+	getPullRequestDiff: (pullNumber: number) => Promise<string>;
+	getPullRequestReviewComments: (
 		pullNumber: number,
-	): Promise<PullRequestReviewComment[]>;
+	) => Promise<PullRequestReviewComment[]>;
 	/** Every comment on an issue or PR conversation, oldest first; `since` filters by last update. */
-	listIssueComments(
+	listIssueComments: (
 		issueNumber: number,
 		since?: string,
-	): Promise<GitHubComment[]>;
+	) => Promise<GitHubComment[]>;
 	/** Every review comment on a PR, oldest first; `since` filters by last update. */
-	listReviewComments(
+	listReviewComments: (
 		pullNumber: number,
 		since?: string,
-	): Promise<GitHubComment[]>;
+	) => Promise<GitHubComment[]>;
+}
+
+/** GitHub's user type; anything unexpected (or missing, for deleted users) counts as a plain user. */
+export function toUserType(type: string | undefined): GitHubUser["type"] {
+	return type === "Bot" || type === "Organization" ? type : "User";
 }
 
 const PAGE_SIZE = 100;
 
+function pageParams(since: string | undefined, page: number) {
+	return { ...(since ? { since } : {}), per_page: PAGE_SIZE, page };
+}
+
 async function listAll(
-	fetchPage: (page: number) => Promise<{ data: unknown }>,
+	fetchPage: (page: number) => Promise<{ data: GitHubComment[] }>,
 ): Promise<GitHubComment[]> {
 	const all: GitHubComment[] = [];
 	for (let page = 1; ; page += 1) {
-		// biome-ignore lint/performance/noAwaitInLoops: pages are fetched until a short one
-		const data = (await fetchPage(page)).data as GitHubComment[];
+		// oxlint-disable-next-line eslint/no-await-in-loop -- pages are fetched until a short one
+		const { data } = await fetchPage(page);
 		all.push(...data);
 		if (data.length < PAGE_SIZE) {
 			return all;
@@ -175,10 +200,10 @@ function toReviewComment(comment: GitHubComment): PullRequestReviewComment {
 		body: comment.body ?? "",
 		user: {
 			login: comment.user?.login ?? "ghost",
-			type: (comment.user?.type ?? "User") as GitHubUser["type"],
+			type: toUserType(comment.user?.type),
 		},
 		...(comment.path ? { path: comment.path } : {}),
-		...(comment.line ? { line: comment.line } : {}),
+		...(typeof comment.line === "number" ? { line: comment.line } : {}),
 		created_at: comment.created_at,
 	};
 }
@@ -188,13 +213,8 @@ export function createGitHubClient(
 	context: GitHubContext,
 ): GitHubClient {
 	const { owner, name: repo } = context.repo;
-	const pageParams = (since: string | undefined, page: number) => ({
-		...(since ? { since } : {}),
-		per_page: PAGE_SIZE,
-		page,
-	});
-	const listReviewComments = (pullNumber: number, since?: string) =>
-		listAll((page) =>
+	const listReviewComments = async (pullNumber: number, since?: string) =>
+		listAll(async (page) =>
 			octokit.rest.pulls.listReviewComments({
 				owner,
 				repo,
@@ -210,11 +230,9 @@ export function createGitHubClient(
 			source: TriggerSource = "comment",
 		) {
 			const params = { owner, repo, comment_id: commentId, content: reaction };
-			if (source === "review_comment") {
-				await octokit.rest.reactions.createForPullRequestReviewComment(params);
-			} else {
-				await octokit.rest.reactions.createForIssueComment(params);
-			}
+			await (source === "review_comment"
+				? octokit.rest.reactions.createForPullRequestReviewComment(params)
+				: octokit.rest.reactions.createForIssueComment(params));
 		},
 
 		async addReactionToIssue(issueNumber: number, reaction: GitHubReaction) {
@@ -242,7 +260,16 @@ export function createGitHubClient(
 				repo,
 				pull_number: pullNumber,
 			});
-			return pullRequest as PullRequestSummary;
+			return {
+				number: pullRequest.number,
+				title: pullRequest.title,
+				body: pullRequest.body ?? "",
+				user: {
+					login: pullRequest.user.login,
+					type: toUserType(pullRequest.user.type),
+				},
+				author_association: pullRequest.author_association,
+			};
 		},
 
 		async getPullRequestDiff(pullNumber: number): Promise<string> {
@@ -252,15 +279,18 @@ export function createGitHubClient(
 				pull_number: pullNumber,
 				mediaType: { format: "diff" },
 			});
-			return diff as string;
+			// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the diff media type returns text; Octokit still types it as a PR
+			return diff as unknown as string;
 		},
 
 		async getPullRequestReviewComments(pullNumber: number) {
-			return (await listReviewComments(pullNumber)).map(toReviewComment);
+			return (await listReviewComments(pullNumber)).map((comment) =>
+				toReviewComment(comment),
+			);
 		},
 
-		listIssueComments(issueNumber: number, since?: string) {
-			return listAll((page) =>
+		async listIssueComments(issueNumber: number, since?: string) {
+			return listAll(async (page) =>
 				octokit.rest.issues.listComments({
 					owner,
 					repo,
@@ -282,13 +312,7 @@ export async function addReaction(
 	>,
 	reaction: GitHubReaction,
 ): Promise<void> {
-	if (trigger.isCommentEvent && trigger.commentId) {
-		await client.addReactionToComment(
-			trigger.commentId,
-			reaction,
-			trigger.source,
-		);
-	} else {
-		await client.addReactionToIssue(trigger.issueNumber, reaction);
-	}
+	await (trigger.isCommentEvent && trigger.commentId !== undefined
+		? client.addReactionToComment(trigger.commentId, reaction, trigger.source)
+		: client.addReactionToIssue(trigger.issueNumber, reaction));
 }

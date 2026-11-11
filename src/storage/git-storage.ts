@@ -13,6 +13,7 @@ import {
 	type Storage,
 	type StorageWrite,
 } from "@earendil-works/pi-durable";
+
 import { GitRepo, type Signature } from "./git.ts";
 
 const FORMAT_VERSION = 1;
@@ -136,7 +137,7 @@ export class GitStorage implements Storage {
 							{ cause: error },
 						);
 					});
-				let batch: Batch;
+				let batch: unknown;
 				try {
 					batch = JSON.parse(content.toString("utf8"));
 				} catch (error) {
@@ -145,11 +146,7 @@ export class GitStorage implements Storage {
 						{ cause: error },
 					);
 				}
-				if (
-					batch?.format !== FORMAT_VERSION ||
-					!Number.isSafeInteger(batch.seq) ||
-					!Array.isArray(batch.writes)
-				) {
+				if (!isBatch(batch)) {
 					throw new GitStorageCorruptionError(
 						`Unsupported or invalid batch in ${sha}`,
 					);
@@ -159,6 +156,7 @@ export class GitStorage implements Storage {
 		);
 		for (const { sha, batch } of batches) {
 			try {
+				// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Seq is a branded number; the log is where seqs come from
 				this.memory.prepareCommit(batch.writes, batch.seq as Seq).apply();
 			} catch (error) {
 				throw new GitStorageCorruptionError(
@@ -179,10 +177,10 @@ export class GitStorage implements Storage {
 			throw new GitStorageReadOnlyError();
 		}
 		const previous = this.queue;
-		const turn = Promise.withResolvers<void>();
+		const turn = Promise.withResolvers<undefined>();
 		this.queue = turn.promise;
 		await previous;
-		const writing = Promise.withResolvers<void>();
+		const writing = Promise.withResolvers<undefined>();
 		this.writing = writing.promise;
 		const seqs: Seq[] = [];
 		const encoded: Batch[] = [];
@@ -215,8 +213,8 @@ export class GitStorage implements Storage {
 			throw this.poison(error);
 		} finally {
 			this.writing = undefined;
-			writing.resolve();
-			turn.resolve();
+			writing.resolve(undefined);
+			turn.resolve(undefined);
 		}
 		for (const [index, seq] of seqs.entries()) {
 			receive(index, seq);
@@ -242,8 +240,9 @@ export class GitStorage implements Storage {
 		_context: Context,
 	): Promise<void> {
 		let parent = this.head;
+		// Each commit is the parent of the next, so the writes are sequential.
+		/* oxlint-disable eslint/no-await-in-loop */
 		for (const batch of batches) {
-			// biome-ignore lint/performance/noAwaitInLoops: each commit is the parent of the next
 			const blob = await this.repo.writeBlob(JSON.stringify(batch));
 			const tree = await this.repo.writeTree({ [BATCH_FILE]: blob });
 			parent = await this.repo.writeCommit({
@@ -253,6 +252,7 @@ export class GitStorage implements Storage {
 				message: commitMessage(batch),
 			});
 		}
+		/* oxlint-enable eslint/no-await-in-loop */
 		if (parent === undefined) {
 			return;
 		}
@@ -265,17 +265,17 @@ export class GitStorage implements Storage {
 		this.head = parent;
 	}
 
-	mintId<I extends Id<string>>(): Promise<I> {
-		try {
-			return this.store.mintId<I>();
-		} catch (error) {
-			return Promise.reject(error);
-		}
+	async mintId<I extends Id<string>>(): Promise<I> {
+		return this.store.mintId<I>();
 	}
-	async conversation(...args: Parameters<Storage["conversation"]>) {
+	async conversation(
+		...args: Parameters<Storage["conversation"]>
+	): ReturnType<Storage["conversation"]> {
 		return (await this.readable()).conversation(...args);
 	}
-	async scanConversations(...args: Parameters<Storage["scanConversations"]>) {
+	async scanConversations(
+		...args: Parameters<Storage["scanConversations"]>
+	): ReturnType<Storage["scanConversations"]> {
 		return (await this.readable()).scanConversations(...args);
 	}
 	entry(id: EntryId, context: Context): ReturnType<MemoryStorage["entry"]>;
@@ -290,6 +290,7 @@ export class GitStorage implements Storage {
 		context?: Context,
 	): ReturnType<MemoryStorage["entry"]> {
 		const memory = await this.readable();
+		/* oxlint-disable typescript/no-unsafe-type-assertion -- the overloads differ by arity, so the third argument tells which one the caller used */
 		return context === undefined
 			? memory.entry(idOrConversation as EntryId, idOrContext as Context)
 			: memory.entry(
@@ -297,44 +298,60 @@ export class GitStorage implements Storage {
 					idOrContext as EntryId,
 					context,
 				);
+		/* oxlint-enable typescript/no-unsafe-type-assertion */
 	}
 	async findLatestHeadMarker(
 		...args: Parameters<Storage["findLatestHeadMarker"]>
-	) {
+	): ReturnType<Storage["findLatestHeadMarker"]> {
 		return (await this.readable()).findLatestHeadMarker(...args);
 	}
-	async scanEntries(...args: Parameters<Storage["scanEntries"]>) {
+	async scanEntries(
+		...args: Parameters<Storage["scanEntries"]>
+	): ReturnType<Storage["scanEntries"]> {
 		return (await this.readable()).scanEntries(...args);
 	}
-	async task(...args: Parameters<Storage["task"]>) {
+	async task(
+		...args: Parameters<Storage["task"]>
+	): ReturnType<Storage["task"]> {
 		return (await this.readable()).task(...args);
 	}
-	async scanTasks(...args: Parameters<Storage["scanTasks"]>) {
+	async scanTasks(
+		...args: Parameters<Storage["scanTasks"]>
+	): ReturnType<Storage["scanTasks"]> {
 		return (await this.readable()).scanTasks(...args);
 	}
-	async submission(...args: Parameters<Storage["submission"]>) {
+	async submission(
+		...args: Parameters<Storage["submission"]>
+	): ReturnType<Storage["submission"]> {
 		return (await this.readable()).submission(...args);
 	}
-	async scanSubmissions(...args: Parameters<Storage["scanSubmissions"]>) {
+	async scanSubmissions(
+		...args: Parameters<Storage["scanSubmissions"]>
+	): ReturnType<Storage["scanSubmissions"]> {
 		return (await this.readable()).scanSubmissions(...args);
 	}
 	async submissionByRequest(
 		...args: Parameters<Storage["submissionByRequest"]>
-	) {
+	): ReturnType<Storage["submissionByRequest"]> {
 		return (await this.readable()).submissionByRequest(...args);
 	}
-	async findDocument(...args: Parameters<Storage["findDocument"]>) {
+	async findDocument(
+		...args: Parameters<Storage["findDocument"]>
+	): ReturnType<Storage["findDocument"]> {
 		return (await this.readable()).findDocument(...args);
 	}
-	async document(...args: Parameters<Storage["document"]>) {
+	async document(
+		...args: Parameters<Storage["document"]>
+	): ReturnType<Storage["document"]> {
 		return (await this.readable()).document(...args);
 	}
-	async scanDocuments(...args: Parameters<Storage["scanDocuments"]>) {
+	async scanDocuments(
+		...args: Parameters<Storage["scanDocuments"]>
+	): ReturnType<Storage["scanDocuments"]> {
 		return (await this.readable()).scanDocuments(...args);
 	}
 
 	async close(context: Context): Promise<void> {
-		// biome-ignore lint/suspicious/noUnnecessaryConditions: close() may be called twice
 		if (this.closed) {
 			return;
 		}
@@ -350,7 +367,7 @@ export class GitStorage implements Storage {
 	}
 	private async readable(): Promise<MemoryStorage> {
 		while (this.writing !== undefined) {
-			// biome-ignore lint/performance/noAwaitInLoops: a new write may start while we wait
+			// oxlint-disable-next-line eslint/no-await-in-loop -- a new write may start while we wait
 			await this.writing;
 		}
 		return this.store;
@@ -360,7 +377,6 @@ export class GitStorage implements Storage {
 		return this.poisonError;
 	}
 	private assertUsable(): void {
-		// biome-ignore lint/suspicious/noUnnecessaryConditions: set by close()
 		if (this.closed) {
 			throw new Error("GitStorage is closed");
 		}
@@ -368,6 +384,17 @@ export class GitStorage implements Storage {
 			throw this.poisonError;
 		}
 	}
+}
+
+function isBatch(value: unknown): value is Batch {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+	return (
+		Reflect.get(value, "format") === FORMAT_VERSION &&
+		Number.isSafeInteger(Reflect.get(value, "seq")) &&
+		Array.isArray(Reflect.get(value, "writes"))
+	);
 }
 
 /** `pi-durable: seq 12 (entry, task×2)` plus trailers, so `git log` reads well. */

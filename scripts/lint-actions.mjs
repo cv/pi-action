@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+
 import { createLinter } from "actionlint";
 
 const WORKFLOW_DIR = ".github/workflows";
@@ -11,7 +12,7 @@ const workflowFiles = (await readdir(WORKFLOW_DIR))
 	.map((fileName) => join(WORKFLOW_DIR, fileName));
 const resultsByFile = await Promise.all(
 	workflowFiles.map(async (workflowFile) => {
-		const workflow = await readFile(workflowFile, "utf-8");
+		const workflow = await readFile(workflowFile, "utf8");
 		return lint(workflow, workflowFile);
 	}),
 );

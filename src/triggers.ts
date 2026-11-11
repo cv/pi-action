@@ -1,5 +1,5 @@
 import { extractTask, hasTrigger } from "./context.ts";
-import type { GitHubClient } from "./github.ts";
+import { type GitHubClient, toUserType } from "./github.ts";
 import { sanitizeInput, validatePermissions } from "./security.ts";
 import type {
 	GitHubComment,
@@ -68,12 +68,9 @@ function commentAuthor(
 ): GitHubUser | undefined {
 	const { user } = comment;
 	if (!(user && hasTrigger(comment.body ?? "", filter.triggerPhrase))) {
-		return;
+		return undefined;
 	}
-	const author: GitHubUser = {
-		login: user.login,
-		type: user.type as GitHubUser["type"],
-	};
+	const author: GitHubUser = { login: user.login, type: toUserType(user.type) };
 	const permitted = validatePermissions({
 		authorAssociation: comment.author_association,
 		authorLogin: author.login,
@@ -163,7 +160,7 @@ export async function collectTriggers(
 			byKey.set(trigger.key, trigger);
 		}
 	}
-	return [...byKey.values()].sort(
+	return [...byKey.values()].toSorted(
 		(a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
 	);
 }

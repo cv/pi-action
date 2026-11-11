@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import {
 	createComment,
 	createMockGitHubClient,
@@ -76,7 +77,7 @@ describe("triggersFromComments", () => {
 			triggersFromComments(comments, "comment", 1, filter).map(
 				(t) => t.commentId,
 			),
-		).toEqual([1, 4]);
+		).toStrictEqual([1, 4]);
 	});
 });
 
@@ -84,15 +85,15 @@ describe("collectTriggers", () => {
 	it("returns only the current trigger for a new thread", async () => {
 		const gh = createMockGitHubClient([createComment({ id: 1 })]);
 		const current = triggerFromInfo(createTriggerInfo(), "@pi");
-		expect(
-			await collectTriggers(
+		await expect(
+			collectTriggers(
 				gh,
 				{ issueNumber: 1, isPullRequest: false },
 				filter,
 				undefined,
 				current,
 			),
-		).toEqual([current]);
+		).resolves.toStrictEqual([current]);
 		expect(gh.listIssueComments).not.toHaveBeenCalled();
 	});
 
@@ -121,7 +122,7 @@ describe("collectTriggers", () => {
 			new Date("2026-01-01T00:00:00Z"),
 			current,
 		);
-		expect(found.map((t) => t.key)).toEqual([
+		expect(found.map((t) => t.key)).toStrictEqual([
 			"comment-2",
 			"review-comment-9",
 			"comment-3",
@@ -141,6 +142,6 @@ describe("triggersFromComments with allowed_users", () => {
 			triggersFromComments(comments, "comment", 1, only).map(
 				(t) => t.commentId,
 			),
-		).toEqual([1]);
+		).toStrictEqual([1]);
 	});
 });
