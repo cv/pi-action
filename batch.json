@@ -1,1 +1,1 @@
-{"format":1,"seq":258,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":259,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"src/thread.ts(215,41): error TS2345: Argument of type 'EntryId | undefined' is not assignable to parameter of type 'EntryId'.\n  Type 'undefined' is not assignable to type 'EntryId'.\n    Type 'undefined' is not assignable to type 'number'.\n"]]}}]}
