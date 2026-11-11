@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULTS } from "./defaults.ts";
 
 const ACTION_YML = readFileSync("action.yml", "utf8");
-const README = readFileSync("README.md", "utf8");
+const INPUTS_DOC = readFileSync("docs/inputs.md", "utf8");
 const NEXT_ACTION_INPUT_PATTERN = /\n {2}\w/u;
 const ACTION_DEFAULT_PATTERN = /\n {4}default: ['"]?([^'"\n]+)['"]?/u;
 const REGEXP_SPECIAL_CHARS_PATTERN = /[.*+?^${}()|[\]\\]/gu;
@@ -48,7 +48,7 @@ function getActionInputDefault(inputName: string): string {
 	return defaultValue;
 }
 
-function getReadmeInputDefault(inputName: string): string {
+function getDocumentedInputDefault(inputName: string): string {
 	const escapedInputName = inputName.replaceAll(
 		REGEXP_SPECIAL_CHARS_PATTERN,
 		String.raw`\$&`,
@@ -56,20 +56,20 @@ function getReadmeInputDefault(inputName: string): string {
 	const defaultMatch = new RegExp(
 		`\\| \`${escapedInputName}\` \\|[^\\n]*\\| \`([^\`]+)\` \\|`,
 		"u",
-	).exec(README);
+	).exec(INPUTS_DOC);
 	const defaultValue = defaultMatch?.[1];
 	if (defaultValue === undefined) {
-		throw new Error(`Input ${inputName} not found in README inputs table`);
+		throw new Error(`Input ${inputName} not found in the docs/inputs.md table`);
 	}
 	return defaultValue;
 }
 
 describe("input defaults", () => {
 	it.each(DEFAULT_CASES)(
-		"keeps %s default in sync across source, action.yml, and README",
+		"keeps %s default in sync across source, action.yml, and docs/inputs.md",
 		(inputName, expectedDefault) => {
 			expect(getActionInputDefault(inputName)).toBe(expectedDefault);
-			expect(getReadmeInputDefault(inputName)).toBe(expectedDefault);
+			expect(getDocumentedInputDefault(inputName)).toBe(expectedDefault);
 		},
 	);
 });
