@@ -99,6 +99,8 @@ export interface GitHubClient {
 	/** One issue/PR conversation comment, as it is now. */
 	getComment: (commentId: number) => Promise<GitHubComment>;
 	updateComment: (commentId: number, body: string) => Promise<void>;
+	/** A user's role on the repository: `admin`, `maintain`, `write`, `triage`, `read`, or `none`. */
+	getCollaboratorPermission: (login: string) => Promise<string>;
 	getPullRequest: (
 		pullNumber: number,
 	) => Promise<{ number: number; title: string; body: string }>;
@@ -149,7 +151,7 @@ export function createGitHubClient(
 	octokit: OctokitClient,
 	{ owner, name: repo }: RepoRef,
 ): GitHubClient {
-	const { reactions, issues, pulls } = octokit.rest;
+	const { reactions, issues, pulls, repos } = octokit.rest;
 	return {
 		async addReaction({ source, issueNumber, commentId }, content) {
 			if (source === "body" || commentId === undefined) {
@@ -193,6 +195,15 @@ export function createGitHubClient(
 				comment_id: commentId,
 				body,
 			});
+		},
+
+		async getCollaboratorPermission(login) {
+			const { data } = await repos.getCollaboratorPermissionLevel({
+				owner,
+				repo,
+				username: login,
+			});
+			return data.role_name ?? data.permission;
 		},
 
 		async getPullRequest(pullNumber) {

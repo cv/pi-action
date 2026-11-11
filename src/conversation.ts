@@ -3,6 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Submission } from "@earendil-works/pi-durable";
 
+import { ANSWER_KIND } from "./answers.ts";
 import type { Thread } from "./thread.ts";
 import type { Trigger } from "./triggers.ts";
 import type { Log } from "./types.ts";
@@ -32,6 +33,8 @@ export interface ConversationOptions {
 	) => Promise<string | undefined>;
 	/** Triggers that arrived since the run started; omitted for one-off runs. */
 	poll?: () => Promise<Trigger[]>;
+	/** The URLs of the questions pi-durable extensions asked in this run so far (see github-ui.ts). */
+	asked?: () => readonly string[];
 }
 
 const EMPTY_RESPONSE = "Agent returned empty response";
@@ -155,7 +158,8 @@ export class ThreadConversation {
 		content: string,
 	): Promise<SettledResult> {
 		const outcome = await this.submitAndWait(trigger, trigger.key, content);
-		if (!(outcome.empty && !this.timedOut)) {
+		// An answer an earlier run delivered (or a question it is waiting on) is not asked for again.
+		if (!(outcome.empty && !this.timedOut) || this.posted.has(outcome.key)) {
 			return outcome;
 		}
 		this.options.log.warning(
@@ -184,6 +188,9 @@ export class ThreadConversation {
 		key: string,
 		content: string,
 	): Promise<SettledResult> {
+		const asked = this.options.asked ?? (() => []);
+		const askedBefore = asked().length;
+		const { answer } = trigger;
 		const submission = await this.options.thread.submit({
 			key,
 			content,
@@ -192,10 +199,36 @@ export class ThreadConversation {
 				source: trigger.source,
 				...(trigger.url ? { url: trigger.url } : {}),
 			},
+			...(answer
+				? {
+						entry: {
+							kind: ANSWER_KIND,
+							data: {
+								key: answer.key,
+								kind: answer.kind,
+								answer: answer.answer,
+								by: answer.by,
+								url: answer.url,
+							},
+						},
+					}
+				: {}),
 		});
 		const record = await submission.wait(BACKGROUND_CONTEXT);
 		if (record.status === "done" && record.answer !== undefined) {
-			const text = await this.options.thread.answerText(record.answer);
+			const { text, toolCalls } = await this.options.thread.answerText(
+				record.answer,
+			);
+			const questions = asked().slice(askedBefore);
+			if (toolCalls && questions.length > 0) {
+				// The run ended on a question (its tool round asked to terminate): the answer comes in a later run.
+				return {
+					key: `answer-${record.answer}`,
+					empty: false,
+					waiting: questions,
+					result: { success: true, response: text },
+				};
+			}
 			return {
 				key: `answer-${record.answer}`,
 				empty: text === "",
@@ -232,6 +265,19 @@ export class ThreadConversation {
 		outcome: SettledResult,
 	): Promise<void> {
 		const alreadyPosted = this.posted.has(outcome.key);
+		if (outcome.waiting) {
+			this.options.log.info(
+				`pi asked a question and ended its turn; waiting for an answer to ${outcome.waiting.join(", ")}`,
+			);
+			if (!alreadyPosted) {
+				this.posted.set(outcome.key, outcome.waiting[0] ?? "");
+				await this.options.thread.markPosted(
+					outcome.key,
+					outcome.waiting[0] ?? "",
+				);
+			}
+			return;
+		}
 		if (alreadyPosted && !outcome.result.success) {
 			return; // a failure an earlier run already reported
 		}
@@ -252,4 +298,6 @@ interface SettledResult {
 	key: string;
 	empty: boolean;
 	result: ThreadResult;
+	/** The run ended on these questions: nothing is posted, the answers start a later run. */
+	waiting?: readonly string[];
 }

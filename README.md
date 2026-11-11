@@ -14,7 +14,7 @@ A GitHub Action that runs a durable [pi](https://github.com/earendil-works/pi) c
 - 🆕 Trigger on issue/PR creation, not just comments
 - 🔀 Automatically includes PR diffs for code review tasks
 - 🧩 Loads model providers from [pi extensions](https://github.com/earendil-works/pi) on npm or in your repository
-- 🛠️ Loads [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) extensions (tools for the conversation), and answers their questions with checkboxes on the issue/PR
+- 🛠️ Loads [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) extensions (tools for the conversation), and asks their questions on the issue/PR: a ticked box or an `/answer` reply continues the conversation in a new run
 - 📦 Built on [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) - no separate installation needed
 - 🪝 Auto-installs git hooks to enforce commit conventions for the agent
 
@@ -33,13 +33,17 @@ on:
   pull_request:
     types: [opened]
   issue_comment:
-    types: [created]
+    types: [created, edited] # edited: a box ticked on a question from a pi-durable extension
   pull_request_review_comment:
     types: [created]
 
 jobs:
   pi-response:
-    if: contains(github.event.comment.body || github.event.issue.body || github.event.pull_request.body || '', '@pi')
+    # @pi requests, /answer replies, and edits of pi's questions (not other edited comments).
+    if: >-
+      (github.event.action == 'edited' && contains(github.event.comment.body, '<!-- pi-action:question'))
+      || (github.event.action != 'edited' && (contains(github.event.comment.body || github.event.issue.body || github.event.pull_request.body || '', '@pi')
+      || contains(github.event.comment.body || '', '/answer')))
     runs-on: ubuntu-latest
     # One run per issue/PR at a time (see "Durable threads" below).
     concurrency:
@@ -120,7 +124,6 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 | `extensions` | pi extensions whose model providers `provider`/`model` can select, and pi-durable extensions whose tools pi gets: npm package specs or workspace paths, one per line or comma-separated (see [Providers from pi extensions](#providers-from-pi-extensions) and [pi-durable extensions](#pi-durable-extensions)) | No | - |
 | `trust_project` | Let pi-durable extensions trust the repository and run its own configuration (see [pi-durable extensions](#pi-durable-extensions)) | No | `false` |
 | `agent_dir` | Agent directory (user-level state) for pi-durable extensions, relative to the workspace | No | (a temp dir under `RUNNER_TEMP`) |
-| `ui_timeout` | Seconds a question from a pi-durable extension waits for an answer on the issue/PR | No | `300` |
 | `prompt_template` | Custom prompt template with placeholder variables | No | (built-in default) |
 | `output_mode` | `comment` to post on the issue/PR, or `output` to set action outputs only | No | `comment` |
 | `prompt` | Direct prompt for the agent (use with `output_mode: output`, or with `pr_number`) | No | - |
@@ -260,20 +263,28 @@ A package that ships a [pi-durable](https://www.npmjs.com/package/@earendil-work
 
 - **Discovery**: a package whose `package.json` has `pi.durable` (a module path, such as `"pi": { "durable": "./src/durable/index.ts" }`) is a pi-durable extension package. Its module exports `createPiDurableExtension(options)` (or a default export with the same signature), which returns a pi-durable `Extension` (`{ name, tools?, sections?, hooks?, wraps?, tasks? }`). A package with both `pi.durable` and `pi.extensions` loads only its pi-durable entry (its pi extensions need pi's coding agent), and says so in the log.
 - **Loading**: as for pi extensions (same install, TypeScript without a build step). Imports of `@earendil-works/pi-durable` and `@earendil-works/chord` (and their subpaths) get the action's copies, so the extension shares the host's instances.
-- **Host options**: `createPiDurableExtension` receives `{ cwd, agentDir, trustProject, ui, log }`: the workspace; `agent_dir` (resolved against the workspace) or a fresh temp directory under `RUNNER_TEMP`; `trust_project`; the GitHub UI below, in comment mode on an issue or PR (omitted in output mode and for direct prompts); and the action's log (`info`, `warning`).
+- **Host options**: `createPiDurableExtension` receives `{ cwd, agentDir, trustProject, ui, log }`, where `ui` is `{ ask, notify }` (an asynchronous host; see below): the workspace; `agent_dir` (resolved against the workspace) or a fresh temp directory under `RUNNER_TEMP`; `trust_project`; the GitHub UI below, in comment mode on an issue or PR (omitted in output mode and for direct prompts); and the action's log (`info`, `warning`).
 - **Installation into the conversation**: the extensions are installed after pi-action's coding tools (read, write, edit, bash), for every conversation: comment mode, `pr_number` runs and direct prompts. Their names must be unique.
 - **`trust_project`** (default `false`) tells the extension it may load and run the repository's own configuration (for pit: `.pi/pit.json` and `.pi/functions`). Anyone who can push a branch or open a PR can change those files, so turn it on only for repositories whose code you would run anyway, and never for workflows that run on untrusted PRs.
 
 ##### Questions on GitHub
 
-When an extension asks its user something (`ui.confirm`, `ui.select`, `ui.input`), pi-action posts the question as a comment on the issue or PR and waits up to `ui_timeout` seconds (default 300), checking every `poll_interval` seconds. The run's own timeout still applies.
+People don't watch issues, so a question may take hours or days to answer, and nothing waits for it. When an extension asks its user something (`ui.confirm`, `ui.select`, `ui.input`; pit's `ui.*` globals, or pit itself, as when it promotes a function to the project), pi-action posts the question as a comment on the issue or PR and **the run ends**:
 
-- **`confirm` and `select`**: the comment has a task list (`- [ ] Yes`, `- [ ] No`, or one box per option). Tick a box to answer; the first ticked box counts. The comment is then edited to show the answer (`✅ Answered: Yes`).
-- **`input`**: reply with a comment that starts with `/answer`, such as `/answer release-2.1`. The text after `/answer` is the answer. The first `/answer` reply posted after the question counts, from someone allowed to run pi (`allowed_users`, `allowed_associations`, `allowed_bots`); pi reacts 👍 to it. Questions and `/answer` replies are never `@pi` requests, even when they mention `@pi`.
-- **No answer**: on timeout, or when the run stops, the comment is edited to say pi continued without an answer; `confirm` returns `false`, `select` and `input` nothing.
+1. pit asks pi-action's `ui.ask`, which posts the question and returns its URL at once. pit stops the program (calls it made before asking keep their effects) and ends the turn with "Question posted: ...".
+2. The run ends quietly: no pi Response comment, and the log says which question pi is waiting for. The thread is saved as usual.
+3. Someone answers: ticks a box (an `issue_comment` `edited` event) or replies `/answer ...` (`created`). That starts a new run on the same thread. pi-action checks who answered, edits the question to show `✅ Answered: <answer> by @user`, and adds the answer to the conversation as a message to pi (`**@user** answered pi's question *<title>* (<url>): <answer>`) together with a `ui.answer` entry.
+4. pi continues: it runs its step again, and when the program asks the same question, pit returns the answer instead of asking. Each answer is used once; asking the same question again later asks anew.
+
+The workflow must listen to `issue_comment` `edited` events, and its `if:` must let them (and `/answer` replies) through; see the snippet in [Basic Setup](#basic-setup). Edits of other comments are ignored.
+
+- **`confirm` and `select`**: the comment has a task list (`- [ ] Yes`, `- [ ] No`, or one box per option). Tick a box to answer; the first box ticked counts, and later ticks on an answered question are ignored. `confirm` answers `true` for Yes and `false` for No; `select` answers the option (options are shown on one line).
+- **`input`**: reply with a comment that starts with `/answer`, such as `/answer release-2.1`. The text after `/answer` is the answer, to the oldest open `input` question, or to the one the reply quotes (GitHub's *Quote reply*). It counts from someone allowed to run pi (`allowed_users`, `allowed_associations`, `allowed_bots`); pi reacts 👍 to it. Questions and `/answer` replies are never `@pi` requests, even when they mention `@pi`.
+- **The same question twice**: while a question is open, asking it again doesn't post a second comment; pi waits for the open one.
+- **A ticked box whose run was cancelled**: GitHub keeps one pending run per concurrency group, so if more events for the issue arrive while a run works, the answer's run may be cancelled. Untick and tick the box again (or reply `/answer` again) to answer.
 - **`notify`**: notifications go to the log and the job summary, not to comments.
 
-**Trust model**: checkboxes are answered by editing pi-action's comment, and GitHub lets only people with write access to the repository edit someone else's comment, so a ticked box comes from a collaborator with write access (who may not be in `allowed_users`; GitHub doesn't tell who ticked it). Each question carries a hidden marker (`<!-- pi-action:question <id> -->`); a question whose marker or options were changed is ignored, as if unanswered, and restored. `/answer` replies can come from anyone, so they count only from people allowed to run pi.
+**Trust model**: GitHub lets only people with write access to the repository edit someone else's comment, so only they can tick pi-action's boxes. pi-action checks it anyway: a tick counts only when the event's sender has the `write`, `maintain` or `admin` role (`GET /repos/{owner}/{repo}/collaborators/{user}/permission`) and, when `allowed_users` is set, is in it; bots must be in `allowed_bots`. Each question carries a hidden marker (`<!-- pi-action:question <key> <kind> -->`, with pit's key for the question); an edit counts only when the marker and the options are the same before and after it, a box went from unticked to ticked, and the question isn't answered yet. `/answer` replies can come from anyone, so they count only from people allowed to run pi.
 
 #### Output mode and direct prompts
 

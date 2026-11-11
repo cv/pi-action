@@ -6,7 +6,7 @@ import { ThreadConversation, type ThreadResult } from "./conversation.ts";
 import { createDurableExtensions } from "./durable-extensions.ts";
 import { loadExtensions } from "./extensions.ts";
 import { formatErrorComment, formatSuccessComment } from "./formatting.ts";
-import { createGitHubUi } from "./github-ui.ts";
+import { createGitHubUi, type GitHubUi } from "./github-ui.ts";
 import type { GitHubClient, ReactionTarget } from "./github.ts";
 import type { ActionInputs } from "./inputs.ts";
 import { createActionModels, findModel } from "./models.ts";
@@ -56,6 +56,7 @@ async function setUp(
 	models: Models;
 	extensions: Extension[];
 	tools: Record<string, string>;
+	ui: GitHubUi | undefined;
 }> {
 	const { inputs, log, cwd } = deps;
 	const env = deps.env ?? process.env;
@@ -81,15 +82,7 @@ async function setUp(
 	}
 	const ui =
 		inputs.outputMode === "comment" && issueNumber !== undefined
-			? createGitHubUi({
-					gh,
-					issueNumber,
-					allow: inputs,
-					pollIntervalMs: inputs.pollInterval * 1000,
-					timeoutMs: inputs.uiTimeout * 1000,
-					log,
-					summary: deps.summary,
-				})
+			? createGitHubUi({ gh, issueNumber, log, summary: deps.summary })
 			: undefined;
 	const extensions = await createDurableExtensions(loaded.durable, {
 		cwd,
@@ -99,7 +92,7 @@ async function setUp(
 		log,
 		env,
 	});
-	return { models, extensions, tools };
+	return { models, extensions, tools, ui };
 }
 
 /** On cancellation (SIGINT, then SIGTERM), push what the thread has so far before the runner kills us. */
@@ -154,12 +147,13 @@ async function initialTriggers(
 	piContext: PIContext,
 	triggerInfo: TriggerInfo | undefined,
 	since: Date | undefined,
+	answer: Trigger | undefined,
 ): Promise<Trigger[]> {
 	const { inputs } = deps;
 	if (!triggerInfo) {
 		return [oneOffTrigger(piContext, deps.env ?? process.env)];
 	}
-	const current = triggerFromInfo(triggerInfo, inputs.triggerPhrase);
+	const current = answer ?? triggerFromInfo(triggerInfo, inputs.triggerPhrase);
 	return inputs.outputMode === "comment"
 		? collectTriggers(gh, triggerInfo, inputs, since, current)
 		: [current];
@@ -227,7 +221,11 @@ export async function run(deps: ActionDependencies): Promise<void> {
 	let thread: Thread | undefined;
 	let stopSignals: (() => void) | undefined;
 	try {
-		const { models, extensions, tools } = await setUp(deps, gh, issueNumber);
+		const { models, extensions, tools, ui } = await setUp(
+			deps,
+			gh,
+			issueNumber,
+		);
 		const opened = await Thread.open({
 			cwd: deps.cwd,
 			issueNumber,
@@ -256,10 +254,14 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			log,
 			timeoutSeconds: inputs.timeout,
 			pollIntervalMs: inputs.pollInterval * 1000,
-			message: async (trigger, first) =>
-				first
+			message: async (trigger, first) => {
+				if (trigger.answer) {
+					return trigger.text;
+				}
+				return first
 					? buildPrompt(contextFor(piContext, trigger), inputs.promptTemplate)
-					: formatFollowUp(trigger),
+					: formatFollowUp(trigger);
+			},
 			deliver: async (trigger, result, alreadyPosted) =>
 				report(
 					result,
@@ -270,9 +272,17 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			...(interactive
 				? { poll: async () => collectTriggers(gh, interactive, inputs, since) }
 				: {}),
+			...(ui ? { asked: () => ui.asked } : {}),
 		});
 		await conversation.run(
-			await initialTriggers(deps, gh, piContext, triggerInfo, opened.startedAt),
+			await initialTriggers(
+				deps,
+				gh,
+				piContext,
+				triggerInfo,
+				opened.startedAt,
+				resolved.answer,
+			),
 		);
 	} catch (error) {
 		await report(

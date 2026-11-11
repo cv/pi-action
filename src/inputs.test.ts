@@ -44,7 +44,6 @@ describe("readActionInputs", () => {
 				extensions: "@acme/pi-provider@1.2.3\n./ext.ts",
 				trust_project: "true",
 				agent_dir: " .pi/agent ",
-				ui_timeout: "60",
 			}),
 			{ GITHUB_TOKEN: "env-token" },
 		);
@@ -69,7 +68,6 @@ describe("readActionInputs", () => {
 			extensions: ["@acme/pi-provider@1.2.3", "./ext.ts"],
 			trustProject: true,
 			agentDir: ".pi/agent",
-			uiTimeout: 60,
 		});
 	});
 });

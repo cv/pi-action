@@ -25,7 +25,6 @@ const DEFAULT_CASES = [
 	["model_max_tokens", String(DEFAULTS.customModelMaxTokens)],
 	["output_mode", DEFAULTS.outputMode],
 	["trust_project", String(DEFAULTS.trustProject)],
-	["ui_timeout", String(DEFAULTS.uiTimeout)],
 ] as const;
 
 function getActionInputDefault(inputName: string): string {

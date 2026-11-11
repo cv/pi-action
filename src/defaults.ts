@@ -18,5 +18,4 @@ export const DEFAULTS = {
 	customModelMaxTokens: 16_384,
 	outputMode: "comment",
 	trustProject: false,
-	uiTimeout: 300,
 } as const;

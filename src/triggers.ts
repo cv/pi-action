@@ -11,6 +11,7 @@ import type {
 	GitHubUser,
 	TriggerInfo,
 	TriggerSource,
+	UiAnswer,
 } from "./types.ts";
 
 /** One request for pi: an issue/PR body or comment that mentions the trigger phrase. */
@@ -26,6 +27,8 @@ export interface Trigger {
 	task: string;
 	createdAt: string;
 	url?: string;
+	/** Set when this is the answer to a question from a pi-durable extension; `text` is the message for the model. */
+	answer?: UiAnswer;
 }
 
 /** Who may run pi, and how they ask: the trigger_phrase and allowed_* inputs. */

@@ -164,6 +164,7 @@ describe("createGitHubClient", () => {
 					updateComment: vi.fn(),
 				},
 				pulls: { get: vi.fn(), listReviewComments: vi.fn() },
+				repos: { getCollaboratorPermissionLevel: vi.fn() },
 			},
 		};
 		const client = createGitHubClient(octokit, { owner: "o", name: "r" });
@@ -233,6 +234,24 @@ describe("createGitHubClient", () => {
 			repo: "r",
 			comment_id: 7,
 			body: "Bye",
+		});
+	});
+
+	it("reads a user's role on the repository", async () => {
+		const { client, repos } = setup();
+		repos.getCollaboratorPermissionLevel
+			.mockResolvedValueOnce({
+				data: { permission: "write", role_name: "maintain" },
+			})
+			.mockResolvedValueOnce({ data: { permission: "read" } });
+		await expect(client.getCollaboratorPermission("ada")).resolves.toBe(
+			"maintain",
+		);
+		await expect(client.getCollaboratorPermission("bob")).resolves.toBe("read");
+		expect(repos.getCollaboratorPermissionLevel).toHaveBeenCalledWith({
+			owner: "o",
+			repo: "r",
+			username: "ada",
 		});
 	});
 

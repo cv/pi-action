@@ -4,26 +4,32 @@ export interface Log {
 	warning: (msg: string) => void;
 }
 
+/** A question a pi-durable extension asks its user; `key` is stable for the same question (pit derives it). */
+export type UiQuestion =
+	| { kind: "confirm"; key: string; title: string; message: string }
+	| { kind: "select"; key: string; title: string; options: string[] }
+	| { kind: "input"; key: string; title: string; placeholder?: string };
+
+/** Someone's answer to a question, delivered to the thread as a `ui.answer` entry. */
+export interface UiAnswer {
+	key: string;
+	kind: UiQuestion["kind"];
+	/** `true`/`false` for confirm, the option for select, the text for input. */
+	answer: boolean | string;
+	/** Who answered (a GitHub login). */
+	by: string;
+	/** The question's comment. */
+	url: string;
+	title: string;
+}
+
 /**
- * The dialogs a pi-durable extension can show its user (the interface `pit/durable` defines). pi-action answers
- * them with comments on the issue or PR (see github-ui.ts).
+ * The UI pi-action gives pi-durable extensions: an asynchronous host (the interface `pit/durable` defines). `ask`
+ * posts the question on the issue or PR and returns at once; the answer arrives in a later run as a `ui.answer` entry
+ * (see github-ui.ts and answers.ts).
  */
 export interface DurableUi {
-	confirm: (
-		title: string,
-		message: string,
-		options?: { signal?: AbortSignal },
-	) => Promise<boolean>;
-	select: (
-		title: string,
-		options: string[],
-		opts?: { signal?: AbortSignal },
-	) => Promise<string | undefined>;
-	input: (
-		title: string,
-		placeholder?: string,
-		opts?: { signal?: AbortSignal },
-	) => Promise<string | undefined>;
+	ask: (question: UiQuestion) => Promise<{ url?: string }>;
 	notify: (message: string, level?: "info" | "warning" | "error") => void;
 }
 
@@ -135,6 +141,11 @@ export interface OctokitClient {
 			updateComment: (
 				params: Params<{ comment_id: number; body: string }>,
 			) => Promise<unknown>;
+		};
+		repos: {
+			getCollaboratorPermissionLevel: (
+				params: Params<{ username: string }>,
+			) => Promise<{ data: { permission: string; role_name?: string } }>;
 		};
 		pulls: {
 			get: (

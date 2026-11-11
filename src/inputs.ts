@@ -32,8 +32,6 @@ export interface ActionInputs {
 	trustProject: boolean;
 	/** The agent directory for pi-durable extensions; a temp dir when unset. */
 	agentDir: string | undefined;
-	/** Seconds a question from an extension waits for an answer on GitHub. */
-	uiTimeout: number;
 }
 
 const TRUE_VALUES = new Set(["true", "1", "yes", "y", "on"]);
@@ -161,7 +159,5 @@ export function readActionInputs(
 		trustProject:
 			parseBoolean(readInput("trust_project")) ?? DEFAULTS.trustProject,
 		agentDir: readInput("agent_dir").trim() || undefined,
-		uiTimeout:
-			parsePositiveInteger(readInput("ui_timeout")) ?? DEFAULTS.uiTimeout,
 	};
 }

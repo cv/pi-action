@@ -62,6 +62,7 @@ export function createMockGitHubClient(
 		updateComment: vi.fn(async (id: number, body: string) => {
 			bodies.set(id, body);
 		}),
+		getCollaboratorPermission: vi.fn(async (_login: string) => "write"),
 		getPullRequest: vi
 			.fn()
 			.mockResolvedValue({ number: 1, title: "Test PR", body: "PR body" }),
@@ -127,7 +128,6 @@ export function createActionInputs(
 		extensions: [],
 		trustProject: DEFAULTS.trustProject,
 		agentDir: undefined,
-		uiTimeout: DEFAULTS.uiTimeout,
 		...overrides,
 	};
 }

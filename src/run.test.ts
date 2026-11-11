@@ -118,6 +118,31 @@ function runnerGitEnv(): Record<string, string> {
 }
 
 describe("run (durable)", () => {
+	it("ignores edited comments that are not answers to questions", async () => {
+		const w = world();
+		const trigger = w.comment("@pi fix it");
+		const deps = w.deps(
+			undefined,
+			{},
+			{
+				action: "edited",
+				comment: trigger,
+				issue: {
+					number: 42,
+					title: "Fix the thing",
+					body: "It is broken",
+					user: { login: "o", type: "User" },
+				},
+			},
+		);
+		await run(deps);
+		expect(deps.log.info).toHaveBeenCalledWith(
+			"An edited comment that is not an answer to a question; skipping",
+		);
+		expect(w.gh.addReaction).not.toHaveBeenCalled();
+		expect(w.gh.posted).toHaveLength(0);
+	});
+
 	it("gives the agent's tools GH_TOKEN and a git identity when the runner has none", async () => {
 		const w = world();
 		w.faux.setResponses([
@@ -500,61 +525,104 @@ describe("run with a pi-durable extension (installed from npm)", () => {
 		rmSync(packs, { recursive: true, force: true });
 	});
 
-	/** A run whose model calls the extension's ask_user tool, then answers with what it reported. */
+	/**
+	 * The model calls the extension's ask_user tool until it reports something other than a posted question, then
+	 * says what it reported. A run that posts a question ends without asking the model again (`terminate`).
+	 */
+	const askUntilAnswered: FauxResponseStep = (context) => {
+		const said = toolText(context.messages);
+		return said === "" || said.startsWith("Question posted")
+			? fauxAssistantMessage([fauxToolCall("ask_user", {})], {
+					stopReason: "toolUse",
+				})
+			: fauxAssistantMessage(`Tool said: ${said}`);
+	};
+
 	function durableWorld(inputs: Partial<ActionInputs> = {}) {
 		const w = world();
-		w.faux.setResponses([
-			fauxAssistantMessage([fauxToolCall("ask_user", {})], {
-				stopReason: "toolUse",
-			}),
-			(context) =>
-				fauxAssistantMessage(`Tool said: ${toolText(context.messages)}`),
-		]);
+		w.faux.setResponses(Array.from({ length: 10 }, () => askUntilAnswered));
 		const runnerTemp = tempDir();
-		const deps = w.deps(w.comment("@pi deploy"), {
-			extensions: [spec],
-			...inputs,
-		});
-		deps.env = { ...process.env, ...deps.env, RUNNER_TEMP: runnerTemp };
-		return { ...w, deps, runnerTemp };
+		/** A run on the extension's runner, for `payload` (default: a new `@pi deploy` comment). */
+		const durableDeps = (payload?: Record<string, unknown>) => {
+			const deps = w.deps(
+				payload ? undefined : w.comment("@pi deploy"),
+				{ extensions: [spec], ...inputs },
+				payload,
+			);
+			deps.env = { ...process.env, ...deps.env, RUNNER_TEMP: runnerTemp };
+			return deps;
+		};
+		/** Someone with write access ticks `label` on question comment `id`: the `issue_comment` `edited` event. */
+		const tick = (id: number, label: string, sender = "ada") => {
+			const before = w.gh.bodies.get(id) ?? "";
+			const after = before.replace(`- [ ] ${label}`, `- [x] ${label}`);
+			w.gh.bodies.set(id, after);
+			return {
+				action: "edited",
+				issue: {
+					number: 42,
+					title: "Fix the thing",
+					body: "It is broken",
+					user: { login: "o", type: "User" },
+				},
+				comment: {
+					id,
+					body: after,
+					user: { login: "github-actions[bot]", type: "Bot" },
+					author_association: "NONE",
+					created_at: new Date().toISOString(),
+					updated_at: new Date().toISOString(),
+					html_url: `https://github.com/o/r/issues/42#issuecomment-${id}`,
+				},
+				changes: { body: { from: before } },
+				sender: { login: sender, type: "User" },
+			};
+		};
+		return { ...w, durableDeps, tick, runnerTemp, deps: durableDeps() };
 	}
 
-	/** Someone ticks `labels` on each question at its second poll. Returns the polls per comment. */
-	function tickOnSecondPoll(
-		gh: ReturnType<typeof world>["gh"],
-		labels: string[],
-	): Map<number, number> {
-		const polls = new Map<number, number>();
-		vi.mocked(gh.getComment).mockImplementation(async (id) => {
-			const count = (polls.get(id) ?? 0) + 1;
-			polls.set(id, count);
-			let body = gh.bodies.get(id) ?? "";
-			for (const label of count === 2 ? labels : []) {
-				body = body.replace(`- [ ] ${label}`, `- [x] ${label}`);
-			}
-			gh.bodies.set(id, body);
-			return createComment({ id, body });
-		});
-		return polls;
-	}
-
-	it("answers the extension's questions with checkboxes ticked on GitHub", async () => {
+	it("posts a question, ends the run quietly, and continues when a box is ticked", async () => {
 		const d = durableWorld();
-		const polls = tickOnSecondPoll(d.gh, ["Yes", "green"]);
-
+		let seen: string[] = [];
 		await run(d.deps);
 
-		expect(d.gh.posted).toHaveLength(3);
+		// The run ends on the question: no pi Response comment, no reaction for a result.
+		expect(d.gh.posted).toHaveLength(1);
 		expect(d.gh.posted[0]).toContain("### ❓ Deploy?");
 		expect(d.gh.posted[0]).toContain("- [ ] Yes\n- [ ] No");
+		expect(d.deps.log.info).toHaveBeenCalledWith(
+			"pi asked a question and ended its turn; waiting for an answer to https://github.com/o/r/issues/1#c1",
+		);
+		expect(d.reacted("rocket")).toHaveLength(0);
+		expect(d.reacted("confused")).toHaveLength(0);
+		expect(d.gh.getComment).not.toHaveBeenCalled();
+
+		// Ticking Yes starts a new run: the answer reaches the thread, and the tool asks its next question.
+		const yes = d.durableDeps(d.tick(1001, "Yes"));
+		await run(yes);
+		expect(d.gh.bodies.get(1001)).toContain("**✅ Answered: Yes by @ada**");
+		expect(d.gh.posted).toHaveLength(2);
 		expect(d.gh.posted[1]).toContain("- [ ] red\n- [ ] green");
+
+		// Ticking green: the tool gets both answers, and pi answers.
+		d.faux.setResponses([
+			async (...args) => {
+				seen = userTexts(args[0].messages);
+				return askUntilAnswered(...args);
+			},
+			askUntilAnswered,
+		]);
+		const green = d.durableDeps(d.tick(1002, "green"));
+		await run(green);
+		expect(d.gh.posted).toHaveLength(3);
 		expect(d.gh.posted[2]).toContain(
 			`Tool said: confirm=true select=green agentDir=${join(d.runnerTemp, "pi-action-agent-")}`,
 		);
-		expect(d.gh.bodies.get(1001)).toContain("✅ Answered: Yes");
-		expect(d.gh.bodies.get(1002)).toContain("✅ Answered: green");
-		expect([polls.get(1001), polls.get(1002)]).toStrictEqual([2, 2]);
-		expect(d.deps.summary).toHaveBeenCalledWith(
+		expect(seen.at(-1)).toBe(
+			"**@ada** answered pi's question *Color* (https://github.com/o/r/issues/42#issuecomment-1002): green",
+		);
+		expect(d.reacted("rocket")).toStrictEqual([1002]);
+		expect(green.summary).toHaveBeenCalledWith(
 			expect.stringContaining("deploy=true"),
 		);
 		expect(d.deps.log.info).toHaveBeenCalledWith(
@@ -563,27 +631,19 @@ describe("run with a pi-durable extension (installed from npm)", () => {
 		expect(d.deps.log.info).toHaveBeenCalledWith(
 			"durable-ask: trustProject=false",
 		);
-		expect(d.reacted("rocket")).toHaveLength(1);
 	}, 120_000);
 
-	it("continues without answers when nobody ticks a box in time", async () => {
-		const d = durableWorld({ uiTimeout: 0.2 });
-
+	it("ignores a box ticked by someone without write access", async () => {
+		const d = durableWorld();
 		await run(d.deps);
-
-		expect(d.gh.posted[2]).toContain("Tool said: confirm=false select=none");
-		expect(d.gh.bodies.get(1001)).toContain("pi continued without one");
-		expect(d.gh.bodies.get(1002)).toContain("pi continued without one");
-	}, 120_000);
-
-	it("stops waiting for an answer when the run is aborted", async () => {
-		const d = durableWorld({ timeout: 1.5, uiTimeout: 60 });
-
-		await run(d.deps);
-
-		expect(d.gh.bodies.get(1001)).toContain("pi stopped waiting");
-		expect(d.gh.posted).toHaveLength(2); // the question, then the timeout
-		expect(d.gh.posted[1]).toContain("Timeout after 1.5 seconds");
+		vi.mocked(d.gh.getCollaboratorPermission).mockResolvedValue("read");
+		const deps = d.durableDeps(d.tick(1001, "Yes", "mallory"));
+		await run(deps);
+		expect(deps.log.warning).toHaveBeenCalledWith(
+			expect.stringContaining("@mallory ticked a box"),
+		);
+		expect(d.gh.bodies.get(1001)).not.toContain("Answered");
+		expect(d.gh.posted).toHaveLength(1);
 	}, 120_000);
 
 	it("sets the tools' variables in the environment the extension shares, unless set", async () => {

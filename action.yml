@@ -90,10 +90,6 @@ inputs:
     description: 'Agent directory (user-level state) for pi-durable extensions, relative to the workspace; a fresh temp directory under RUNNER_TEMP when empty'
     required: false
     default: ''
-  ui_timeout:
-    description: 'Seconds a question from a pi-durable extension waits for an answer on the issue/PR (checkboxes or an /answer reply) before pi continues without one'
-    required: false
-    default: '300'
   prompt_template:
     description: 'Custom prompt template with placeholder variables'
     required: false
@@ -177,7 +173,6 @@ runs:
         INPUT_EXTENSIONS: ${{ inputs.extensions }}
         INPUT_TRUST_PROJECT: ${{ inputs.trust_project }}
         INPUT_AGENT_DIR: ${{ inputs.agent_dir }}
-        INPUT_UI_TIMEOUT: ${{ inputs.ui_timeout }}
         INPUT_PROMPT_TEMPLATE: ${{ inputs.prompt_template }}
         INPUT_OUTPUT_MODE: ${{ inputs.output_mode }}
         INPUT_PROMPT: ${{ inputs.prompt }}

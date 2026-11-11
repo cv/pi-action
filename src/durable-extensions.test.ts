@@ -45,9 +45,7 @@ describe("createDurableExtensions", () => {
 
 	it("passes the host options, with a temp agent directory under RUNNER_TEMP", async () => {
 		const ui: DurableUi = {
-			confirm: vi.fn<DurableUi["confirm"]>(),
-			select: vi.fn<DurableUi["select"]>(),
-			input: vi.fn<DurableUi["input"]>(),
+			ask: vi.fn<DurableUi["ask"]>(),
 			notify: vi.fn<DurableUi["notify"]>(),
 		};
 		const opts = options({ trustProject: true, ui });

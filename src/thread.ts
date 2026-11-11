@@ -53,6 +53,8 @@ export interface ThreadInput {
 	key: string;
 	content: string;
 	data: Record<string, string>;
+	/** Place the input as this entry instead of a comment (an answer to a question: `ui.answer`). */
+	entry?: { kind: string; data: Record<string, string | boolean> } | undefined;
 }
 
 interface Persistence {
@@ -179,25 +181,34 @@ export class Thread {
 				content: input.content,
 				requestId: input.key,
 				whenBusy: "steer",
-				entry: { kind: COMMENT_KIND, data: { key: input.key, ...input.data } },
+				entry: input.entry ?? {
+					kind: COMMENT_KIND,
+					data: { key: input.key, ...input.data },
+				},
 			},
 			context,
 		);
 	}
 
-	async answerText(answer: EntryId): Promise<string> {
+	/** The text of a run's answer, and whether it called tools (a run that ended on a `terminate` round). */
+	async answerText(
+		answer: EntryId,
+	): Promise<{ text: string; toolCalls: boolean }> {
 		const entry = await this.root.commit(
 			async (tx) => tx.entry(AssistantEntry, answer),
 			context,
 		);
 		const message = entry?.model?.[0];
 		if (message?.role !== "assistant") {
-			return "";
+			return { text: "", toolCalls: false };
 		}
-		return message.content
-			.flatMap((block) => (block.type === "text" ? [block.text] : []))
-			.join("")
-			.trim();
+		return {
+			text: message.content
+				.flatMap((block) => (block.type === "text" ? [block.text] : []))
+				.join("")
+				.trim(),
+			toolCalls: message.content.some((block) => block.type === "toolCall"),
+		};
 	}
 
 	/** Results already posted (`answer-<entryId>`, `error-<submissionId>`), with their comment URLs. */

@@ -1,294 +1,188 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+	answeredBody,
 	createGitHubUi,
-	type GitHubUiOptions,
 	isQuestionComment,
+	parseQuestion,
 	readAnswerReply,
-	readCheckboxAnswer,
+	renderQuestion,
 } from "./github-ui.ts";
 import {
 	createComment,
 	createLogger,
 	createMockGitHubClient,
 } from "./test-helpers.ts";
-import type { GitHubComment } from "./types.ts";
+import type { GitHubComment, UiQuestion } from "./types.ts";
 
-const MARKER = "<!-- pi-action:question q1 -->";
-const YES_NO = ["Yes", "No"];
+const KEY = "0123456789abcdef";
+const CONFIRM: UiQuestion = {
+	kind: "confirm",
+	key: KEY,
+	title: "Deploy?",
+	message: "Ship it?\n- [ ] not a box",
+};
+const SELECT: UiQuestion = {
+	kind: "select",
+	key: "fedcba9876543210",
+	title: "Color",
+	options: ["red", "dark\ngreen", ""],
+};
+const INPUT: UiQuestion = {
+	kind: "input",
+	key: "00112233445566778899",
+	title: "Branch?",
+	placeholder: "release-2.1",
+};
 
-const question = (...items: string[]): string =>
-	[
-		MARKER,
-		"### ❓ Deploy?",
-		"",
-		"> Ship it?",
-		"",
-		...items,
-		"",
-		"<sub>Tick one box</sub>",
-	].join("\n");
-
-describe("readCheckboxAnswer", () => {
-	it("reads the first ticked box, [x] or [X]", () => {
-		expect(
-			readCheckboxAnswer(question("- [ ] Yes", "- [x] No"), "q1", YES_NO),
-		).toStrictEqual({ status: "answered", index: 1 });
-		expect(
-			readCheckboxAnswer(question("- [X] Yes", "- [ ] No"), "q1", YES_NO),
-		).toStrictEqual({ status: "answered", index: 0 });
-		expect(
-			readCheckboxAnswer(question("- [x] Yes", "- [x] No"), "q1", YES_NO),
-		).toStrictEqual({ status: "answered", index: 0 });
-		const crlf = question("* [ ] Yes", "* [x] No").replaceAll("\n", "\r\n");
-		expect(readCheckboxAnswer(crlf, "q1", YES_NO)).toStrictEqual({
-			status: "answered",
-			index: 1,
+describe("question comments", () => {
+	it("renders confirm and select as task lists, with the key and kind in the marker", () => {
+		expect(renderQuestion(CONFIRM)).toBe(
+			[
+				`<!-- pi-action:question ${KEY} confirm -->`,
+				"### ❓ Deploy?",
+				"",
+				"> Ship it?",
+				"> - [ ] not a box",
+				"",
+				"- [ ] Yes",
+				"- [ ] No",
+				"",
+				"<sub>Tick one box to answer. pi continues in a new run when you do; this run has ended.</sub>",
+			].join("\n"),
+		);
+		const select = parseQuestion(renderQuestion(SELECT));
+		expect(select).toStrictEqual({
+			key: SELECT.key,
+			kind: "select",
+			title: "Color",
+			options: ["red", "dark green", "(empty)"],
+			ticked: [false, false, false],
+			answered: false,
 		});
 	});
 
-	it("reports unticked boxes as unanswered", () => {
+	it("renders input as a request for an /answer reply", () => {
+		const body = renderQuestion(INPUT);
+		expect(body).toContain("For example: `/answer release-2.1`");
+		expect(body).toContain("Reply with a comment that starts with `/answer`");
+		expect(parseQuestion(body)).toMatchObject({ kind: "input", options: [] });
 		expect(
-			readCheckboxAnswer(question("- [ ] Yes", "- [ ] No"), "q1", YES_NO),
-		).toStrictEqual({ status: "unanswered" });
+			renderQuestion({ ...INPUT, title: " ", placeholder: " " }),
+		).toContain("### ❓ pi has a question\n\n\n<sub>");
 	});
 
-	it("ignores task lists in the quoted message", () => {
-		const body = [MARKER, "> - [x] No", "", "- [ ] Yes", "- [ ] No"].join("\n");
-		expect(readCheckboxAnswer(body, "q1", YES_NO)).toStrictEqual({
-			status: "unanswered",
+	it("reads ticked boxes, and marks a question answered", () => {
+		const body = renderQuestion(CONFIRM).replace("- [ ] No", "- [X] No");
+		// The message's "- [ ] not a box" is quoted, so it is no checkbox.
+		expect(parseQuestion(body)?.ticked).toStrictEqual([false, true]);
+		const answered = answeredBody(body, "No", "ada");
+		expect(answered).not.toContain("<sub>");
+		expect(answered).toContain("**✅ Answered: No by @ada**");
+		expect(parseQuestion(answered)?.answered).toBe(true);
+		expect(answeredBody(body, " ", "ada")).toContain("Answered: (empty) by");
+	});
+
+	it("is undefined for other comments and bad markers", () => {
+		expect(parseQuestion("hello")).toBeUndefined();
+		expect(
+			parseQuestion("<!-- pi-action:question KEY confirm -->"),
+		).toBeUndefined();
+		expect(
+			parseQuestion(`<!-- pi-action:question ${KEY} other -->`),
+		).toBeUndefined();
+		expect(
+			parseQuestion(`text\n<!-- pi-action:question ${KEY} confirm -->`),
+		).toBeUndefined();
+		expect(
+			parseQuestion(`<!-- pi-action:question ${KEY} confirm -->`)?.title,
+		).toBe("pi has a question");
+	});
+
+	it("reads /answer replies, also after a quote", () => {
+		expect(readAnswerReply("/answer release-2.1")).toStrictEqual({
+			text: "release-2.1",
+			quote: "",
 		});
+		expect(
+			readAnswerReply("> ### ❓ Branch?\n> more\n\n/ANSWER  main <!-- x -->"),
+		).toStrictEqual({
+			text: "main",
+			quote: "### ❓ Branch?\nmore",
+		});
+		expect(readAnswerReply("/answer")).toStrictEqual({ text: "", quote: "" });
+		expect(readAnswerReply("/answers no")).toBeUndefined();
+		expect(readAnswerReply("> /answer quoted only")).toBeUndefined();
+		expect(readAnswerReply("please /answer")).toBeUndefined();
 	});
 
-	it("reports a question whose marker or options were edited as changed", () => {
-		const changed = { status: "changed" };
-		const ticked = question("- [x] Yes", "- [ ] No");
-		expect(
-			readCheckboxAnswer(ticked.replace(MARKER, ""), "q1", YES_NO),
-		).toStrictEqual(changed);
-		expect(readCheckboxAnswer(ticked, "q2", YES_NO)).toStrictEqual(changed);
-		expect(
-			readCheckboxAnswer(question("- [x] Maybe", "- [ ] No"), "q1", YES_NO),
-		).toStrictEqual(changed);
-		expect(
-			readCheckboxAnswer(
-				question("- [ ] Yes", "- [ ] No", "- [x] Other"),
-				"q1",
-				YES_NO,
-			),
-		).toStrictEqual(changed);
-		expect(
-			readCheckboxAnswer(question("- [x] Yes"), "q1", YES_NO),
-		).toStrictEqual(changed);
+	it("never takes questions or /answer replies for @pi requests", () => {
+		expect(isQuestionComment(renderQuestion(CONFIRM))).toBe(true);
+		expect(isQuestionComment("/answer @pi yes")).toBe(true);
+		expect(isQuestionComment("@pi do it")).toBe(false);
 	});
 });
 
-describe("readAnswerReply and isQuestionComment", () => {
-	it("reads /answer replies only", () => {
-		expect(readAnswerReply("/answer  main ")).toBe("main");
-		expect(readAnswerReply("/ANSWER\ntwo\nlines")).toBe("two\nlines");
-		expect(readAnswerReply("<!-- hidden -->/answer yes")).toBe("yes");
-		expect(readAnswerReply("/answer")).toBe("");
-		expect(readAnswerReply("/answered it")).toBeUndefined();
-		expect(readAnswerReply("I /answer later")).toBeUndefined();
-	});
-
-	it("recognizes questions and answers, which are never triggers", () => {
-		expect(isQuestionComment(`${MARKER}\n@pi asks`)).toBe(true);
-		expect(isQuestionComment("  /answer @pi yes")).toBe(true);
-		expect(isQuestionComment("@pi help")).toBe(false);
-	});
-});
-
-/** A GitHub UI on a mock client, with a way to tick a box after some polls. */
-function setup(overrides: Partial<GitHubUiOptions> = {}) {
+function setup() {
 	const comments: GitHubComment[] = [];
 	const gh = createMockGitHubClient(comments);
 	const log = createLogger();
 	const summary = vi.fn(async (_markdown: string) => undefined);
-	let ids = 0;
-	const ui = createGitHubUi({
-		gh,
-		issueNumber: 42,
-		allow: {
-			allowedBots: [],
-			allowedUsers: [],
-			allowedAssociations: ["OWNER", "MEMBER"],
-		},
-		pollIntervalMs: 5,
-		timeoutMs: 5000,
-		log,
-		summary,
-		newId: () => {
-			ids += 1;
-			return `q${ids}`;
-		},
-		...overrides,
-	});
-	/** On poll number `polls` of a question, `edit` its body (a user ticking a box). */
-	const onPoll = (polls: number, edit: (body: string) => string) => {
-		let calls = 0;
-		vi.mocked(gh.getComment).mockImplementation(async (id) => {
-			calls += 1;
-			if (calls === polls) {
-				gh.bodies.set(id, edit(gh.bodies.get(id) ?? ""));
-			}
-			return createComment({ id, body: gh.bodies.get(id) ?? null });
-		});
-	};
-	const tick = (label: string) => (body: string) =>
-		body.replace(`- [ ] ${label}`, `- [x] ${label}`);
-	return { gh, log, summary, ui, onPoll, tick, comments };
+	const ui = createGitHubUi({ gh, issueNumber: 42, log, summary });
+	return { gh, log, summary, ui, comments };
 }
 
-describe("createGitHubUi: confirm and select", () => {
-	it("asks with checkboxes, waits for a tick, and shows the answer", async () => {
-		const s = setup({ timeoutMs: 300_000 });
-		s.onPoll(2, s.tick("Yes"));
-
-		await expect(s.ui.confirm("Deploy?", "Ship it?")).resolves.toBe(true);
-
-		const [posted = ""] = s.gh.posted;
-		expect(posted).toContain("<!-- pi-action:question q1 -->");
-		expect(posted).toContain("### ❓ Deploy?");
-		expect(posted).toContain("> Ship it?");
-		expect(posted).toContain("- [ ] Yes\n- [ ] No");
-		expect(posted).toContain("pi waits up to 5 minutes");
-		expect(s.gh.getComment).toHaveBeenCalledTimes(2);
-		const final = String(s.gh.bodies.get(1001));
-		expect(final).toContain("✅ Answered: Yes");
-		expect(final).toContain("- [x] Yes");
-		expect(final).toContain(MARKER);
-		expect(final).not.toContain("Tick one box");
-	});
-
-	it("returns false for No", async () => {
+describe("createGitHubUi: ask", () => {
+	it("posts the question and returns its URL at once", async () => {
 		const s = setup();
-		s.onPoll(1, s.tick("No"));
-		await expect(s.ui.confirm("Deploy?", "")).resolves.toBe(false);
-		expect(s.gh.posted[0]).not.toContain("\n> ");
-	});
-
-	it("returns the option as given, one box per option", async () => {
-		const s = setup();
-		s.onPoll(1, s.tick("green light"));
-		await expect(s.ui.select("Color", ["red", "green\n light"])).resolves.toBe(
-			"green\n light",
-		);
-		expect(s.gh.posted[0]).toContain("- [ ] red\n- [ ] green light");
-		expect(s.gh.bodies.get(1001)).toContain("✅ Answered: green light");
-	});
-
-	it("asks nothing without options", async () => {
-		const s = setup();
-		await expect(s.ui.select("Color", [])).resolves.toBeUndefined();
-		expect(s.gh.posted).toHaveLength(0);
-	});
-
-	it("continues without an answer at the timeout", async () => {
-		const s = setup({ timeoutMs: 30 });
-		await expect(s.ui.confirm("Deploy?", "Ship it?")).resolves.toBe(false);
-		await expect(s.ui.select("Color", ["red"])).resolves.toBeUndefined();
-		expect(s.gh.bodies.get(1001)).toContain(
-			"No answer within 1 second; pi continued without one.",
-		);
-		expect(s.gh.bodies.get(1002)).toContain("No answer within");
-	});
-
-	it("stops waiting when the signal aborts", async () => {
-		const s = setup();
-		const controller = new AbortController();
-		s.onPoll(1, (body) => {
-			controller.abort();
-			return body;
+		await expect(s.ui.ask(CONFIRM)).resolves.toStrictEqual({
+			url: "https://github.com/o/r/issues/1#c1",
 		});
-		await expect(
-			s.ui.confirm("Deploy?", "Ship it?", { signal: controller.signal }),
-		).resolves.toBe(false);
-		expect(s.gh.bodies.get(1001)).toContain("pi stopped waiting");
-
-		await expect(
-			s.ui.select("Color", ["red"], { signal: controller.signal }),
-		).resolves.toBeUndefined();
-		await expect(
-			s.ui.input("Name?", undefined, { signal: controller.signal }),
-		).resolves.toBeUndefined();
-		expect(s.gh.posted).toHaveLength(1); // nothing asked once aborted
-	});
-
-	it("ignores and restores a question someone rewrote", async () => {
-		const s = setup();
-		s.onPoll(1, () => "- [x] Yes\n- [ ] No");
-		await expect(s.ui.confirm("Deploy?", "Ship it?")).resolves.toBe(false);
-		const restored = String(s.gh.bodies.get(1001));
-		expect(restored).toContain("<!-- pi-action:question q1 -->");
-		expect(restored).toContain("edited beyond its checkboxes");
-		expect(s.log.warning).toHaveBeenCalledWith(
-			expect.stringContaining("was edited beyond its checkboxes"),
-		);
-	});
-
-	it("keeps polling when a check fails, and warns when the comment can't be updated", async () => {
-		const s = setup();
-		s.onPoll(2, s.tick("Yes"));
-		vi.mocked(s.gh.getComment).mockRejectedValueOnce(new Error("502"));
-		vi.mocked(s.gh.updateComment).mockRejectedValueOnce(new Error("403"));
-		await expect(s.ui.confirm("Deploy?", "Ship it?")).resolves.toBe(true);
-		expect(s.log.warning).toHaveBeenCalledWith(
-			"Could not check for an answer: 502",
-		);
-		expect(s.log.warning).toHaveBeenCalledWith(
-			"Could not update the question comment: 403",
-		);
-	});
-});
-
-describe("createGitHubUi: input", () => {
-	const reply = (id: number, body: string, association = "MEMBER") =>
-		createComment({
-			id,
-			body,
-			author_association: association,
-			created_at: new Date().toISOString(),
-			html_url: `https://github.com/o/r/issues/42#issuecomment-${id}`,
-		});
-
-	it("takes the first /answer reply from someone allowed to run pi", async () => {
-		const s = setup();
-		s.comments.push(
-			reply(500, "/answer from before the question"),
-			reply(2001, "/answer evil", "NONE"),
-			reply(2002, "not an answer"),
-			reply(2003, "/answer  release-2.1 "),
-		);
-
-		await expect(s.ui.input("Branch?", "main")).resolves.toBe("release-2.1");
-
-		expect(s.gh.posted[0]).toContain("For example: `/answer main`");
-		expect(s.gh.posted[0]).toContain("starts with `/answer`");
-		expect(s.gh.bodies.get(1001)).toContain(
-			"✅ Answered by @user** (https://github.com/o/r/issues/42#issuecomment-2003)",
-		);
-		expect(s.gh.addReaction).toHaveBeenCalledWith(
-			{ source: "comment", issueNumber: 42, commentId: 2003 },
-			"+1",
-		);
+		await s.ui.ask(INPUT);
+		expect(s.gh.posted).toStrictEqual([
+			renderQuestion(CONFIRM),
+			renderQuestion(INPUT),
+		]);
+		expect(s.ui.asked).toStrictEqual([
+			"https://github.com/o/r/issues/1#c1",
+			"https://github.com/o/r/issues/1#c2",
+		]);
 		expect(s.log.info).toHaveBeenCalledWith(
-			"Ignoring /answer from @user, who is not allowed to run pi",
+			"Asked on GitHub: Deploy? (https://github.com/o/r/issues/1#c1)",
 		);
+		expect(s.gh.getComment).not.toHaveBeenCalled();
 	});
 
-	it("uses each reply for one question only, and times out without one", async () => {
-		const s = setup({ timeoutMs: 40 });
-		s.comments.push(reply(2001, "/answer first"));
-		vi.mocked(s.gh.addReaction).mockRejectedValueOnce(new Error("nope"));
-		await expect(s.ui.input("One?")).resolves.toBe("first");
-		await expect(s.ui.input("Two?")).resolves.toBeUndefined();
-		expect(s.gh.posted[1]).not.toContain("For example");
-		expect(s.gh.bodies.get(1002)).toContain("No answer within");
-		expect(s.log.warning).toHaveBeenCalledWith(
-			"Could not react to the answer: nope",
+	it("does not post a question that is still open again", async () => {
+		const s = setup();
+		const answered = answeredBody(renderQuestion(CONFIRM), "Yes", "ada");
+		s.comments.push(
+			createComment({
+				id: 5,
+				body: answered,
+				html_url: "old",
+			}),
+			createComment({ id: 6, body: renderQuestion(CONFIRM), html_url: "open" }),
 		);
+		await expect(s.ui.ask(CONFIRM)).resolves.toStrictEqual({ url: "open" });
+		expect(s.gh.posted).toHaveLength(0);
+		expect(s.ui.asked).toStrictEqual(["open"]);
+		// Answered before: asked anew.
+		s.comments.pop();
+		await expect(s.ui.ask(CONFIRM)).resolves.toStrictEqual({
+			url: "https://github.com/o/r/issues/1#c1",
+		});
+	});
+
+	it("refuses keys that could break the marker, and selects without options", async () => {
+		const s = setup();
+		await expect(s.ui.ask({ ...CONFIRM, key: "x -->" })).rejects.toThrow(
+			"Invalid question key",
+		);
+		await expect(s.ui.ask({ ...SELECT, options: [] })).rejects.toThrow(
+			"has no options",
+		);
+		expect(s.gh.posted).toHaveLength(0);
 	});
 });
 

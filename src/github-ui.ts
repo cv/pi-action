@@ -1,29 +1,28 @@
-// Dialogs for pi-durable extensions (`ui.confirm`, `ui.select`, `ui.input`, `ui.notify`) as GitHub comments.
-import { randomUUID } from "node:crypto";
-import { setTimeout as sleep } from "node:timers/promises";
-
-import { type GitHubClient, toUserType } from "./github.ts";
-import {
-	type Allowlists,
-	sanitizeInput,
-	validatePermissions,
-} from "./security.ts";
-import type { DurableUi, GitHubComment, Log } from "./types.ts";
+// Questions from pi-durable extensions (`ui.ask`) as GitHub comments, and `ui.notify` as the log and job summary.
+// pi-action is an asynchronous host: `ask` posts the question and returns at once. The answer (a ticked box, or an
+// `/answer` reply) starts a later run, which delivers it to the thread (see answers.ts).
+import type { GitHubClient } from "./github.ts";
+import { sanitizeInput } from "./security.ts";
+import type { DurableUi, Log, UiQuestion } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
 
 const MARKER_PREFIX = "<!-- pi-action:question";
+/** Added to a question once it is answered; an open question has none. */
+const ANSWERED_MARK = "<!-- pi-action:answered -->";
+const KEY_PATTERN = /^[0-9a-f]{8,64}$/u;
+const MARKER_PATTERN =
+	/^<!-- pi-action:question ([0-9a-f]{8,64}) (confirm|select|input) -->/u;
+const HEADING_PATTERN = /^### ❓ (.*)$/mu;
 const ANSWER_PATTERN = /^\/answer(?:\s+|$)/iu;
 const TASK_ITEM = /^\s*[-*+]\s+\[([ xX])\]\s+(.*?)\s*$/u;
 const LINE_BREAK = /\r?\n/u;
 const WHITESPACE_RUN = /\s+/gu;
-/** `input` looks this far back for replies, in case the runner's clock is ahead of GitHub's. */
-const CLOCK_SLACK_MS = 60_000;
-const CONFIRM_OPTIONS = ["Yes", "No"];
+const FOOTER_LINE = /^<sub>.*<\/sub>$/u;
+const CONFIRM_OPTIONS: readonly string[] = ["Yes", "No"];
 const NOTIFY_ICONS = { info: "ℹ️", warning: "⚠️", error: "❌" } as const;
+const DEFAULT_TITLE = "pi has a question";
 
-const markerOf = (id: string): string => `<!-- pi-action:question ${id} -->`;
-
-const oneLine = (text: string): string =>
+export const oneLine = (text: string): string =>
 	text.replaceAll(WHITESPACE_RUN, " ").trim();
 
 /** A checkbox label: one line, never empty (an empty task-list item is not a checkbox on GitHub). */
@@ -31,73 +30,66 @@ const optionLabel = (option: string): string => oneLine(option) || "(empty)";
 
 /** Comments that belong to questions (pi-action's own, and `/answer` replies) are never `@pi` triggers. */
 export function isQuestionComment(body: string): boolean {
-	return body.includes(MARKER_PREFIX) || ANSWER_PATTERN.test(body.trim());
+	return body.includes(MARKER_PREFIX) || readAnswerReply(body) !== undefined;
 }
 
-export type CheckboxAnswer =
-	| { status: "unanswered" }
-	| { status: "answered"; index: number }
-	/** The marker is gone or the options are not the ones asked: someone rewrote the question. */
-	| { status: "changed" };
+/** A question comment as it reads now. */
+export interface PostedQuestion {
+	key: string;
+	kind: UiQuestion["kind"];
+	title: string;
+	/** The task list (for confirm and select), in order, and which boxes are ticked. */
+	options: string[];
+	ticked: boolean[];
+	answered: boolean;
+}
 
-/**
- * The state of question `id`'s checkboxes in a comment body: the first checked option (`[x]` or `[X]`), none, or
- * "changed" when the body no longer starts with the question's marker or its task list is not exactly `options`.
- */
-export function readCheckboxAnswer(
-	body: string,
-	id: string,
-	options: readonly string[],
-): CheckboxAnswer {
-	if (!body.trimStart().startsWith(markerOf(id))) {
-		return { status: "changed" };
+/** The question in a comment body that starts with pi-action's marker; undefined for any other comment. */
+export function parseQuestion(body: string): PostedQuestion | undefined {
+	const marker = MARKER_PATTERN.exec(body.trimStart());
+	const [, key, kind] = marker ?? [];
+	if (
+		key === undefined ||
+		(kind !== "confirm" && kind !== "select" && kind !== "input")
+	) {
+		return undefined;
 	}
 	const items = body.split(LINE_BREAK).flatMap((line) => {
 		const match = TASK_ITEM.exec(line);
-		return match ? [{ checked: match[1] !== " ", label: match[2] ?? "" }] : [];
+		return match ? [{ ticked: match[1] !== " ", label: match[2] ?? "" }] : [];
 	});
-	if (
-		items.length !== options.length ||
-		items.some((item, index) => item.label !== options[index])
-	) {
-		return { status: "changed" };
+	return {
+		key,
+		kind,
+		title: sanitizeInput(HEADING_PATTERN.exec(body)?.[1] ?? DEFAULT_TITLE),
+		options: items.map((item) => item.label),
+		ticked: items.map((item) => item.ticked),
+		answered: body.includes(ANSWERED_MARK),
+	};
+}
+
+/**
+ * An `/answer <text>` reply: the answer (sanitized, the prefix removed) and the text the reply quotes first (GitHub's
+ * "Quote reply" puts the quote before the answer). Undefined for any other comment.
+ */
+export function readAnswerReply(
+	body: string,
+): { text: string; quote: string } | undefined {
+	const lines = sanitizeInput(body).split(LINE_BREAK);
+	const start = lines.findIndex(
+		(line) => line.trim() !== "" && !line.startsWith(">"),
+	);
+	const rest = start === -1 ? "" : lines.slice(start).join("\n").trim();
+	const match = ANSWER_PATTERN.exec(rest);
+	if (!match) {
+		return undefined;
 	}
-	const index = items.findIndex((item) => item.checked);
-	return index === -1
-		? { status: "unanswered" }
-		: { status: "answered", index };
-}
-
-/** The answer in an `/answer <text>` reply (sanitized, the prefix removed); undefined for any other comment. */
-export function readAnswerReply(body: string): string | undefined {
-	const text = sanitizeInput(body);
-	const match = ANSWER_PATTERN.exec(text);
-	return match ? text.slice(match[0].length).trim() : undefined;
-}
-
-function formatDuration(ms: number): string {
-	const seconds = Math.max(1, Math.round(ms / 1000));
-	if (seconds % 60 === 0) {
-		const minutes = seconds / 60;
-		return `${minutes} minute${minutes === 1 ? "" : "s"}`;
-	}
-	return `${seconds} second${seconds === 1 ? "" : "s"}`;
-}
-
-function renderQuestion(
-	id: string,
-	title: string,
-	lines: readonly string[],
-	footer: string,
-): string {
-	return [
-		markerOf(id),
-		`### ❓ ${oneLine(title) || "pi has a question"}`,
-		"",
-		...lines,
-		"",
-		footer,
-	].join("\n");
+	const quote = lines
+		.slice(0, Math.max(start, 0))
+		.map((line) => line.slice(1).trim())
+		.join("\n")
+		.trim();
+	return { text: rest.slice(match[0].length).trim(), quote };
 }
 
 /** The message as a blockquote, so none of its lines can pass for one of the question's checkboxes. */
@@ -112,255 +104,131 @@ const quoted = (text: string | undefined): string[] =>
 			]
 		: [];
 
-type Waited<T> =
-	| { kind: "answered"; value: T }
-	| { kind: "timeout" }
-	| { kind: "aborted" };
+/** The checkbox labels a confirm or select question shows. */
+function labelsOf(question: UiQuestion): string[] {
+	if (question.kind === "confirm") {
+		return [...CONFIRM_OPTIONS];
+	}
+	return question.kind === "select"
+		? question.options.map((option) => optionLabel(option))
+		: [];
+}
+
+const CHECKBOX_FOOTER =
+	"<sub>Tick one box to answer. pi continues in a new run when you do; this run has ended.</sub>";
+const REPLY_FOOTER =
+	"<sub>Reply with a comment that starts with `/answer` (only replies from people allowed to run pi count). pi continues in a new run when you do; this run has ended.</sub>";
+
+/** What a question shows between its title and footer: a task list, or an example `/answer` reply. */
+function questionBody(question: UiQuestion): string[] {
+	if (question.kind !== "input") {
+		return [
+			...quoted(question.kind === "confirm" ? question.message : undefined),
+			...labelsOf(question).map((label) => `- [ ] ${label}`),
+		];
+	}
+	return question.placeholder?.trim()
+		? [`For example: \`/answer ${oneLine(question.placeholder)}\``]
+		: [];
+}
+
+export function renderQuestion(question: UiQuestion): string {
+	const body = questionBody(question);
+	return [
+		`<!-- pi-action:question ${question.key} ${question.kind} -->`,
+		`### ❓ ${oneLine(question.title) || DEFAULT_TITLE}`,
+		"",
+		...body,
+		"",
+		question.kind === "input" ? REPLY_FOOTER : CHECKBOX_FOOTER,
+	].join("\n");
+}
+
+/** The question's body once answered: the footer replaced by the answer and who gave it, and the answered mark. */
+export function answeredBody(
+	body: string,
+	answer: string,
+	login: string,
+): string {
+	const lines = body
+		.trimEnd()
+		.split(LINE_BREAK)
+		.filter((line) => !FOOTER_LINE.test(line.trim()));
+	return [
+		...lines,
+		`**✅ Answered: ${oneLine(answer) || "(empty)"} by @${login}**`,
+		ANSWERED_MARK,
+	].join("\n");
+}
 
 export interface GitHubUiOptions {
 	gh: GitHubClient;
 	/** The issue or PR the questions are posted on. */
 	issueNumber: number;
-	/** Who may answer `input` questions: the same rules as for running pi. */
-	allow: Allowlists;
-	pollIntervalMs: number;
-	/** How long a question waits for an answer. */
-	timeoutMs: number;
 	log: Log;
 	/** Appends Markdown to the job summary. */
 	summary?: ((markdown: string) => Promise<void>) | undefined;
-	/** Question IDs (default: random UUIDs). */
-	newId?: () => string;
+}
+
+/** The UI, and the questions this run asked (their comment URLs, oldest first). */
+export interface GitHubUi extends DurableUi {
+	readonly asked: readonly string[];
 }
 
 /**
- * pi-durable dialogs as comments on the issue or PR. `confirm` and `select` post a task list and poll the comment
- * until a box is ticked (only people with write access can edit pi-action's comments); `input` waits for a reply
- * starting with `/answer` from someone allowed to run pi. A question that times out, is aborted, or is rewritten is
- * edited to say pi continued without an answer. `notify` goes to the log and the job summary, not to comments.
+ * pi-durable questions as comments on the issue or PR. `ask` posts a task list (`confirm`, `select`) or a request for
+ * an `/answer` reply (`input`) and returns its URL at once; a question already open with the same key is not posted
+ * twice. `notify` goes to the log and the job summary, not to comments.
  */
-export function createGitHubUi(options: GitHubUiOptions): DurableUi {
+export function createGitHubUi(options: GitHubUiOptions): GitHubUi {
 	const { gh, issueNumber, log } = options;
-	const newId = options.newId ?? randomUUID;
-	const waitsFor = formatDuration(options.timeoutMs);
-	const consumed = new Set<number>();
-	const ignored = new Set<number>();
+	const asked: string[] = [];
 	let summarized = false;
 
-	async function waitFor<T>(
-		check: () => Promise<T | undefined>,
-		signal: AbortSignal | undefined,
-	): Promise<Waited<T>> {
-		const deadline = Date.now() + options.timeoutMs;
-		for (;;) {
-			const remaining = deadline - Date.now();
-			if (signal?.aborted === true) {
-				return { kind: "aborted" };
-			}
-			if (remaining <= 0) {
-				return { kind: "timeout" };
-			}
-			try {
-				// oxlint-disable-next-line eslint/no-await-in-loop -- polling waits between checks by design
-				await sleep(
-					Math.min(options.pollIntervalMs, remaining),
-					undefined,
-					signal ? { signal } : {},
-				);
-			} catch {
-				return { kind: "aborted" };
-			}
-			try {
-				// oxlint-disable-next-line eslint/no-await-in-loop -- one check per round
-				const value = await check();
-				if (value !== undefined) {
-					return { kind: "answered", value };
-				}
-			} catch (error) {
-				log.warning(`Could not check for an answer: ${getErrorMessage(error)}`);
-			}
-		}
-	}
-
-	/** Replace the question's footer with its outcome; `latest` when it still has the footer, else the original. */
-	async function settle(
-		commentId: number,
-		bodies: { original: string; latest: string },
-		footer: string,
-		outcome: string,
-	): Promise<void> {
-		const base = bodies.latest.includes(footer)
-			? bodies.latest
-			: bodies.original;
-		try {
-			await gh.updateComment(commentId, base.replace(footer, outcome));
-		} catch (error) {
-			log.warning(
-				`Could not update the question comment: ${getErrorMessage(error)}`,
+	/** The URL of the open question with this key, if one was posted before. */
+	async function openQuestion(
+		question: UiQuestion,
+	): Promise<string | undefined> {
+		const comments = await gh.listIssueComments(issueNumber);
+		const open = comments.find((comment) => {
+			const posted = parseQuestion(comment.body ?? "");
+			return (
+				posted?.key === question.key &&
+				posted.kind === question.kind &&
+				!posted.answered
 			);
-		}
-	}
-
-	function unanswered(kind: "timeout" | "aborted" | "changed"): string {
-		if (kind === "timeout") {
-			return `**⏱️ No answer within ${waitsFor}; pi continued without one.**`;
-		}
-		return kind === "aborted"
-			? "**⏹️ pi stopped waiting (the run was stopped) and continued without an answer.**"
-			: "**⚠️ This question was edited beyond its checkboxes, so pi ignored it and continued without an answer.**";
-	}
-
-	/** Post a checkbox question and wait for a box; the index of the first ticked option, or undefined. */
-	async function askCheckboxes(
-		title: string,
-		message: string | undefined,
-		labels: readonly string[],
-		signal: AbortSignal | undefined,
-	): Promise<number | undefined> {
-		if (signal?.aborted === true) {
-			return undefined;
-		}
-		const id = newId();
-		const footer = `<sub>Tick one box to answer. pi waits up to ${waitsFor}, then continues without an answer.</sub>`;
-		const original = renderQuestion(
-			id,
-			title,
-			[...quoted(message), ...labels.map((label) => `- [ ] ${label}`)],
-			footer,
-		);
-		const posted = await gh.createComment(issueNumber, original);
-		log.info(`Asked on GitHub: ${oneLine(title)} (${posted.url})`);
-		const bodies = { original, latest: original };
-		const waited = await waitFor(async () => {
-			bodies.latest = (await gh.getComment(posted.id)).body ?? "";
-			const answer = readCheckboxAnswer(bodies.latest, id, labels);
-			return answer.status === "unanswered" ? undefined : answer;
-		}, signal);
-		if (waited.kind === "answered" && waited.value.status === "answered") {
-			const { index } = waited.value;
-			const label = labels[index] ?? "";
-			log.info(`Answered on GitHub: ${oneLine(title)}: ${label}`);
-			await settle(posted.id, bodies, footer, `**✅ Answered: ${label}**`);
-			return index;
-		}
-		const kind = waited.kind === "answered" ? "changed" : waited.kind;
-		if (kind === "changed") {
-			log.warning(
-				`The question "${oneLine(title)}" (${posted.url}) was edited beyond its checkboxes; pi ignored it`,
-			);
-		} else {
-			log.info(`No answer on GitHub to: ${oneLine(title)} (${kind})`);
-		}
-		await settle(
-			posted.id,
-			{ original, latest: original },
-			footer,
-			unanswered(kind),
-		);
-		return undefined;
-	}
-
-	/** 👍 on the reply that answered a question. */
-	async function acknowledge(commentId: number): Promise<void> {
-		try {
-			await gh.addReaction({ source: "comment", issueNumber, commentId }, "+1");
-		} catch (error) {
-			log.warning(`Could not react to the answer: ${getErrorMessage(error)}`);
-		}
-	}
-
-	/** The first `/answer` reply after the question from someone allowed to run pi, not used for another question. */
-	function findReply(
-		comments: readonly GitHubComment[],
-		questionId: number,
-	): { comment: GitHubComment; login: string; text: string } | undefined {
-		for (const comment of comments) {
-			const text = readAnswerReply(comment.body ?? "");
-			const { user } = comment;
-			if (
-				comment.id > questionId &&
-				!consumed.has(comment.id) &&
-				text !== undefined &&
-				user
-			) {
-				const author = { login: user.login, type: toUserType(user.type) };
-				if (
-					validatePermissions(author, comment.author_association, options.allow)
-				) {
-					consumed.add(comment.id);
-					return { comment, login: user.login, text };
-				}
-				if (!ignored.has(comment.id)) {
-					ignored.add(comment.id);
-					log.info(
-						`Ignoring /answer from @${user.login}, who is not allowed to run pi`,
-					);
-				}
-			}
-		}
-		return undefined;
+		});
+		return open?.html_url;
 	}
 
 	return {
-		async confirm(title, message, dialog) {
-			const index = await askCheckboxes(
-				title,
-				message,
-				CONFIRM_OPTIONS,
-				dialog?.signal,
-			);
-			return index === 0;
-		},
+		asked,
 
-		async select(title, choices, dialog) {
-			if (choices.length === 0) {
-				return undefined;
+		async ask(question) {
+			if (!KEY_PATTERN.test(question.key)) {
+				throw new Error(
+					`Invalid question key ${JSON.stringify(question.key)}: expected 8 to 64 lowercase hex characters`,
+				);
 			}
-			const index = await askCheckboxes(
-				title,
-				undefined,
-				choices.map((choice) => optionLabel(choice)),
-				dialog?.signal,
+			if (question.kind === "select" && question.options.length === 0) {
+				throw new Error(
+					`The question "${oneLine(question.title)}" has no options`,
+				);
+			}
+			const title = oneLine(question.title);
+			const open = await openQuestion(question);
+			if (open !== undefined) {
+				log.info(`Already asked on GitHub, still open: ${title} (${open})`);
+				asked.push(open);
+				return { url: open };
+			}
+			const posted = await gh.createComment(
+				issueNumber,
+				renderQuestion(question),
 			);
-			return index === undefined ? undefined : choices[index];
-		},
-
-		async input(title, placeholder, dialog) {
-			const signal = dialog?.signal;
-			if (signal?.aborted === true) {
-				return undefined;
-			}
-			const since = new Date(Date.now() - CLOCK_SLACK_MS).toISOString();
-			const footer = `<sub>Reply with a comment that starts with \`/answer\`; only replies from people allowed to run pi count. pi waits up to ${waitsFor}, then continues without an answer.</sub>`;
-			const hint = placeholder?.trim()
-				? [`For example: \`/answer ${oneLine(placeholder)}\``]
-				: [];
-			const original = renderQuestion(newId(), title, hint, footer);
-			const posted = await gh.createComment(issueNumber, original);
-			log.info(`Asked on GitHub: ${oneLine(title)} (${posted.url})`);
-			const waited = await waitFor(
-				async () =>
-					findReply(await gh.listIssueComments(issueNumber, since), posted.id),
-				signal,
-			);
-			const bodies = { original, latest: original };
-			if (waited.kind !== "answered") {
-				log.info(`No answer on GitHub to: ${oneLine(title)} (${waited.kind})`);
-				await settle(posted.id, bodies, footer, unanswered(waited.kind));
-				return undefined;
-			}
-			const { comment, login, text } = waited.value;
-			log.info(`Answered on GitHub by @${login}: ${oneLine(title)}`);
-			await Promise.all([
-				settle(
-					posted.id,
-					bodies,
-					footer,
-					`**✅ Answered by @${login}** (${comment.html_url})`,
-				),
-				acknowledge(comment.id),
-			]);
-			return text;
+			log.info(`Asked on GitHub: ${title} (${posted.url})`);
+			asked.push(posted.url);
+			return { url: posted.url };
 		},
 
 		notify(message, level = "info") {
