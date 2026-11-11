@@ -314,7 +314,7 @@ describe("pushThread (the always() step)", () => {
 
 		expect(await pushThread(payload, deps.cwd, log)).toBe("pushed");
 		expect(git(w.remote, "rev-parse", REF).trim()).toBe(tip);
-		expect(await pushThread(payload, deps.cwd, log)).toBe("pushed");
+		expect(await pushThread(payload, deps.cwd, log)).toBe("up-to-date");
 		expect(await pushThread({ issue: { number: 7 } }, deps.cwd, log)).toBe(
 			"nothing",
 		);

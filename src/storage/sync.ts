@@ -81,12 +81,7 @@ export class GitSync {
 	 * when the remote has no such ref yet.
 	 */
 	async fetch(): Promise<string | undefined> {
-		const { stdout } = await this.git(
-			["ls-remote", "--refs", this.remote, this.ref],
-			this.repo,
-		);
-		const line = stdout.split("\n").find((l) => l.endsWith(`\t${this.ref}`));
-		const tip = line?.split("\t")[0];
+		const tip = await this.remoteHead();
 		if (tip === undefined) {
 			await this.git(["update-ref", "-d", this.ref], this.repo).catch(
 				() => undefined,
@@ -106,8 +101,18 @@ export class GitSync {
 			);
 			this.log(`${this.ref}: fetched ${tip.slice(0, 7)}`);
 		}
-		this.remoteTip = tip;
 		return tip;
+	}
+
+	/** Look up the remote tip without touching the local ref; undefined when the remote has no such ref. */
+	async remoteHead(): Promise<string | undefined> {
+		const { stdout } = await this.git(
+			["ls-remote", "--refs", this.remote, this.ref],
+			this.repo,
+		);
+		const line = stdout.split("\n").find((l) => l.endsWith(`\t${this.ref}`));
+		this.remoteTip = line?.split("\t")[0];
+		return this.remoteTip;
 	}
 
 	/** Push `tip` soon; resolves when it (or a newer scheduled tip) is pushed. */

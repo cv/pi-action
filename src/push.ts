@@ -27,7 +27,7 @@ export async function pushThread(
 	cwd: string,
 	log: PushLogger,
 	prNumber?: number,
-): Promise<"pushed" | "nothing" | "failed"> {
+): Promise<"pushed" | "up-to-date" | "nothing" | "failed"> {
 	const number = threadNumber(payload) ?? prNumber;
 	if (number === undefined) {
 		return "nothing";
@@ -43,7 +43,12 @@ export async function pushThread(
 		return "nothing";
 	}
 	try {
-		await new GitSync({ repo: cwd, ref, log: log.info }).flush(tip);
+		const sync = new GitSync({ repo: cwd, ref, log: log.info });
+		if ((await sync.remoteHead()) === tip) {
+			log.info(`${ref} is already saved at ${tip.slice(0, 7)}`);
+			return "up-to-date";
+		}
+		await sync.flush(tip);
 		log.info(`${ref} is saved at ${tip.slice(0, 7)}`);
 		return "pushed";
 	} catch (error) {
