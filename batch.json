@@ -1,1 +1,1 @@
-{"format":1,"seq":284,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",2,"arguments","content"]," Without a quote, it goes"]]}}]}
+{"format":1,"seq":285,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",2,"arguments","content"]," to the oldest open `input` question. pi-action adds 👍 to the reply.\n- pi-action never tak"]]}}]}
