@@ -2,7 +2,9 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
+
 import { installAgentHooks } from "./install-agent-hooks.js";
 import {
 	appendIssueReference,
@@ -26,11 +28,15 @@ describe("prepare-commit-msg", () => {
 		const messageFile = join(directory, "message");
 		await writeFile(messageFile, "fix: correct bug\n");
 
-		expect(await appendIssueReference(messageFile, "fix/123-bug")).toBe(true);
-		expect(await readFile(messageFile, "utf8")).toBe(
+		await expect(
+			appendIssueReference(messageFile, "fix/123-bug"),
+		).resolves.toBe(true);
+		await expect(readFile(messageFile, "utf8")).resolves.toBe(
 			"fix: correct bug\n\nRefs #123\n",
 		);
-		expect(await appendIssueReference(messageFile, "fix/123-bug")).toBe(false);
+		await expect(
+			appendIssueReference(messageFile, "fix/123-bug"),
+		).resolves.toBe(false);
 	});
 
 	it("ignores non-regular commits", async () => {
@@ -38,10 +44,12 @@ describe("prepare-commit-msg", () => {
 		const messageFile = join(directory, "message");
 		await writeFile(messageFile, "Merge branch main\n");
 
-		expect(
-			await appendIssueReference(messageFile, "fix/123-bug", "merge"),
-		).toBe(false);
-		expect(await readFile(messageFile, "utf8")).toBe("Merge branch main\n");
+		await expect(
+			appendIssueReference(messageFile, "fix/123-bug", "merge"),
+		).resolves.toBe(false);
+		await expect(readFile(messageFile, "utf8")).resolves.toBe(
+			"Merge branch main\n",
+		);
 	});
 });
 
@@ -77,10 +85,12 @@ describe("install-agent-hooks", () => {
 		expect(
 			spawnSync(prepareHook, [validMessage], { cwd: directory }).status,
 		).toBe(0);
-		expect(await readFile(validMessage, "utf8")).toContain("Refs #456");
+		await expect(readFile(validMessage, "utf8")).resolves.toContain(
+			"Refs #456",
+		);
 
 		await installAgentHooks(directory);
-		expect(await readFile(commitHook, "utf8")).toContain(
+		await expect(readFile(commitHook, "utf8")).resolves.toContain(
 			"Conventional Commits",
 		);
 	});

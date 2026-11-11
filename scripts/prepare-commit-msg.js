@@ -2,7 +2,6 @@
 import { execFileSync } from "node:child_process";
 import { appendFile, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 const ISSUE_NUMBER_PATTERN = /\d+/u;
 
@@ -52,10 +51,7 @@ async function main() {
 	await appendIssueReference(messageFile, undefined, commitSource);
 }
 
-if (
-	process.argv[1] &&
-	resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
 	main().catch((error) => {
 		process.stderr.write(
 			`${error instanceof Error ? error.message : String(error)}\n`,

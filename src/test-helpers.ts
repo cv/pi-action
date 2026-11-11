@@ -5,10 +5,12 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { vi } from "vitest";
+
 import { DEFAULTS } from "./defaults.ts";
 import type { GitHubClient } from "./github.ts";
-import type { ActionInputs } from "./run.ts";
+import type { ActionInputs, Logger } from "./run.ts";
 import type { GitHubComment, ModelConfig, TriggerInfo } from "./types.ts";
 
 const since = (list: GitHubComment[], iso?: string) =>
@@ -20,6 +22,17 @@ const since = (list: GitHubComment[], iso?: string) =>
  * Creates a mock GitHub client with all required methods. `comments` and `reviewComments` back the list
  * methods (live arrays: tests may push to them), and posted comment bodies are recorded in `posted`.
  */
+/** A Logger whose methods are typed mocks. */
+export function createLogger(): Logger {
+	return {
+		info: vi.fn<Logger["info"]>(),
+		warning: vi.fn<Logger["warning"]>(),
+		error: vi.fn<Logger["error"]>(),
+		setFailed: vi.fn<Logger["setFailed"]>(),
+		setOutput: vi.fn<Logger["setOutput"]>(),
+	};
+}
+
 export function createMockGitHubClient(
 	comments: GitHubComment[] = [],
 	reviewComments: GitHubComment[] = [],
@@ -29,12 +42,12 @@ export function createMockGitHubClient(
 		posted,
 		addReactionToComment: vi.fn(),
 		addReactionToIssue: vi.fn(),
-		createComment: vi.fn((_issue: number, body: string) => {
+		createComment: vi.fn(async (_issue: number, body: string) => {
 			posted.push(body);
-			return Promise.resolve({
+			return {
 				id: 1000 + posted.length,
 				url: `https://github.com/o/r/issues/1#c${posted.length}`,
-			});
+			};
 		}),
 		getPullRequest: vi.fn().mockResolvedValue({
 			number: 1,
@@ -45,11 +58,11 @@ export function createMockGitHubClient(
 		}),
 		getPullRequestDiff: vi.fn().mockResolvedValue(""),
 		getPullRequestReviewComments: vi.fn().mockResolvedValue([]),
-		listIssueComments: vi.fn((_issue: number, iso?: string) =>
-			Promise.resolve(since(comments, iso)),
+		listIssueComments: vi.fn(async (_issue: number, iso?: string) =>
+			since(comments, iso),
 		),
-		listReviewComments: vi.fn((_pr: number, iso?: string) =>
-			Promise.resolve(since(reviewComments, iso)),
+		listReviewComments: vi.fn(async (_pr: number, iso?: string) =>
+			since(reviewComments, iso),
 		),
 	};
 }
@@ -136,6 +149,8 @@ export function tempRepo(): {
 	return {
 		dir,
 		git,
-		cleanup: () => rmSync(dir, { recursive: true, force: true }),
+		cleanup: () => {
+			rmSync(dir, { recursive: true, force: true });
+		},
 	};
 }

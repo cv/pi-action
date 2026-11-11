@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+
 import {
 	addReaction,
 	createGitHubClient,
@@ -27,7 +28,7 @@ describe("extractTriggerInfo", () => {
 			};
 
 			const result = extractTriggerInfo(payload);
-			expect(result).toEqual({
+			expect(result).toStrictEqual({
 				isCommentEvent: true,
 				triggerText: "@pi do something",
 				author: { login: "testuser", type: "User" },
@@ -59,7 +60,7 @@ describe("extractTriggerInfo", () => {
 			};
 
 			const result = extractTriggerInfo(payload);
-			expect(result).toEqual({
+			expect(result).toStrictEqual({
 				isCommentEvent: true,
 				triggerText: "@pi review this",
 				author: { login: "reviewer", type: "User" },
@@ -95,7 +96,7 @@ describe("extractTriggerInfo", () => {
 
 			const result = extractTriggerInfo(payload);
 
-			expect(result).toEqual(
+			expect(result).toStrictEqual(
 				expect.objectContaining({
 					isCommentEvent: true,
 					issueNumber: 100,
@@ -118,7 +119,7 @@ describe("extractTriggerInfo", () => {
 			};
 
 			const result = extractTriggerInfo(payload);
-			expect(result).toEqual({
+			expect(result).toStrictEqual({
 				isCommentEvent: false,
 				triggerText: "@pi help me with this",
 				author: { login: "creator", type: "User" },
@@ -126,7 +127,6 @@ describe("extractTriggerInfo", () => {
 				issueNumber: 1,
 				issueTitle: "New Issue",
 				issueBody: "@pi help me with this",
-				commentId: undefined,
 				isPullRequest: false,
 				source: "body",
 			});
@@ -144,7 +144,7 @@ describe("extractTriggerInfo", () => {
 			};
 
 			const result = extractTriggerInfo(payload);
-			expect(result).toEqual({
+			expect(result).toStrictEqual({
 				isCommentEvent: false,
 				triggerText: "@pi please review",
 				author: { login: "contributor", type: "User" },
@@ -152,7 +152,6 @@ describe("extractTriggerInfo", () => {
 				issueNumber: 5,
 				issueTitle: "New PR",
 				issueBody: "@pi please review",
-				commentId: undefined,
 				isPullRequest: true,
 				source: "body",
 			});
@@ -353,7 +352,7 @@ describe("createGitHubClient", () => {
 			per_page: 100,
 			page: 1,
 		});
-		expect(comments).toEqual([
+		expect(comments).toStrictEqual([
 			{
 				id: 1,
 				body: "Please simplify this",
@@ -381,7 +380,7 @@ describe("createGitHubClient", () => {
 
 		const comments = await client.getPullRequestReviewComments(99);
 
-		expect(comments).toEqual([
+		expect(comments).toStrictEqual([
 			{
 				id: 2,
 				body: "General comment",
@@ -463,7 +462,7 @@ describe("createGitHubClient (durable threads)", () => {
 
 	it("returns the posted comment's id and URL", async () => {
 		const client = createGitHubClient(octokit(), context);
-		expect(await client.createComment(1, "hi")).toEqual({
+		await expect(client.createComment(1, "hi")).resolves.toStrictEqual({
 			id: 7,
 			url: "https://github.com/c/7",
 		});
@@ -512,9 +511,9 @@ describe("createGitHubClient (durable threads)", () => {
 		mock.rest.pulls.listReviewComments.mockResolvedValueOnce({
 			data: page(2, 0),
 		});
-		expect(
-			await createGitHubClient(mock, context).listReviewComments(9),
-		).toHaveLength(2);
+		await expect(
+			createGitHubClient(mock, context).listReviewComments(9),
+		).resolves.toHaveLength(2);
 		expect(mock.rest.pulls.listReviewComments).toHaveBeenCalledWith({
 			owner: "o",
 			repo: "r",
@@ -535,7 +534,7 @@ describe("createGitHubClient (durable threads)", () => {
 			mock,
 			context,
 		).getPullRequestReviewComments(9);
-		expect(comment).toEqual({
+		expect(comment).toStrictEqual({
 			id: 1,
 			body: "",
 			user: { login: "ghost", type: "User" },

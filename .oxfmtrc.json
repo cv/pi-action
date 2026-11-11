@@ -1,0 +1,24 @@
+{
+	"$schema": "./node_modules/oxfmt/configuration_schema.json",
+	"useTabs": true,
+	"tabWidth": 2,
+	"printWidth": 80,
+	"singleQuote": false,
+	"jsxSingleQuote": false,
+	"quoteProps": "as-needed",
+	"trailingComma": "all",
+	"semi": true,
+	"arrowParens": "always",
+	"bracketSameLine": false,
+	"bracketSpacing": true,
+	"sortImports": true,
+	"sortPackageJson": true,
+	"ignorePatterns": [
+		"**/node_modules",
+		"**/coverage",
+		"**/*.md",
+		"**/*.yml",
+		"**/*.yaml",
+		"package-lock.json"
+	]
+}

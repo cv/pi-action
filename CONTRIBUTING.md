@@ -211,11 +211,11 @@ This verifies the TypeScript production entrypoint without emitting JavaScript. 
 
 ## Code Style
 
-- TypeScript with strict mode (see [`tsconfig.json`](tsconfig.json))
-- [Biome](https://biomejs.dev/) for formatting and linting (see [`biome.json`](biome.json))
-- No semicolons, tabs for indentation
-- Prefer explicit types over inference for function signatures
-- Use discriminated unions for result types (see [`AgentResult` in `types.ts`](src/types.ts))
+- TypeScript with every strict compiler option on (see [`tsconfig.json`](tsconfig.json)); Node runs it directly, so only erasable syntax
+- [oxlint](https://oxc.rs/docs/guide/usage/linter) with type-aware rules (see [`.oxlintrc.json`](.oxlintrc.json)): every rule category is an error, and the few rules that are off say why. Warnings fail the build, and so do `oxlint-disable` comments that no longer suppress anything
+- [oxfmt](https://oxc.rs/docs/guide/usage/formatter) formats the code and JSON, and sorts imports (see [`.oxfmtrc.json`](.oxfmtrc.json)); Markdown and YAML are formatted by hand
+- An `oxlint-disable-next-line <rule> -- <reason>` comment is fine when a rule is wrong for one line; say why
+- Values from outside (JSON, GitHub payloads, git output) are `unknown` until checked, not cast
 
 ## Pull Request Guidelines
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { sanitizeInput, validatePermissions } from "./security.ts";
 
 function createSecurityContext(

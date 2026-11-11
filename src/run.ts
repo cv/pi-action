@@ -1,4 +1,5 @@
 import type { Models } from "@earendil-works/pi-ai/models";
+
 import { buildPrompt, formatFollowUp, type PIContext } from "./context.ts";
 import { ThreadConversation, type ThreadResult } from "./conversation.ts";
 import { DEFAULTS } from "./defaults.ts";
@@ -75,7 +76,7 @@ export interface ActionDependencies {
 	env?: Record<string, string | undefined>;
 }
 
-const defaultModels = (inputs: ActionInputs): Promise<Models> =>
+const defaultModels = async (inputs: ActionInputs): Promise<Models> =>
 	createActionModels({
 		provider: inputs.modelConfig.provider,
 		model: inputs.modelConfig.model,
@@ -89,7 +90,9 @@ function pushOnSignals(thread: Thread, log: Logger): () => void {
 		log.warning(`Received ${signal}; saving the thread before exiting`);
 		thread
 			.push()
-			.catch((error: unknown) => log.warning(getErrorMessage(error)))
+			.catch((error: unknown) => {
+				log.warning(getErrorMessage(error));
+			})
 			.finally(() => {
 				process.exitCode = 1;
 				process.kill(process.pid, "SIGKILL");
@@ -213,10 +216,6 @@ class ActionRun {
 		}
 	}
 
-	private footer(thread?: Thread): CommentFooter {
-		return { ref: thread?.ref };
-	}
-
 	private async converse(thread: Thread): Promise<void> {
 		const { triggerInfo } = this;
 		this.deps.log.info(
@@ -230,11 +229,11 @@ class ActionRun {
 			timeoutSeconds: this.inputs.modelConfig.timeout,
 			pollIntervalMs:
 				(this.inputs.pollInterval || DEFAULTS.pollInterval) * 1000,
-			message: (trigger, first) => this.message(trigger, first),
-			deliver: (trigger, result, alreadyPosted) =>
+			message: async (trigger, first) => this.message(trigger, first),
+			deliver: async (trigger, result, alreadyPosted) =>
 				this.deliver(thread, trigger, result, alreadyPosted),
 			...(this.interactive && triggerInfo
-				? { poll: () => this.poll(thread, triggerInfo) }
+				? { poll: async () => this.poll(thread, triggerInfo) }
 				: {}),
 		});
 		if (!(this.interactive && triggerInfo)) {
@@ -257,30 +256,26 @@ class ActionRun {
 	}
 
 	/** New thread: from the time of the trigger; existing one: everything since it began. */
-	private poll(thread: Thread, info: TriggerInfo): Promise<Trigger[]> {
+	private async poll(thread: Thread, info: TriggerInfo): Promise<Trigger[]> {
 		const since =
 			thread.startedAt ??
 			new Date(Date.parse(info.createdAt ?? new Date().toISOString()) - 1000);
 		return collectTriggers(this.gh, info, this.filter, since);
 	}
 
-	private message(trigger: Trigger, first: boolean): Promise<string> {
+	private async message(trigger: Trigger, first: boolean): Promise<string> {
 		if (first) {
-			return Promise.resolve(
-				buildPrompt(
-					contextFor(this.piContext, trigger),
-					this.inputs.promptTemplate,
-				),
+			return buildPrompt(
+				contextFor(this.piContext, trigger),
+				this.inputs.promptTemplate,
 			);
 		}
-		return Promise.resolve(
-			formatFollowUp({
-				author: trigger.author.login,
-				task: trigger.task,
-				reviewComment: trigger.source === "review_comment",
-				...(trigger.url ? { url: trigger.url } : {}),
-			}),
-		);
+		return formatFollowUp({
+			author: trigger.author.login,
+			task: trigger.task,
+			reviewComment: trigger.source === "review_comment",
+			...(trigger.url ? { url: trigger.url } : {}),
+		});
 	}
 
 	private async deliver(
@@ -305,16 +300,16 @@ class ActionRun {
 			);
 		}
 		if (alreadyPosted) {
-			return;
+			return undefined;
 		}
 		const number = issueNumberOf(this.piContext);
 		if (number === undefined) {
 			log.setFailed(
 				"comment output mode requires an issue or pull request trigger",
 			);
-			return;
+			return undefined;
 		}
-		const footer = this.footer(thread);
+		const footer: CommentFooter = { ref: thread.ref };
 		const body = result.success
 			? formatSuccessComment(result.response, footer)
 			: formatErrorComment(result.error, footer);

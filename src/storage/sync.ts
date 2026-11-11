@@ -1,7 +1,8 @@
 // Moving a GitStorage ref between a local repository and a remote: fetch it before opening, push it as it grows.
 import { execFile } from "node:child_process";
-import { assertRefName } from "./git.ts";
+
 import type { Batch } from "./git-storage.ts";
+import { assertRefName } from "./git.ts";
 
 export class GitSyncConflictError extends Error {
 	readonly ref: string;
@@ -45,6 +46,27 @@ export function isTurnBoundary(batches: readonly Batch[]): boolean {
  * (GitSyncConflictError) instead of overwriting the other's history. Pushes are coalesced: at most one runs,
  * and the newest scheduled tip goes next.
  */
+export const runGit: GitRunner = async (args, cwd) =>
+	new Promise((resolve, reject) => {
+		execFile(
+			"git",
+			[...args],
+			{ cwd, maxBuffer: 64 * 1024 * 1024 },
+			(error, stdout, stderr) => {
+				if (error) {
+					reject(
+						Object.assign(new Error(error.message, { cause: error }), {
+							stdout,
+							stderr,
+						}),
+					);
+				} else {
+					resolve({ stdout, stderr });
+				}
+			},
+		);
+	});
+
 export class GitSync {
 	readonly ref: string;
 	readonly remote: string;
@@ -116,9 +138,9 @@ export class GitSync {
 	}
 
 	/** Push `tip` soon; resolves when it (or a newer scheduled tip) is pushed. */
-	schedule(tip: string): Promise<void> {
+	async schedule(tip: string): Promise<void> {
 		if (this.failure) {
-			return Promise.reject(this.failure);
+			throw this.failure;
 		}
 		this.wanted = tip;
 		this.running ??= this.drain().finally(() => {
@@ -144,14 +166,19 @@ export class GitSync {
 		while (this.wanted !== undefined && this.wanted !== this.remoteTip) {
 			const tip = this.wanted;
 			try {
-				// biome-ignore lint/performance/noAwaitInLoops: pushes go one at a time, newest tip next
+				// oxlint-disable-next-line eslint/no-await-in-loop -- pushes go one at a time, newest tip next
 				await this.git(
 					["push", "--quiet", "--no-verify", this.remote, `${tip}:${this.ref}`],
 					this.repo,
 				);
 			} catch (error) {
-				const { stderr } = error as { stderr?: string };
-				const detail = (stderr ? stderr : String(error)).trim();
+				const stderr: unknown =
+					typeof error === "object" && error !== null
+						? Reflect.get(error, "stderr")
+						: undefined;
+				const detail = (
+					typeof stderr === "string" && stderr !== "" ? stderr : String(error)
+				).trim();
 				this.failure = REJECTED_PATTERN.test(detail)
 					? new GitSyncConflictError(this.ref, detail)
 					: new Error(`Push of ${this.ref} failed: ${detail}`);
@@ -162,19 +189,3 @@ export class GitSync {
 		}
 	}
 }
-
-export const runGit: GitRunner = (args, cwd) =>
-	new Promise((resolve, reject) => {
-		execFile(
-			"git",
-			[...args],
-			{ cwd, maxBuffer: 64 * 1024 * 1024 },
-			(error, stdout, stderr) => {
-				if (error) {
-					reject(Object.assign(error, { stdout, stderr }));
-				} else {
-					resolve({ stdout, stderr });
-				}
-			},
-		);
-	});

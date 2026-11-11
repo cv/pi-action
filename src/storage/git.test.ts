@@ -1,11 +1,13 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { ConversationId } from "@earendil-works/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
+
 import { tempRepo } from "../test-helpers.ts";
-import { assertRefName, GitRepo, RefConflictError } from "./git.ts";
 import { GitStorage } from "./git-storage.ts";
+import { assertRefName, GitRepo, RefConflictError } from "./git.ts";
 
 const author = { name: "t", email: "t@t" };
 const cleanups: (() => void)[] = [];
@@ -21,10 +23,11 @@ function repo() {
 }
 async function commitChain(git: GitRepo, files: Record<string, string>[]) {
 	let parent: string | undefined;
+	// Building a chain: each commit is the parent of the next.
+	/* oxlint-disable eslint/no-await-in-loop */
 	for (const content of files) {
 		const entries: Record<string, string> = {};
 		for (const [name, text] of Object.entries(content)) {
-			// biome-ignore lint/performance/noAwaitInLoops: building a chain in order
 			entries[name] = await git.writeBlob(text);
 		}
 		const tree = await git.writeTree(entries);
@@ -35,6 +38,7 @@ async function commitChain(git: GitRepo, files: Record<string, string>[]) {
 			message: "m\n",
 		});
 	}
+	/* oxlint-enable eslint/no-await-in-loop */
 	return parent ?? "";
 }
 
@@ -52,7 +56,9 @@ describe("assertRefName", () => {
 	it.each(["refs/pi/threads/1", "refs/heads/feature/x"])(
 		"accepts %s",
 		(ref) => {
-			expect(() => assertRefName(ref)).not.toThrow();
+			expect(() => {
+				assertRefName(ref);
+			}).not.toThrow();
 		},
 	);
 	it.each([
@@ -67,7 +73,9 @@ describe("assertRefName", () => {
 		"refs/pi/x.lock",
 		"refs/pi/end.",
 	])("rejects %s", (ref) => {
-		expect(() => assertRefName(ref)).toThrow(BAD_REF);
+		expect(() => {
+			assertRefName(ref);
+		}).toThrow(BAD_REF);
 	});
 });
 
@@ -87,15 +95,19 @@ describe("GitRepo", () => {
 		);
 		const linked = join(r.dir, "..", `${r.dir.split("/").at(-1)}-wt`);
 		r.git("worktree", "add", "-q", linked);
-		cleanups.push(() => rmSync(linked, { recursive: true, force: true }));
+		cleanups.push(() => {
+			rmSync(linked, { recursive: true, force: true });
+		});
 		r.git("init", "-q", "--bare", "b.git");
 		const tip = await commitChain(await GitRepo.open(r.dir), [{ f: "x" }]);
-		for (const path of [join(r.dir, ".git"), linked]) {
-			// biome-ignore lint/performance/noAwaitInLoops: one at a time
-			const git = await GitRepo.open(path);
-			expect((await git.commits(tip)).map((c) => c.id)).toEqual([tip]);
-			await git.close();
+		const opened = await Promise.all(
+			[join(r.dir, ".git"), linked].map(async (path) => GitRepo.open(path)),
+		);
+		for (const git of opened) {
+			// oxlint-disable-next-line eslint/no-await-in-loop -- one repository at a time
+			expect((await git.commits(tip)).map((c) => c.id)).toStrictEqual([tip]);
 		}
+		await Promise.all(opened.map(async (git) => git.close()));
 		await expect(GitRepo.open(join(r.dir, "b.git"))).resolves.toBeInstanceOf(
 			GitRepo,
 		);
@@ -114,20 +126,20 @@ describe("GitRepo", () => {
 		await git.updateRef("refs/pi/x", tip, undefined);
 		const chain = await git.commits(tip);
 		expect(chain).toHaveLength(2);
-		expect(chain[1]).toEqual({ id: tip, parents: [chain[0]?.id] });
+		expect(chain[1]).toStrictEqual({ id: tip, parents: [chain[0]?.id] });
 		expect((await git.readFile(tip, "a.txt")).toString()).toBe("two");
 		await git.close();
 
 		r.git("gc", "-q", "--prune=now");
 		const packed = await GitRepo.open(r.dir);
-		expect(await packed.readRef("refs/pi/x")).toBe(tip);
+		await expect(packed.readRef("refs/pi/x")).resolves.toBe(tip);
 		expect((await packed.readFile(tip, "a.txt")).toString()).toBe("two");
 		await expect(packed.readFile(tip, "b.txt")).rejects.toThrow(MISSING);
 		await expect(packed.readFile("nope", "a.txt")).rejects.toThrow(
 			"Bad object id",
 		);
 		await expect(packed.commits("nope")).rejects.toThrow("Bad object id");
-		expect(await packed.readRef("refs/pi/none")).toBeUndefined();
+		await expect(packed.readRef("refs/pi/none")).resolves.toBeUndefined();
 		await packed.close();
 	});
 
@@ -149,7 +161,7 @@ describe("GitRepo", () => {
 			git.updateRef("refs/pi/w", two, "f".repeat(40)),
 		).rejects.toMatchObject({ actual: one });
 		await git.updateRef("refs/pi/w", two, one);
-		expect(await git.readRef("refs/pi/w")).toBe(two);
+		await expect(git.readRef("refs/pi/w")).resolves.toBe(two);
 
 		mkdirSync(join(r.dir, ".git", "refs", "pi"), { recursive: true });
 		writeFileSync(join(r.dir, ".git", "refs", "pi", "z.lock"), "");
@@ -196,7 +208,9 @@ describe("GitRepo", () => {
 		);
 		await storage.close(BACKGROUND_CONTEXT);
 		const reopened = await GitStorage.open({ repo: sub, ref: "refs/pi/s" });
-		expect(await reopened.conversation(id, BACKGROUND_CONTEXT)).toBeDefined();
+		await expect(
+			reopened.conversation(id, BACKGROUND_CONTEXT),
+		).resolves.toBeDefined();
 		await reopened.close(BACKGROUND_CONTEXT);
 	});
 });
@@ -218,7 +232,7 @@ describe("GitStorage corruption and modes", () => {
 		}
 		await git.updateRef("refs/pi/t", tip, undefined);
 		await git.close();
-		return () => GitStorage.open({ repo: r.dir, ref: "refs/pi/t" });
+		return async () => GitStorage.open({ repo: r.dir, ref: "refs/pi/t" });
 	}
 
 	it("rejects logs it cannot replay", async () => {
@@ -276,7 +290,7 @@ describe("GitStorage corruption and modes", () => {
 			ref: "refs/pi/m",
 			readOnly: true,
 		});
-		expect(await reader.conversation(id, ctx)).toBeDefined();
+		await expect(reader.conversation(id, ctx)).resolves.toBeDefined();
 		await expect(reader.commit([[]], () => undefined, ctx)).rejects.toThrow(
 			READ_ONLY,
 		);

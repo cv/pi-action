@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+
 import { describe, expect, it } from "vitest";
 
 // Vitest resolves "./x.js" to x.ts, but the action runs these files with plain Node (type stripping), which

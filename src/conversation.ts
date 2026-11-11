@@ -1,5 +1,6 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Submission } from "@earendil-works/pi-durable";
+
 import type { Thread } from "./thread.ts";
 import type { Trigger } from "./triggers.ts";
 import { getErrorMessage } from "./utils.ts";
@@ -50,7 +51,12 @@ function sleep(ms: number): { promise: Promise<void>; cancel: () => void } {
 	const promise = new Promise<void>((resolve) => {
 		timer = setTimeout(resolve, Math.max(0, ms));
 	});
-	return { promise, cancel: () => clearTimeout(timer) };
+	return {
+		promise,
+		cancel: () => {
+			clearTimeout(timer);
+		},
+	};
 }
 
 function describeUnanswered(
@@ -100,32 +106,30 @@ export class ThreadConversation {
 			}
 			if (this.pending.size > 0) {
 				const timer = sleep(Math.min(pollIntervalMs, remaining));
-				// biome-ignore lint/performance/noAwaitInLoops: the poll loop waits between rounds by design
-				await Promise.race([
-					Promise.allSettled([...this.pending]),
-					timer.promise,
-				]);
+				// oxlint-disable-next-line eslint/no-await-in-loop -- the poll loop waits between rounds by design
+				await Promise.race([Promise.allSettled(this.pending), timer.promise]);
 				timer.cancel();
 			}
 			const fresh = poll
-				? (await poll()).filter((trigger) => !this.handled.has(trigger.key))
+				? // oxlint-disable-next-line eslint/no-await-in-loop -- each round polls once, after the wait
+					(await poll()).filter((trigger) => !this.handled.has(trigger.key))
 				: [];
 			if (fresh.length > 0) {
 				log.info(
 					`${fresh.length} new comment(s) for pi; adding them to the conversation`,
 				);
+				// oxlint-disable-next-line eslint/no-await-in-loop -- new comments join before the next round
 				await this.submitAll(fresh);
 			} else if (this.pending.size === 0) {
 				break;
 			}
 		}
 
-		// biome-ignore lint/suspicious/noUnnecessaryConditions: set by the loop above
 		if (this.timedOut) {
 			log.warning(`Timeout after ${timeoutSeconds} seconds; aborting the run`);
 			await thread.abort();
 		}
-		await Promise.allSettled([...this.pending]);
+		await Promise.allSettled(this.pending);
 		await this.delivering;
 	}
 
@@ -134,7 +138,7 @@ export class ThreadConversation {
 			if (!this.handled.has(trigger.key)) {
 				const first = this.options.thread.isNew && this.handled.size === 0;
 				this.handled.add(trigger.key);
-				// biome-ignore lint/performance/noAwaitInLoops: triggers are submitted in order
+				// oxlint-disable-next-line eslint/no-await-in-loop -- triggers are submitted in order
 				const content = await this.options.message(trigger, first);
 				this.track(trigger, this.answer(trigger, content));
 			}
@@ -142,13 +146,19 @@ export class ThreadConversation {
 	}
 
 	private track(trigger: Trigger, result: Promise<SettledResult>): void {
-		const settled = result
-			.then((outcome) => this.enqueueDelivery(trigger, outcome))
-			.catch((error: unknown) =>
-				this.options.log.warning(getErrorMessage(error)),
-			);
+		const settled = (async () => {
+			try {
+				this.enqueueDelivery(trigger, await result);
+			} catch (error) {
+				this.options.log.warning(getErrorMessage(error));
+			}
+		})();
 		this.pending.add(settled);
-		settled.finally(() => this.pending.delete(settled)).catch(() => undefined);
+		settled
+			.finally(() => {
+				this.pending.delete(settled);
+			})
+			.catch(() => undefined);
 	}
 
 	/** Submit and wait; an empty answer is followed by one request for a summary (as pi-action always did). */
@@ -206,7 +216,6 @@ export class ThreadConversation {
 					: { success: false, error: EMPTY_RESPONSE },
 			};
 		}
-		// biome-ignore lint/suspicious/noUnnecessaryConditions: set by run() while answers are pending
 		const timedOutAfter = this.timedOut
 			? this.options.timeoutSeconds
 			: undefined;
@@ -222,12 +231,12 @@ export class ThreadConversation {
 
 	private enqueueDelivery(trigger: Trigger, outcome: SettledResult): void {
 		this.delivering = this.delivering
-			.then(() => this.deliver(trigger, outcome))
-			.catch((error: unknown) =>
+			.then(async () => this.deliver(trigger, outcome))
+			.catch((error: unknown) => {
 				this.options.log.warning(
 					`Failed to deliver result: ${getErrorMessage(error)}`,
-				),
-			);
+				);
+			});
 	}
 
 	private async deliver(

@@ -2,39 +2,36 @@
 	"name": "pi-action",
 	"version": "2.0.0",
 	"description": "GitHub Action to invoke the pi coding agent on issues and PRs",
-	"type": "module",
-	"scripts": {
-		"build": "tsc --noEmit",
-		"test": "vitest run",
-		"test:watch": "vitest",
-		"coverage": "vitest run --coverage",
-		"check": "npm run typecheck && npm run lint && npm run coverage && npm run analyze",
-		"lint": "biome check --error-on-warnings . && npm run lint:actions",
-		"analyze": "knip --treat-config-hints-as-errors && jscpd --config .jscpd.json src",
-		"fix": "biome check --write .",
-		"lint:actions": "node scripts/lint-actions.mjs",
-		"typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
-		"prepare": "prek install --allow-missing-config --hook-type pre-commit --hook-type commit-msg --hook-type prepare-commit-msg --hook-type pre-push"
-	},
 	"keywords": [
-		"github-action",
-		"pi",
 		"ai",
+		"automation",
 		"coding-agent",
-		"automation"
+		"github-action",
+		"pi"
 	],
-	"author": "Carlos Villela",
+	"homepage": "https://github.com/cv/pi-action#readme",
+	"bugs": {
+		"url": "https://github.com/cv/pi-action/issues"
+	},
 	"license": "MIT",
+	"author": "Carlos Villela",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/cv/pi-action.git"
 	},
-	"bugs": {
-		"url": "https://github.com/cv/pi-action/issues"
-	},
-	"homepage": "https://github.com/cv/pi-action#readme",
-	"engines": {
-		"node": ">=24.0.0"
+	"type": "module",
+	"scripts": {
+		"build": "tsc -p tsconfig.build.json",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"coverage": "vitest run --coverage",
+		"check": "npm run typecheck && npm run lint && npm run coverage && npm run analyze",
+		"lint": "oxlint --type-aware --deny-warnings --report-unused-disable-directives && oxfmt --check && npm run lint:actions",
+		"analyze": "knip --treat-config-hints-as-errors && jscpd --config .jscpd.json src",
+		"fix": "oxlint --type-aware --fix && oxfmt",
+		"lint:actions": "node scripts/lint-actions.mjs",
+		"typecheck": "tsc -p tsconfig.build.json && tsc",
+		"prepare": "prek install --allow-missing-config --hook-type pre-commit --hook-type commit-msg --hook-type prepare-commit-msg --hook-type pre-push"
 	},
 	"dependencies": {
 		"@actions/core": "^3.0.1",
@@ -44,7 +41,6 @@
 		"@earendil-works/pi-durable": "1.5.2"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.5.9",
 		"@commitlint/cli": "^21.2.2",
 		"@commitlint/config-conventional": "^21.2.2",
 		"@j178/prek": "^0.4.14",
@@ -54,7 +50,13 @@
 		"actionlint": "^2.0.6",
 		"jscpd": "^5.0.16",
 		"knip": "^6.32.2",
+		"oxfmt": "0.78.0",
+		"oxlint": "1.93.0",
+		"oxlint-tsgolint": "7.0.2006",
 		"typescript": "^7.0.2",
 		"vitest": "^4.1.10"
+	},
+	"engines": {
+		"node": ">=24.0.0"
 	}
 }

@@ -1,0 +1,6 @@
+{
+	// The action's own code, without tests: catches production code that leans on test-only types.
+	"extends": "./tsconfig.json",
+	"include": ["src/**/*"],
+	"exclude": ["src/**/*.test.ts", "src/test-helpers.ts", "src/test-setup.ts"]
+}

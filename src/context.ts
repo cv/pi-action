@@ -80,7 +80,7 @@ export function renderTemplate(template: string, context: PIContext): string {
 	let rendered = template;
 	for (const [key, value] of Object.entries(variables)) {
 		const placeholder = new RegExp(`\\{\\{${key}\\}\\}`, "gu");
-		rendered = rendered.replace(placeholder, value);
+		rendered = rendered.replaceAll(placeholder, value);
 	}
 
 	return rendered;
@@ -133,7 +133,8 @@ export function formatFollowUp(input: {
 	url?: string;
 	reviewComment?: boolean;
 }): string {
-	const verb = input.reviewComment ? "commented on the diff" : "commented";
+	const verb =
+		input.reviewComment === true ? "commented on the diff" : "commented";
 	const where = input.url ? ` (${input.url})` : "";
 	return `**@${input.author}** ${verb}${where}:\n\n${input.task}`;
 }

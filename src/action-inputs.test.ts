@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { readActionInputs } from "./action-inputs.ts";
 import { DEFAULTS } from "./defaults.ts";
 
@@ -14,7 +15,7 @@ describe("readActionInputs", () => {
 			GITHUB_TOKEN: "env-token",
 		});
 
-		expect(inputs).toEqual({
+		expect(inputs).toStrictEqual({
 			triggerPhrase: DEFAULTS.triggerPhrase,
 			allowedBots: [],
 			allowedUsers: [],
@@ -62,15 +63,18 @@ describe("readActionInputs", () => {
 		expect(inputs.githubToken).toBe("input-token");
 		expect(inputs.apiKey).toBe("sk-test");
 		expect(inputs.triggerPhrase).toBe("@assistant");
-		expect(inputs.allowedBots).toEqual(["dependabot[bot]", "renovate[bot]"]);
-		expect(inputs.allowedUsers).toEqual(["@alice", "Bob"]);
-		expect(inputs.allowedAssociations).toEqual(["OWNER", "COLLABORATOR"]);
-		expect(inputs.modelConfig).toEqual({
+		expect(inputs.allowedBots).toStrictEqual([
+			"dependabot[bot]",
+			"renovate[bot]",
+		]);
+		expect(inputs.allowedUsers).toStrictEqual(["@alice", "Bob"]);
+		expect(inputs.allowedAssociations).toStrictEqual(["OWNER", "COLLABORATOR"]);
+		expect(inputs.modelConfig).toStrictEqual({
 			provider: "nvidia",
 			model: "openai/openai/gpt-5.5",
 			timeout: 60,
 		});
-		expect(inputs.customProvider).toEqual(
+		expect(inputs.customProvider).toStrictEqual(
 			expect.objectContaining({
 				baseUrl: "https://inference-api.nvidia.com",
 				api: "openai-responses",

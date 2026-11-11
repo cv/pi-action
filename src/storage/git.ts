@@ -10,7 +10,7 @@ import {
 } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve as resolvePath } from "node:path";
 import { deflateSync } from "node:zlib";
 
 interface GitObject {
@@ -54,7 +54,7 @@ export class RefConflictError extends Error {
 /** Control characters, space, and the characters check-ref-format forbids anywhere. */
 function hasForbiddenChar(ref: string): boolean {
 	for (const ch of ref) {
-		const code = ch.charCodeAt(0);
+		const code = ch.codePointAt(0) ?? 0;
 		if (code <= 0x20 || code === 0x7f || "~^:?*[\\".includes(ch)) {
 			return true;
 		}
@@ -90,16 +90,21 @@ class GitError extends Error {
 }
 
 /** Run git in `dir`; resolves with stdout, rejects with a GitError on a nonzero exit. */
-function git(dir: string, args: readonly string[]): Promise<string> {
-	return new Promise((onOutput, onError) => {
+async function git(dir: string, args: readonly string[]): Promise<string> {
+	return new Promise((resolve, reject) => {
 		execFile("git", ["-C", dir, ...args], (error, stdout, stderr) => {
 			if (error) {
-				onError(new GitError(args, stderr || error.message));
+				reject(new GitError(args, stderr || error.message));
 			} else {
-				onOutput(stdout);
+				resolve(stdout);
 			}
 		});
 	});
+}
+
+/** Drop the characters git's ident format can't hold. */
+function cleanIdent(text: string): string {
+	return text.replaceAll(IDENT_CRUD, "");
 }
 
 function assertObjectId(id: string): void {
@@ -133,7 +138,7 @@ export class GitRepo {
 		const [format = "", objects = ""] = out.trim().split("\n");
 		return new GitRepo(
 			path,
-			resolve(path, objects),
+			resolvePath(path, objects),
 			format === "sha256" ? "sha256" : "sha1",
 		);
 	}
@@ -149,10 +154,10 @@ export class GitRepo {
 		]);
 		const id = createHash(this.hash).update(raw).digest("hex");
 		const path = join(this.objects, id.slice(0, 2), id.slice(2));
-		const present = await fs.access(path).then(
-			() => true,
-			() => false,
-		);
+		const present = await fs
+			.access(path)
+			.then(() => true)
+			.catch(() => false);
 		if (!present) {
 			await fs.mkdir(dirname(path), { recursive: true });
 			const tmp = `${path}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
@@ -162,27 +167,27 @@ export class GitRepo {
 		return id;
 	}
 
-	writeBlob(content: string): Promise<string> {
+	async writeBlob(content: string): Promise<string> {
 		return this.writeObject("blob", Buffer.from(content));
 	}
 
 	/** A tree of regular files; names are sorted as git requires. */
-	writeTree(files: Readonly<Record<string, string>>): Promise<string> {
-		const names = Object.keys(files).sort((a, b) =>
+	async writeTree(files: Readonly<Record<string, string>>): Promise<string> {
+		const names = Object.keys(files).toSorted((a, b) =>
 			Buffer.compare(Buffer.from(a), Buffer.from(b)),
 		);
 		const parts: Buffer[] = [];
 		for (const name of names) {
 			const id = files[name] ?? "";
 			if (!OBJECT_ID.test(id) || BAD_TREE_NAME.test(name)) {
-				return Promise.reject(new Error(`Bad tree entry ${name}`));
+				throw new Error(`Bad tree entry ${name}`);
 			}
 			parts.push(Buffer.from(`100644 ${name}\0`), Buffer.from(id, "hex"));
 		}
 		return this.writeObject("tree", Buffer.concat(parts));
 	}
 
-	writeCommit(input: {
+	async writeCommit(input: {
 		tree: string;
 		parents: readonly string[];
 		author: Signature;
@@ -190,8 +195,7 @@ export class GitRepo {
 		time?: Date;
 	}): Promise<string> {
 		const seconds = Math.floor((input.time ?? new Date()).getTime() / 1000);
-		const clean = (text: string) => text.replace(IDENT_CRUD, "");
-		const who = `${clean(input.author.name)} <${clean(input.author.email)}> ${seconds} +0000`;
+		const who = `${cleanIdent(input.author.name)} <${cleanIdent(input.author.email)}> ${seconds} +0000`;
 		const lines = [
 			`tree ${input.tree}`,
 			...input.parents.map((p) => `parent ${p}`),
@@ -236,10 +240,9 @@ export class GitRepo {
 	/** The commit `ref` points at; undefined when it doesn't exist. */
 	async readRef(ref: string): Promise<string | undefined> {
 		assertRefName(ref);
-		const symbolic = await git(this.dir, ["symbolic-ref", "-q", ref]).then(
-			() => true,
-			() => false,
-		);
+		const symbolic = await git(this.dir, ["symbolic-ref", "-q", ref])
+			.then(() => true)
+			.catch(() => false);
 		if (symbolic) {
 			throw new Error(`Ref ${ref} is not a direct ref`);
 		}
@@ -273,7 +276,6 @@ export class GitRepo {
 				throw error;
 			}
 			const actual = await this.readRef(ref).catch(() => undefined);
-			// biome-ignore lint/style/useErrorCause: the cause is passed in the options argument
 			throw new RefConflictError(
 				ref,
 				expected,
@@ -317,18 +319,18 @@ class CatFile {
 			}
 		};
 		this.child.on("error", fail);
-		this.child.on("exit", (code) =>
-			fail(new Error(`git cat-file exited with ${code}`)),
-		);
+		this.child.on("exit", (code) => {
+			fail(new Error(`git cat-file exited with ${code}`));
+		});
 		this.child.stdin.on("error", fail);
 	}
 
-	read(sha: string): Promise<GitObject> {
+	async read(sha: string): Promise<GitObject> {
 		if (this.failure) {
-			return Promise.reject(this.failure);
+			throw this.failure;
 		}
-		return new Promise((onObject, onError) => {
-			this.waiting.push({ sha, resolve: onObject, reject: onError });
+		return new Promise((resolve, reject) => {
+			this.waiting.push({ sha, resolve, reject });
 			this.child.stdin.write(`${sha}\n`);
 		});
 	}
@@ -372,7 +374,11 @@ class CatFile {
 		if (this.child.exitCode !== null) {
 			return;
 		}
-		const exited = new Promise((r) => this.child.once("exit", r));
+		const exited = new Promise<void>((resolve) => {
+			this.child.once("exit", () => {
+				resolve();
+			});
+		});
 		this.child.stdin.end();
 		await exited;
 	}

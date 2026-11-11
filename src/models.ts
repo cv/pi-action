@@ -5,6 +5,7 @@ import {
 } from "@earendil-works/pi-ai";
 import type { MutableModels } from "@earendil-works/pi-ai/models";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
+
 import { createCustomProvider } from "./custom-provider.ts";
 import type { CustomProviderConfig } from "./types.ts";
 
@@ -27,9 +28,10 @@ export async function createActionModels(
 	const credentials = new InMemoryCredentialStore();
 	const { apiKey } = options;
 	if (apiKey) {
-		await credentials.modify(options.provider, () =>
-			Promise.resolve({ type: "api_key", key: apiKey }),
-		);
+		await credentials.modify(options.provider, async () => ({
+			type: "api_key",
+			key: apiKey,
+		}));
 	}
 	const models = builtinModels({ credentials });
 	if (options.customProvider) {

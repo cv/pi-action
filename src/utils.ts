@@ -8,7 +8,7 @@ export function getErrorMessage(error: unknown): string {
 	if (typeof error === "string") {
 		return error;
 	}
-	if (error && typeof error === "object" && "message" in error) {
+	if (typeof error === "object" && error !== null && "message" in error) {
 		return String(error.message);
 	}
 	return "Unknown error";
@@ -27,13 +27,14 @@ export class TimeoutError extends Error {
 	}
 }
 
-export function withTimeout<T>(
+export async function withTimeout<T>(
 	promise: Promise<T>,
 	timeoutMs: number,
 	message?: string,
 ): Promise<T> {
-	return new Promise((resolve, reject) => {
-		const timeoutId = setTimeout(() => {
+	let timeoutId: ReturnType<typeof setTimeout> | undefined;
+	const timeout = new Promise<never>((_resolve, reject) => {
+		timeoutId = setTimeout(() => {
 			reject(
 				new TimeoutError(
 					message ?? `Operation timed out after ${timeoutMs}ms`,
@@ -41,15 +42,10 @@ export function withTimeout<T>(
 				),
 			);
 		}, timeoutMs);
-
-		promise
-			.then((result) => {
-				clearTimeout(timeoutId);
-				resolve(result);
-			})
-			.catch((error) => {
-				clearTimeout(timeoutId);
-				reject(error);
-			});
 	});
+	try {
+		return await Promise.race([promise, timeout]);
+	} finally {
+		clearTimeout(timeoutId);
+	}
 }

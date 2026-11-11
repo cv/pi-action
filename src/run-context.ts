@@ -1,11 +1,14 @@
-import type { PIContext } from "./context.ts";
-import { extractTask, hasTrigger } from "./context.ts";
+import { extractTask, hasTrigger, type PIContext } from "./context.ts";
 import { formatReviewComments } from "./formatting.ts";
 import { extractTriggerInfo, type GitHubClient } from "./github.ts";
 import type { ActionDependencies, Logger } from "./run.ts";
-import type { SecurityContext } from "./security.ts";
-import { sanitizeInput, validatePermissions } from "./security.ts";
+import {
+	type SecurityContext,
+	sanitizeInput,
+	validatePermissions,
+} from "./security.ts";
 import type { TriggerInfo } from "./types.ts";
+import { getErrorMessage } from "./utils.ts";
 
 export interface ResolvedRunContext {
 	piContext: PIContext;
@@ -88,7 +91,9 @@ async function getPullRequestContext(
 				: {}),
 		};
 	} catch (error) {
-		log.warning(`Failed to fetch PR review comments: ${error}`);
+		log.warning(
+			`Failed to fetch PR review comments: ${getErrorMessage(error)}`,
+		);
 	}
 	return { diff };
 }
@@ -144,7 +149,7 @@ export async function getRunContext(
 	deps: ActionDependencies,
 ): Promise<ResolvedRunContext | null> {
 	const { inputs, log } = deps;
-	if (inputs.prNumber) {
+	if (inputs.prNumber !== undefined) {
 		const ghClient = createGitHubClientFromInputs(deps);
 		return ghClient
 			? {

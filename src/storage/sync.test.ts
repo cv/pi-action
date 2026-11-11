@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import {
@@ -10,6 +11,7 @@ import {
 } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
+
 import { GitStorage } from "./git-storage.ts";
 import { GitSync, GitSyncConflictError, isTurnBoundary } from "./sync.ts";
 
@@ -114,7 +116,7 @@ describe("GitSync", () => {
 		expect(b.settled.status).toBe("done");
 		await b.sync.flush(b.storage.tip);
 		expect(
-			sh(w.remote, "merge-base", "--is-ancestor", a.storage.tip ?? "", REF),
+			sh(w.remote, "merge-base", "--is-ancestor", String(a.storage.tip), REF),
 		).toBe("");
 		const users = sh(w.remote, "log", "--format=%s", REF)
 			.split("\n")
@@ -153,7 +155,9 @@ describe("GitSync", () => {
 		const dir = w.clone("a");
 		sh(dir, "update-ref", REF, "HEAD");
 		const sync = new GitSync({ repo: dir, ref: REF });
-		expect(await sync.fetch()).toBeUndefined();
-		expect(() => sh(dir, "rev-parse", "--verify", "-q", REF)).toThrow();
+		await expect(sync.fetch()).resolves.toBeUndefined();
+		expect(() => sh(dir, "rev-parse", "--verify", "-q", REF)).toThrow(
+			"Command failed",
+		);
 	});
 });

@@ -1,9 +1,11 @@
 import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
+
 import { DEFAULTS } from "./defaults.ts";
 
-const ACTION_YML = readFileSync("action.yml", "utf-8");
-const README = readFileSync("README.md", "utf-8");
+const ACTION_YML = readFileSync("action.yml", "utf8");
+const README = readFileSync("README.md", "utf8");
 const NEXT_ACTION_INPUT_PATTERN = /\n {2}\w/u;
 const ACTION_DEFAULT_PATTERN = /\n {4}default: ['"]?([^'"\n]+)['"]?/u;
 const REGEXP_SPECIAL_CHARS_PATTERN = /[.*+?^${}()|[\]\\]/gu;
@@ -37,7 +39,7 @@ function getActionInputDefault(inputName: string): string {
 		nextInputStart === -1
 			? ACTION_YML.slice(inputStart)
 			: ACTION_YML.slice(inputStart, inputStart + 1 + nextInputStart);
-	const defaultMatch = inputBlock.match(ACTION_DEFAULT_PATTERN);
+	const defaultMatch = ACTION_DEFAULT_PATTERN.exec(inputBlock);
 	const defaultValue = defaultMatch?.[1];
 	if (defaultValue === undefined) {
 		throw new Error(`Input ${inputName} has no default in action.yml`);
@@ -46,16 +48,14 @@ function getActionInputDefault(inputName: string): string {
 }
 
 function getReadmeInputDefault(inputName: string): string {
-	const escapedInputName = inputName.replace(
+	const escapedInputName = inputName.replaceAll(
 		REGEXP_SPECIAL_CHARS_PATTERN,
-		"\\$&",
+		String.raw`\$&`,
 	);
-	const defaultMatch = README.match(
-		new RegExp(
-			`\\| \`${escapedInputName}\` \\|[^\\n]*\\| \`([^\`]+)\` \\|`,
-			"u",
-		),
-	);
+	const defaultMatch = new RegExp(
+		`\\| \`${escapedInputName}\` \\|[^\\n]*\\| \`([^\`]+)\` \\|`,
+		"u",
+	).exec(README);
 	const defaultValue = defaultMatch?.[1];
 	if (defaultValue === undefined) {
 		throw new Error(`Input ${inputName} not found in README inputs table`);

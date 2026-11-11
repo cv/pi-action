@@ -4,7 +4,10 @@ export type InputReader = (name: string) => string;
 
 const TRUE_VALUES = new Set(["true", "1", "yes", "y", "on"]);
 const FALSE_VALUES = new Set(["false", "0", "no", "n", "off"]);
-const MODEL_INPUT_MODES = new Set<ModelInputMode>(["text", "image"]);
+const MODEL_INPUT_MODES: ReadonlySet<string> = new Set<ModelInputMode>([
+	"text",
+	"image",
+]);
 const INTEGER_PATTERN = /^\d+$/u;
 
 export function getInputOrDefault(
@@ -32,16 +35,13 @@ export function parseBooleanInput(
 
 export function parseOptionalBooleanInput(value: string): boolean | undefined {
 	const normalized = value.trim().toLowerCase();
-	if (!normalized) {
-		return;
-	}
 	if (TRUE_VALUES.has(normalized)) {
 		return true;
 	}
 	if (FALSE_VALUES.has(normalized)) {
 		return false;
 	}
-	return;
+	return undefined;
 }
 
 export function parsePositiveIntegerInput(
@@ -61,7 +61,7 @@ export function parseModelInputModes(
 	defaultValue: ModelInputMode[],
 ): ModelInputMode[] {
 	const modes = parseCsvInput(value).filter((mode): mode is ModelInputMode =>
-		MODEL_INPUT_MODES.has(mode as ModelInputMode),
+		MODEL_INPUT_MODES.has(mode),
 	);
 	return modes.length > 0 ? modes : defaultValue;
 }
