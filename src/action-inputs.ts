@@ -1,13 +1,12 @@
-import { readCustomProviderConfig } from "./custom-provider.js";
-import { DEFAULTS } from "./defaults.js";
+import { readCustomProviderConfig } from "./custom-provider.ts";
+import { DEFAULTS } from "./defaults.ts";
 import {
 	getInputOrDefault,
 	type InputReader,
-	parseBooleanInput,
 	parseCsvInput,
 	parsePositiveIntegerInput,
-} from "./inputs.js";
-import type { ActionInputs } from "./run.js";
+} from "./inputs.ts";
+import type { ActionInputs } from "./run.ts";
 
 const GITHUB_TOKEN_ENV = "GITHUB_TOKEN";
 
@@ -47,12 +46,12 @@ export function readActionInputs(
 		apiKey: readInput("api_key") || undefined,
 		customProvider: readCustomProviderConfig(readInput),
 		promptTemplate: readInput("prompt_template") || undefined,
-		shareSession: parseBooleanInput(
-			readInput("share_session"),
-			DEFAULTS.shareSession,
-		),
 		outputMode: getOutputMode(readInput),
 		prompt: readInput("prompt") || undefined,
 		prNumber: prNumber > 0 ? prNumber : undefined,
+		pollInterval: parsePositiveIntegerInput(
+			readInput("poll_interval"),
+			DEFAULTS.pollInterval,
+		),
 	};
 }

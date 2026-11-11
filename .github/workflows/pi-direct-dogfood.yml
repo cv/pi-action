@@ -29,7 +29,6 @@ jobs:
         uses: ./
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          share_session: true
           output_mode: output
           prompt: ${{ github.event.inputs.prompt }}
           provider: nvidia
@@ -46,9 +45,7 @@ jobs:
       - name: Print outputs
         env:
           PI_SUCCESS: ${{ steps.pi.outputs.success }}
-          PI_SHARE_URL: ${{ steps.pi.outputs.share_url }}
           PI_RESPONSE: ${{ steps.pi.outputs.response }}
         run: |
           printf 'success=%s\n' "$PI_SUCCESS"
-          printf 'share_url=%s\n' "$PI_SHARE_URL"
           printf 'response<<EOF\n%s\nEOF\n' "$PI_RESPONSE"

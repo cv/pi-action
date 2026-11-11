@@ -2,29 +2,31 @@
  * Response formatting utilities for consistent GitHub comment formatting
  */
 
-import type { PullRequestReviewComment } from "./types.js";
+import type { PullRequestReviewComment } from "./types.ts";
+
+export interface CommentFooter {
+	/** The thread's ref, e.g. refs/pi/threads/42. */
+	ref?: string | undefined;
+}
+
+function footer(info: CommentFooter | undefined): string {
+	return info?.ref
+		? `\n\n---\n🧵 Thread state: \`${info.ref}\` (\`git fetch origin ${info.ref}\`)`
+		: "";
+}
 
 export function formatSuccessComment(
 	response: string,
-	shareUrl?: string,
+	info?: CommentFooter,
 ): string {
-	let comment = `### 🤖 pi Response\n\n${response}`;
-
-	if (shareUrl) {
-		comment += `\n\n---\n📎 [Download session artifact](${shareUrl})`;
-	}
-
-	return comment;
+	return `### 🤖 pi Response\n\n${response}${footer(info)}`;
 }
 
-export function formatErrorComment(error: string, shareUrl?: string): string {
-	let comment = `### ❌ pi Error\n\nFailed to process request: ${error}`;
-
-	if (shareUrl) {
-		comment += `\n\n---\n📎 [Download session artifact](${shareUrl})`;
-	}
-
-	return comment;
+export function formatErrorComment(
+	error: string,
+	info?: CommentFooter,
+): string {
+	return `### ❌ pi Error\n\nFailed to process request: ${error}${footer(info)}`;
 }
 
 export function formatReviewComments(

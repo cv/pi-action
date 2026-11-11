@@ -2,6 +2,18 @@ export function hasTrigger(text: string, trigger: string): boolean {
 	return text.toLowerCase().includes(trigger.toLowerCase());
 }
 
+/** Appended to every first prompt: the runner, and anything left uncommitted on it, is gone after the run. */
+const RUNNER_REQUIREMENTS = `## Important: Artifact and Script Requirements
+
+**CRITICAL:** After the GitHub Action finishes running, all files modified or created are lost, and the GitHub Action runner is destroyed. Therefore:
+
+1. **All generated code and artifacts MUST be committed** - Any files you create, modify, or generate must be committed and pushed to the repository before the action completes. Nothing will persist otherwise.
+
+2. **Any throw-away scripts generated MUST be run immediately** - If you create temporary scripts (like \`/tmp/create-issues.sh\` or similar), you must execute them during the same session. They will be lost when the runner terminates.
+
+3. **Commit and push all work** - Always end your work by committing and pushing changes to ensure they persist beyond the GitHub Action execution.
+`;
+
 export function extractTask(comment: string, trigger: string): string {
 	const idx = comment.toLowerCase().indexOf(trigger.toLowerCase());
 	if (idx === -1) {
@@ -89,16 +101,7 @@ export function buildPrompt(
 ## Task
 ${context.task}
 
-## Important: Artifact and Script Requirements
-
-**CRITICAL:** After the GitHub Action finishes running, all files modified or created are lost, and the GitHub Action runner is destroyed. Therefore:
-
-1. **All generated code and artifacts MUST be committed** - Any files you create, modify, or generate must be committed and pushed to the repository before the action completes. Nothing will persist otherwise.
-
-2. **Any throw-away scripts generated MUST be run immediately** - If you create temporary scripts (like \`/tmp/create-issues.sh\` or similar), you must execute them during the same session. They will be lost when the runner terminates.
-
-3. **Commit and push all work** - Always end your work by committing and pushing changes to ensure they persist beyond the GitHub Action execution.
-`;
+${RUNNER_REQUIREMENTS}`;
 	}
 
 	// Default template (preserving backward compatibility)
@@ -114,20 +117,23 @@ ${context.type === "pull_request" ? (context.reviewComments ?? "") : ""}
 ## Task
 ${context.task}
 
-## Important: Artifact and Script Requirements
-
-**CRITICAL:** After the GitHub Action finishes running, all files modified or created are lost, and the GitHub Action runner is destroyed. Therefore:
-
-1. **All generated code and artifacts MUST be committed** - Any files you create, modify, or generate must be committed and pushed to the repository before the action completes. Nothing will persist otherwise.
-
-2. **Any throw-away scripts generated MUST be run immediately** - If you create temporary scripts (like \`/tmp/create-issues.sh\` or similar), you must execute them during the same session. They will be lost when the runner terminates.
-
-3. **Commit and push all work** - Always end your work by committing and pushing changes to ensure they persist beyond the GitHub Action execution.
-`;
+${RUNNER_REQUIREMENTS}`;
 
 	if (context.type === "pull_request" && context.diff) {
 		prompt += `\n## PR Diff\n\`\`\`diff\n${context.diff}\n\`\`\`\n`;
 	}
 
 	return prompt;
+}
+
+/** A later comment on an existing thread: the conversation already has the issue's context. */
+export function formatFollowUp(input: {
+	author: string;
+	task: string;
+	url?: string;
+	reviewComment?: boolean;
+}): string {
+	const verb = input.reviewComment ? "commented on the diff" : "commented";
+	const where = input.url ? ` (${input.url})` : "";
+	return `**@${input.author}** ${verb}${where}:\n\n${input.task}`;
 }

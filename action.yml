@@ -1,5 +1,5 @@
 name: 'pi-action'
-description: 'Invoke the pi coding agent on GitHub issues and PRs via comment triggers'
+description: 'Run a durable pi coding agent on GitHub issues and PRs: one conversation per thread, stored in git'
 author: 'Carlos Villela'
 branding:
   icon: 'cpu'
@@ -25,14 +25,17 @@ inputs:
     description: 'Comma-separated GitHub author associations allowed to trigger pi when allowed_users is empty'
     default: 'OWNER,MEMBER'
   timeout:
-    description: 'Execution timeout in seconds'
+    description: 'Seconds before the run is aborted (its thread is still saved)'
     default: '1800'
+  poll_interval:
+    description: 'Seconds between checks for new comments while pi works; new trigger comments join the running conversation'
+    default: '15'
   provider:
     description: 'LLM provider (anthropic, openai, google, etc.)'
     default: 'anthropic'
   model:
     description: 'Model ID'
-    default: 'claude-sonnet-4-20250514'
+    default: 'claude-sonnet-5-5'
   provider_base_url:
     description: 'Base URL for a single custom provider/model (e.g., https://inference-api.nvidia.com)'
     required: false
@@ -72,17 +75,12 @@ inputs:
   compat_supports_reasoning_effort:
     description: 'Whether the OpenAI-compatible custom provider supports reasoning_effort'
     required: false
+  compat_force_adaptive_thinking:
+    description: 'Use adaptive thinking for an Anthropic-compatible custom model (required by Claude Opus 4.6+ and Sonnet 4.6+)'
+    required: false
   prompt_template:
     description: 'Custom prompt template with placeholder variables'
     required: false
-  share_session:
-    description: 'Upload session.html and session.jsonl as a GitHub Actions artifact and link it in the response comment'
-    required: false
-    default: 'true'
-  session_artifact_name:
-    description: 'GitHub Actions artifact name for shared session files; defaults to pi-session-<run_id>-<run_attempt>'
-    required: false
-    default: ''
   output_mode:
     description: 'How to deliver results: comment (post to issue/PR) or output (set action outputs only)'
     required: false
@@ -103,16 +101,31 @@ outputs:
   success:
     description: 'Whether the agent succeeded (true/false) when output_mode is output'
     value: ${{ steps.run-pi-action.outputs.success }}
-  share_url:
-    description: 'URL to the workflow run containing the session artifact, if session sharing is enabled'
-    value: ${{ steps.run-pi-action.outputs.share_url }}
 
 runs:
   using: 'composite'
   steps:
+    # pi-action runs its TypeScript directly, which needs Node.js 24. Reuse the job's Node when it is new enough;
+    # otherwise set it up (from the runner's tool cache, so this is quick).
+    - name: Check Node.js version
+      id: node
+      shell: bash
+      run: |
+        if node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 24 ? 0 : 1)' 2>/dev/null; then
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "ok=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Set up Node.js
+      if: steps.node.outputs.ok != 'true'
+      uses: actions/setup-node@v6
+      with:
+        node-version: '24'
+
     - name: Install action dependencies
       shell: bash
-      run: npm ci --prefix ${{ github.action_path }}
+      run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund --prefix ${{ github.action_path }}
     
     - name: Install pi-agent git hooks
       shell: bash
@@ -121,7 +134,7 @@ runs:
     - name: Run pi-action
       id: run-pi-action
       shell: bash
-      run: npx --prefix ${{ github.action_path }} tsx ${{ github.action_path }}/src/index.ts
+      run: node --disable-warning=ExperimentalWarning ${{ github.action_path }}/src/index.ts
       env:
         INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
         INPUT_API_KEY: ${{ inputs.api_key }}
@@ -130,6 +143,7 @@ runs:
         INPUT_ALLOWED_USERS: ${{ inputs.allowed_users }}
         INPUT_ALLOWED_ASSOCIATIONS: ${{ inputs.allowed_associations }}
         INPUT_TIMEOUT: ${{ inputs.timeout }}
+        INPUT_POLL_INTERVAL: ${{ inputs.poll_interval }}
         INPUT_PROVIDER: ${{ inputs.provider }}
         INPUT_MODEL: ${{ inputs.model }}
         INPUT_PROVIDER_BASE_URL: ${{ inputs.provider_base_url }}
@@ -143,16 +157,17 @@ runs:
         INPUT_MODEL_MAX_TOKENS: ${{ inputs.model_max_tokens }}
         INPUT_COMPAT_SUPPORTS_DEVELOPER_ROLE: ${{ inputs.compat_supports_developer_role }}
         INPUT_COMPAT_SUPPORTS_REASONING_EFFORT: ${{ inputs.compat_supports_reasoning_effort }}
+        INPUT_COMPAT_FORCE_ADAPTIVE_THINKING: ${{ inputs.compat_force_adaptive_thinking }}
         INPUT_PROMPT_TEMPLATE: ${{ inputs.prompt_template }}
-        INPUT_SHARE_SESSION: ${{ inputs.share_session }}
         INPUT_OUTPUT_MODE: ${{ inputs.output_mode }}
         INPUT_PROMPT: ${{ inputs.prompt }}
         INPUT_PR_NUMBER: ${{ inputs.pr_number }}
 
-    - name: Upload pi session artifact
-      if: ${{ inputs.share_session == 'true' }}
-      uses: actions/upload-artifact@v7
-      with:
-        name: ${{ inputs.session_artifact_name || format('pi-session-{0}-{1}', github.run_id, github.run_attempt) }}
-        path: ${{ runner.temp }}/pi-action-session
-        if-no-files-found: ignore
+    # Pushes the thread's refs/pi/threads/<number> if the step above was cancelled, timed out, or crashed
+    # before its own final push. Fast-forward only: it never overwrites another run's history.
+    - name: Save pi thread state
+      if: always()
+      shell: bash
+      run: node --disable-warning=ExperimentalWarning ${{ github.action_path }}/src/push.ts
+      env:
+        INPUT_PR_NUMBER: ${{ inputs.pr_number }}

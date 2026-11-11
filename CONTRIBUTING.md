@@ -82,7 +82,7 @@ Use branch names like `feat/123-description` or `fix/456-bug-name` to automatica
 
 ## Architecture
 
-The action is built with TypeScript and uses the [pi-coding-agent SDK](https://github.com/earendil-works/pi-mono) directly.
+The action is built with TypeScript on [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) and [pi-ai](https://www.npmjs.com/package/@earendil-works/pi-ai). Each issue/PR is a durable conversation whose storage is a chain of git commits on `refs/pi/threads/<number>` (the storage backend is in `src/storage/`).
 
 ### Source Files
 
@@ -90,7 +90,16 @@ The action is built with TypeScript and uses the [pi-coding-agent SDK](https://g
 |------|-------------|
 | [`src/index.ts`](src/index.ts) | Entry point - wires up dependencies and runs the action |
 | [`src/run.ts`](src/run.ts) | Main orchestration logic |
-| [`src/agent.ts`](src/agent.ts) | pi SDK integration |
+| [`src/run-context.ts`](src/run-context.ts) | Resolving what to run on: a trigger, `pr_number`, or a direct prompt |
+| [`src/thread.ts`](src/thread.ts) | One issue/PR as a durable pi conversation stored in git |
+| [`src/conversation.ts`](src/conversation.ts) | Submitting triggers, waiting within the timeout, delivering each result once |
+| [`src/triggers.ts`](src/triggers.ts) | Finding the `@pi` comments a thread still has to answer |
+| [`src/models.ts`](src/models.ts) | Built-in providers with the `api_key` input as an in-memory credential |
+| [`src/custom-provider.ts`](src/custom-provider.ts) | The single custom provider/model from the flat `provider_*`/`model_*` inputs |
+| [`src/push.ts`](src/push.ts) | The `if: always()` step that pushes unsaved thread state |
+| [`src/storage/git.ts`](src/storage/git.ts) | In-process git objects and compare-and-swap ref updates |
+| [`src/storage/git-storage.ts`](src/storage/git-storage.ts) | `GitStorage`: a pi-durable `Storage` whose log is a chain of commits on one ref |
+| [`src/storage/sync.ts`](src/storage/sync.ts) | `GitSync`: fetching a thread ref and pushing it (fast-forward only) at turn boundaries |
 | [`src/github.ts`](src/github.ts) | GitHub API client helpers |
 | [`src/inputs.ts`](src/inputs.ts) | GitHub Actions input parsing helpers |
 | [`src/context.ts`](src/context.ts) | Prompt building and trigger extraction |
@@ -111,20 +120,19 @@ Pure helpers for parsing GitHub Actions inputs (CSV allowlists, booleans, and po
 
 #### [`run.ts`](src/run.ts)
 Main orchestration that:
-1. Uses provider credentials from environment variables or the runtime-only `api_key` input
-2. Extracts trigger information from the GitHub payload
-3. Validates permissions
-4. Builds the pi context/prompt
-5. Runs the agent
-6. Posts results as comments
+1. Resolves the run context (trigger, `pr_number`, or direct prompt) and validates permissions
+2. Sets up models from environment variables, the runtime-only `api_key` input, and the custom provider inputs
+3. Opens the thread (fetching `refs/pi/threads/<number>`; in memory for direct prompts)
+4. Submits every unanswered `@pi` comment, then polls for new ones while pi works (comment mode), or runs one request (output mode, `pr_number`, direct prompts)
+5. Posts each answer (or failure) once, or sets the action outputs
+6. Pushes the thread
 
-#### [`agent.ts`](src/agent.ts)
-Wraps the pi SDK to:
-- Discover or use provided auth/model registry
-- Create an agent session with appropriate settings
-- Subscribe to streaming responses
-- Handle timeouts (using [`withTimeout`](src/utils.ts) utility)
-- Return success/error results
+#### [`thread.ts`](src/thread.ts)
+Wraps a pi-durable `Harness` on `GitStorage`:
+- Fetches the thread ref, opens the conversation, resumes unfinished work
+- Pushes the ref at every turn boundary (`GitSync`, fast-forward only)
+- Submits comments with their GitHub ID as `requestId`, so each is answered once
+- Records which results were posted, so a restarted run doesn't post them twice
 
 #### [`github.ts`](src/github.ts)
 Provides a clean interface to GitHub APIs:
@@ -149,9 +157,10 @@ Permission and input validation:
 The [`action.yml`](action.yml) file defines:
 - Input parameters
 - A composite action that:
-  1. Installs npm dependencies
-  2. Installs standalone git hooks for conventional commits (see [`scripts/install-agent-hooks.js`](scripts/install-agent-hooks.js))
-  3. Runs the TypeScript entrypoint via `tsx`
+  1. Sets up Node.js 24 if the job's Node is older
+  2. Installs the runtime npm dependencies (`--omit=dev`)
+  3. Installs standalone git hooks for conventional commits (see [`scripts/install-agent-hooks.js`](scripts/install-agent-hooks.js))
+  4. Runs `src/index.ts` with Node's built-in TypeScript support, then `src/push.ts` in an `if: always()` step
 
 ### Testing
 
@@ -184,7 +193,7 @@ Thresholds and production coverage includes are configured in [`vitest.config.ts
 npm run build
 ```
 
-This verifies the TypeScript production entrypoint without emitting JavaScript. The action runs TypeScript directly with `tsx`, so generated `dist/` artifacts are not committed.
+This verifies the TypeScript production entrypoint without emitting JavaScript. Node runs the TypeScript directly (type stripping), so there is no build output and no `dist/`. That's why imports use `.ts` extensions and the code sticks to erasable syntax (no enums, namespaces, or parameter properties); `erasableSyntaxOnly` in `tsconfig.json` enforces it.
 
 ## CI/CD
 
@@ -198,7 +207,7 @@ This verifies the TypeScript production entrypoint without emitting JavaScript. 
 1. Ensure all tests pass and coverage thresholds are met
 2. Update version in `package.json`
 3. Create a new release/tag (e.g., `v1.0.1`)
-4. Users reference the action via `cv/pi-action@v1`
+4. Users reference the action via `cv/pi-action@v2`
 
 ## Code Style
 

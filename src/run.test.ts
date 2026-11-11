@@ -1,954 +1,439 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULTS } from "./defaults.js";
-import { type ActionDependencies, run } from "./run.js";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { createModels } from "@earendil-works/pi-ai/models";
+import {
+	type FauxResponseStep,
+	fauxAssistantMessage,
+	fauxProvider,
+	fauxToolCall,
+} from "@earendil-works/pi-ai/providers/faux";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { pushThread } from "./push.ts";
+import { type ActionDependencies, type ActionInputs, run } from "./run.ts";
 import {
 	createActionInputs,
-	createIssuePayload,
+	createComment,
 	createMockGitHubClient,
-	createModelConfig,
-	createPullRequestPayload,
-	createRepoRef,
-} from "./test-helpers.js";
+} from "./test-helpers.ts";
+import type { GitHubComment } from "./types.ts";
 
-// Mock the agent module
-vi.mock("./agent.js", () => ({
-	runAgent: vi.fn(),
-}));
-
-// Mock the share module
-vi.mock("./share.js", () => ({
-	shareSession: vi.fn(),
-}));
-
-import { runAgent } from "./agent.js";
-import { shareSession } from "./share.js";
-import type { CustomProviderConfig } from "./types.js";
-
-describe("run", () => {
-	function createMockDeps(
-		overrides: Partial<ActionDependencies> = {},
-	): ActionDependencies {
-		return {
-			inputs: createActionInputs(),
-			context: {
-				payload: {},
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => createMockGitHubClient()),
-			log: {
-				info: vi.fn(),
-				warning: vi.fn(),
-				error: vi.fn(),
-				setFailed: vi.fn(),
-				setOutput: vi.fn(),
-			},
-			cwd: "/test/cwd",
-			...overrides,
-		};
+const REF = "refs/pi/threads/42";
+const FIRST_COMMIT = /pi-durable: seq 1 /u;
+const COMMIT_ID = /^[0-9a-f]{40}$/u;
+const dirs: string[] = [];
+afterEach(() => {
+	for (const dir of dirs.splice(0)) {
+		rmSync(dir, { recursive: true, force: true });
 	}
+});
+const git = (cwd: string, ...args: string[]) =>
+	execFileSync("git", args, { cwd, encoding: "utf8" });
 
-	beforeEach(() => {
-		vi.clearAllMocks();
-	});
-
-	it("skips when no issue or PR in payload", async () => {
-		const deps = createMockDeps();
-		await run(deps);
-		expect(deps.log.info).toHaveBeenCalledWith(
-			"No issue or pull_request in payload, skipping",
-		);
-	});
-
-	it("skips when trigger phrase not found", async () => {
-		const deps = createMockDeps({
-			context: {
-				payload: {
-					issue: {
-						number: 1,
-						title: "Test",
-						body: "No trigger here",
-						user: { login: "user", type: "User" },
-						author_association: "OWNER",
-					},
+/** A bare "GitHub" remote, a fresh runner checkout per run, a faux model, and a fake GitHub API. */
+function world() {
+	const root = mkdtempSync(join(tmpdir(), "pi-action-run-"));
+	dirs.push(root);
+	const remote = join(root, "remote.git");
+	git(root, "init", "-q", "--bare", "-b", "main", remote);
+	const seed = join(root, "seed");
+	git(root, "init", "-q", "-b", "main", seed);
+	git(
+		seed,
+		"-c",
+		"user.name=t",
+		"-c",
+		"user.email=t@t",
+		"commit",
+		"-q",
+		"--allow-empty",
+		"-m",
+		"init",
+	);
+	git(seed, "push", "-q", remote, "main");
+	let runners = 0;
+	const checkout = () => {
+		runners += 1;
+		const dir = join(root, `runner-${runners}`);
+		git(root, "clone", "-q", "--depth", "1", `file://${remote}`, dir);
+		return dir;
+	};
+	const faux = fauxProvider();
+	const models = createModels();
+	models.setProvider(faux.provider);
+	const model = faux.getModel();
+	const comments: GitHubComment[] = [];
+	const gh = createMockGitHubClient(comments);
+	let nextId = 100;
+	const comment = (body: string, overrides: Partial<GitHubComment> = {}) => {
+		nextId += 1;
+		const c = createComment({
+			id: nextId,
+			body,
+			created_at: new Date().toISOString(),
+			html_url: `https://github.com/o/r/issues/42#issuecomment-${nextId}`,
+			...overrides,
+		});
+		comments.push(c);
+		return c;
+	};
+	const deps = (
+		trigger: GitHubComment | undefined,
+		inputs: Partial<ActionInputs> = {},
+		payload?: Record<string, unknown>,
+	): ActionDependencies => ({
+		inputs: createActionInputs({
+			modelConfig: { provider: model.provider, model: model.id, timeout: 30 },
+			pollInterval: 0.05,
+			...inputs,
+		}),
+		context: {
+			payload: payload ?? {
+				comment: trigger,
+				issue: {
+					number: 42,
+					title: "Fix the thing",
+					body: "It is broken",
+					user: { login: "o", type: "User" },
 				},
-				repo: { owner: "testowner", name: "testrepo" },
 			},
-		});
+			repo: { owner: "o", name: "r" },
+		},
+		createClient: () => gh,
+		log: {
+			info: vi.fn(),
+			warning: vi.fn(),
+			error: vi.fn(),
+			setFailed: vi.fn(),
+			setOutput: vi.fn(),
+		},
+		cwd: checkout(),
+		createModels: () => Promise.resolve(models),
+		env: {
+			GITHUB_REPOSITORY: "o/r",
+			GITHUB_RUN_ID: "777",
+			GITHUB_RUN_ATTEMPT: "1",
+			GITHUB_ACTOR: "dispatcher",
+		},
+	});
+	return { remote, faux, gh, comment, deps, comments };
+}
 
-		await run(deps);
-		expect(deps.log.info).toHaveBeenCalledWith(
-			'No trigger phrase "@pi" found, skipping',
+const userTexts = (messages: { role: string; content: unknown }[]) =>
+	messages
+		.filter((m) => m.role === "user")
+		.map((m) =>
+			typeof m.content === "string"
+				? m.content
+				: (m.content as { type: string; text?: string }[])
+						.map((b) => b.text ?? "")
+						.join(""),
 		);
-	});
 
-	it("warns and skips when user lacks permission", async () => {
-		const deps = createMockDeps({
-			context: {
-				payload: {
-					issue: {
-						number: 1,
-						title: "Test",
-						body: "@pi do something",
-						user: { login: "stranger", type: "User" },
-						author_association: "NONE",
-					},
-				},
-				repo: { owner: "testowner", name: "testrepo" },
-			},
-		});
+describe("run (durable)", () => {
+	it("answers a trigger, posts once, and pushes the thread to the remote", async () => {
+		const w = world();
+		w.faux.setResponses([fauxAssistantMessage("Fixed it.")]);
+		const trigger = w.comment("@pi please fix");
 
-		await run(deps);
-		expect(deps.log.warning).toHaveBeenCalledWith(
-			"User stranger (NONE) does not have permission",
+		await run(w.deps(trigger));
+
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain("### 🤖 pi Response\n\nFixed it.");
+		expect(w.gh.posted[0]).toContain(REF);
+		expect(w.gh.addReactionToComment).toHaveBeenCalledWith(
+			trigger.id,
+			"eyes",
+			"comment",
 		);
-	});
-
-	it("allows explicit users outside allowed associations", async () => {
-		const mockClient = createMockGitHubClient();
-		const deps = createMockDeps({
-			inputs: createActionInputs({ allowedUsers: ["stranger"] }),
-			context: {
-				payload: {
-					issue: {
-						number: 1,
-						title: "Test",
-						body: "@pi do something",
-						user: { login: "stranger", type: "User" },
-						author_association: "NONE",
-					},
-				},
-				repo: { owner: "testowner", name: "testrepo" },
-			},
-			createClient: vi.fn(() => mockClient),
-		});
-		vi.mocked(runAgent).mockResolvedValue({ success: true, response: "Done" });
-
-		await run(deps);
-
-		expect(deps.log.warning).not.toHaveBeenCalled();
-		expect(mockClient.createComment).toHaveBeenCalled();
-	});
-
-	it("allows bots in allowedBots list", async () => {
-		const mockClient = createMockGitHubClient();
-		const deps = createMockDeps({
-			inputs: {
-				triggerPhrase: DEFAULTS.triggerPhrase,
-				allowedBots: ["dependabot[bot]"],
-				allowedUsers: [],
-				allowedAssociations: [...DEFAULTS.allowedAssociations],
-				modelConfig: createModelConfig(),
-				githubToken: "test-token",
-				apiKey: undefined,
-				customProvider: undefined,
-				promptTemplate: undefined,
-				shareSession: DEFAULTS.shareSession,
-				outputMode: "comment",
-				prompt: undefined,
-				prNumber: undefined,
-			},
-			context: {
-				payload: {
-					comment: {
-						id: 123,
-						body: "@pi update deps",
-						user: { login: "dependabot[bot]", type: "Bot" },
-						author_association: "NONE",
-					},
-					issue: {
-						number: 1,
-						title: "Dependency Update",
-						body: "Update deps",
-						user: { login: "dependabot[bot]", type: "Bot" },
-						author_association: "NONE",
-					},
-				},
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => mockClient),
-		});
-
-		vi.mocked(runAgent).mockResolvedValue({
-			success: true,
-			response: "Done",
-		});
-
-		await run(deps);
-
-		// Should not have logged a warning about permissions
-		expect(deps.log.warning).not.toHaveBeenCalled();
-		// Should have proceeded to add reaction
-		expect(mockClient.addReactionToComment).toHaveBeenCalledWith(123, "eyes");
-	});
-
-	it("fails when github_token is missing", async () => {
-		const deps = createMockDeps({
-			inputs: {
-				triggerPhrase: DEFAULTS.triggerPhrase,
-				allowedBots: [],
-				allowedUsers: [],
-				allowedAssociations: [...DEFAULTS.allowedAssociations],
-				modelConfig: createModelConfig(),
-				githubToken: undefined,
-				apiKey: undefined,
-				customProvider: undefined,
-				promptTemplate: undefined,
-				shareSession: DEFAULTS.shareSession,
-				outputMode: "comment",
-				prompt: undefined,
-				prNumber: undefined,
-			},
-			context: {
-				payload: {
-					issue: {
-						number: 1,
-						title: "Test",
-						body: "@pi do something",
-						user: { login: "user", type: "User" },
-						author_association: "OWNER",
-					},
-				},
-				repo: createRepoRef(),
-			},
-		});
-
-		await run(deps);
-		expect(deps.log.setFailed).toHaveBeenCalledWith("github_token is required");
-	});
-
-	it("runs agent and posts success response", async () => {
-		const mockClient = createMockGitHubClient();
-		const deps = createMockDeps({
-			context: {
-				payload: createIssuePayload({ number: 42, body: "@pi help me" }),
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => mockClient),
-		});
-
-		vi.mocked(runAgent).mockResolvedValue({
-			success: true,
-			response: "Here is your help!",
-		});
-
-		await run(deps);
-
-		expect(mockClient.addReactionToIssue).toHaveBeenCalledWith(42, "eyes");
-		expect(runAgent).toHaveBeenCalledWith(
-			expect.objectContaining({
-				type: "issue",
-				title: "Test Issue",
-				task: "help me",
-			}),
-			expect.objectContaining({
-				provider: DEFAULTS.provider,
-				model: DEFAULTS.model,
-				timeout: DEFAULTS.timeout,
-				cwd: "/test/cwd",
-			}),
+		expect(w.gh.addReactionToComment).toHaveBeenCalledWith(
+			trigger.id,
+			"rocket",
+			"comment",
 		);
-		expect(mockClient.addReactionToIssue).toHaveBeenCalledWith(42, "rocket");
-		expect(mockClient.createComment).toHaveBeenCalledWith(
-			42,
-			"### 🤖 pi Response\n\nHere is your help!",
-		);
+		const log = git(w.remote, "log", "--format=%s", REF);
+		expect(log).toMatch(FIRST_COMMIT);
 	});
 
-	it("passes api_key through to the agent config", async () => {
-		const mockClient = createMockGitHubClient();
-		const deps = createMockDeps({
-			inputs: {
-				triggerPhrase: DEFAULTS.triggerPhrase,
-				allowedBots: [],
-				allowedUsers: [],
-				allowedAssociations: [...DEFAULTS.allowedAssociations],
-				modelConfig: createModelConfig(),
-				githubToken: "test-token",
-				apiKey: "sk-test",
-				customProvider: undefined,
-				promptTemplate: undefined,
-				shareSession: DEFAULTS.shareSession,
-				outputMode: "comment",
-				prompt: undefined,
-				prNumber: undefined,
-			},
-			context: {
-				payload: {
-					issue: {
-						number: 42,
-						title: "Test Issue",
-						body: "@pi help me",
-						user: { login: "user", type: "User" },
-						author_association: "OWNER",
-					},
-				},
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => mockClient),
-		});
-
-		vi.mocked(runAgent).mockResolvedValue({
-			success: true,
-			response: "Done",
-		});
-
-		await run(deps);
-
-		expect(runAgent).toHaveBeenCalledWith(
-			expect.anything(),
-			expect.objectContaining({ apiKey: "sk-test" }),
-		);
-	});
-
-	it("passes custom provider config through to the agent config", async () => {
-		const mockClient = createMockGitHubClient();
-		const customProvider: CustomProviderConfig = {
-			baseUrl: "https://inference-api.nvidia.com",
-			api: "openai-responses",
-			authHeader: false,
-			reasoning: true,
-			input: ["text", "image"],
-			contextWindow: 1_050_000,
-			maxTokens: 16_384,
+	it("continues the same conversation in a later run on a fresh runner", async () => {
+		const w = world();
+		let seen: string[] = [];
+		const remember: FauxResponseStep = (context) => {
+			seen = userTexts(context.messages as never);
+			return fauxAssistantMessage(`I remember ${seen.length} requests.`);
 		};
-		const deps = createMockDeps({
-			inputs: {
-				triggerPhrase: DEFAULTS.triggerPhrase,
-				allowedBots: [],
-				allowedUsers: [],
-				allowedAssociations: [...DEFAULTS.allowedAssociations],
-				modelConfig: createModelConfig(),
-				githubToken: "test-token",
-				apiKey: "sk-test",
-				customProvider,
-				promptTemplate: undefined,
-				shareSession: DEFAULTS.shareSession,
-				outputMode: "comment",
-				prompt: undefined,
-				prNumber: undefined,
-			},
-			context: {
-				payload: {
-					issue: {
-						number: 42,
-						title: "Test Issue",
-						body: "@pi help me",
-						user: { login: "user", type: "User" },
-						author_association: "OWNER",
-					},
-				},
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => mockClient),
-		});
+		w.faux.setResponses([fauxAssistantMessage("First answer."), remember]);
+		await run(w.deps(w.comment("@pi first task")));
+		await run(w.deps(w.comment("@pi and now the second")));
 
-		vi.mocked(runAgent).mockResolvedValue({
-			success: true,
-			response: "Done",
-		});
-
-		await run(deps);
-
-		expect(runAgent).toHaveBeenCalledWith(
-			expect.anything(),
-			expect.objectContaining({ customProvider }),
+		expect(w.gh.posted).toHaveLength(2);
+		expect(w.gh.posted[1]).toContain("I remember 2 requests.");
+		expect(seen[0]).toContain("first task");
+		expect(seen[0]).toContain("Fix the thing"); // the first message carries the issue context
+		expect(seen[1]).toBe(
+			`**@user** commented (https://github.com/o/r/issues/42#issuecomment-${102}):\n\nand now the second`,
 		);
 	});
 
-	it("runs agent and posts error response on failure", async () => {
-		const mockClient = createMockGitHubClient();
-		const deps = createMockDeps({
-			context: {
-				payload: {
-					issue: {
-						number: 42,
-						title: "Test Issue",
-						body: "@pi do something",
-						user: { login: "user", type: "User" },
-						author_association: "MEMBER",
-					},
-				},
-				repo: createRepoRef(),
+	it("picks up comments a cancelled run never handled", async () => {
+		const w = world();
+		w.faux.setResponses([
+			fauxAssistantMessage("one"),
+			fauxAssistantMessage("two"),
+			fauxAssistantMessage("three"),
+		]);
+		await run(w.deps(w.comment("@pi one")));
+		const missed = w.comment("@pi two (its run was cancelled while pending)");
+		const current = w.comment("@pi three");
+
+		await run(w.deps(current));
+
+		const rockets = vi
+			.mocked(w.gh.addReactionToComment)
+			.mock.calls.filter(([, reaction]) => reaction === "rocket")
+			.map(([id]) => id);
+		expect(rockets).toEqual(expect.arrayContaining([missed.id, current.id]));
+		expect(w.gh.posted.length).toBeGreaterThanOrEqual(2);
+		// Nothing is answered twice: the first comment was already handled.
+		expect(w.gh.posted.filter((p) => p.includes("one"))).toHaveLength(1);
+	});
+
+	it("adds comments posted while pi works to the running conversation", async () => {
+		const w = world();
+		let late: GitHubComment | undefined;
+		let contextAtEnd: string[] = [];
+		w.faux.setResponses([
+			() => {
+				late = w.comment("@pi also update the docs", {
+					user: { login: "bob", type: "User" },
+				});
+				return fauxAssistantMessage(
+					[fauxToolCall("bash", { command: "sleep 0.5" })],
+					{ stopReason: "toolUse" },
+				);
 			},
-			createClient: vi.fn(() => mockClient),
-		});
+			(context) => {
+				contextAtEnd = userTexts(context.messages as never);
+				return fauxAssistantMessage("Done, docs too.");
+			},
+			fauxAssistantMessage("Docs were already handled."),
+		]);
 
-		vi.mocked(runAgent).mockResolvedValue({
-			success: false,
-			error: "Model not found",
-		});
+		await run(w.deps(w.comment("@pi fix it")));
 
-		await run(deps);
-
-		expect(deps.log.error).toHaveBeenCalledWith(
-			"pi execution failed: Model not found",
+		expect(late).toBeDefined();
+		expect(contextAtEnd.some((t) => t.includes("**@bob** commented"))).toBe(
+			true,
 		);
-		expect(mockClient.addReactionToIssue).toHaveBeenCalledWith(42, "confused");
-		expect(mockClient.createComment).toHaveBeenCalledWith(
-			42,
-			"### ❌ pi Error\n\nFailed to process request: Model not found",
+		expect(w.gh.addReactionToComment).toHaveBeenCalledWith(
+			late?.id,
+			"rocket",
+			"comment",
 		);
 	});
 
-	it("fetches PR diff for pull requests", async () => {
-		const mockClient = createMockGitHubClient();
-		mockClient.getPullRequestDiff = vi
-			.fn()
-			.mockResolvedValue("+added\n-removed");
-		const deps = createMockDeps({
-			inputs: createActionInputs({
-				allowedAssociations: ["OWNER", "MEMBER", "COLLABORATOR"],
+	it("aborts at the timeout, reports it, and still saves the thread", async () => {
+		const w = world();
+		w.faux.setResponses([
+			fauxAssistantMessage([fauxToolCall("bash", { command: "sleep 5" })], {
+				stopReason: "toolUse",
 			}),
-			context: {
-				payload: {
-					pull_request: {
-						number: 99,
-						title: "Add Feature",
-						body: "@pi review",
-						user: { login: "contributor", type: "User" },
-						author_association: "COLLABORATOR",
-					},
-				},
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => mockClient),
-		});
-
-		vi.mocked(runAgent).mockResolvedValue({
-			success: true,
-			response: "LGTM!",
-		});
+		]);
+		const trigger = w.comment("@pi run forever");
+		const deps = w.deps(trigger);
+		deps.inputs.modelConfig.timeout = 0.3;
 
 		await run(deps);
 
-		expect(mockClient.getPullRequestDiff).toHaveBeenCalledWith(99);
-		expect(runAgent).toHaveBeenCalledWith(
-			expect.objectContaining({
-				type: "pull_request",
-				diff: "+added\n-removed",
-			}),
-			expect.anything(),
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain("Timeout after 0.3 seconds");
+		expect(w.gh.addReactionToComment).toHaveBeenCalledWith(
+			trigger.id,
+			"confused",
+			"comment",
 		);
+		expect(git(w.remote, "rev-parse", REF).trim()).toMatch(COMMIT_ID);
+	}, 20_000);
+
+	it("does not repeat a failure report in a later run", async () => {
+		const w = world();
+		// The provider fails until someone asks again.
+		const flaky: FauxResponseStep = (context) =>
+			userTexts(context.messages as never)
+				.at(-1)
+				?.includes("again")
+				? fauxAssistantMessage("recovered")
+				: (fauxAssistantMessage("", {
+						stopReason: "error",
+						errorMessage: "provider exploded",
+					}) as AssistantMessage);
+		w.faux.setResponses(Array.from({ length: 10 }, () => flaky));
+		await run(w.deps(w.comment("@pi try")));
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain("pi Error");
+
+		await run(w.deps(w.comment("@pi try again")));
+		expect(w.gh.posted).toHaveLength(2);
+		expect(w.gh.posted[1]).toContain("recovered");
+	}, 30_000);
+
+	it("ignores triggers from users without write access", async () => {
+		const w = world();
+		const deps = w.deps(w.comment("@pi hack", { author_association: "NONE" }));
+		await run(deps);
+		expect(w.gh.posted).toHaveLength(0);
+		expect(w.gh.addReactionToComment).not.toHaveBeenCalled();
 	});
 
-	it("handles comment events", async () => {
-		const mockClient = createMockGitHubClient();
-		const deps = createMockDeps({
-			context: {
-				payload: {
-					comment: {
-						id: 123,
-						body: "@pi format code",
-						user: { login: "reviewer", type: "User" },
-						author_association: "MEMBER",
-					},
-					issue: {
-						number: 42,
-						title: "Code Review",
-						body: "Please review",
-						user: { login: "author", type: "User" },
-						author_association: "OWNER",
-					},
-				},
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => mockClient),
+	it("reports an unknown model", async () => {
+		const w = world();
+		const deps = w.deps(w.comment("@pi hi"), {
+			modelConfig: { provider: "nope", model: "missing", timeout: 30 },
 		});
+		await run(deps);
+		expect(w.gh.posted[0]).toContain("Model not found: nope/missing");
+	});
+});
 
-		vi.mocked(runAgent).mockResolvedValue({
-			success: true,
-			response: "Code formatted!",
-		});
+describe("pushThread (the always() step)", () => {
+	it("pushes a thread the main step left unpushed, and is a no-op otherwise", async () => {
+		const w = world();
+		w.faux.setResponses([fauxAssistantMessage("ok")]);
+		const deps = w.deps(w.comment("@pi go"));
+		await run(deps);
+		const log = { info: vi.fn(), warning: vi.fn() };
+		const { payload } = deps.context;
+
+		// Simulate a step killed before its final push: rewind the remote ref.
+		const tip = git(deps.cwd, "rev-parse", REF).trim();
+		const parent = git(deps.cwd, "rev-parse", `${REF}~3`).trim();
+		git(w.remote, "update-ref", REF, parent);
+
+		expect(await pushThread(payload, deps.cwd, log)).toBe("pushed");
+		expect(git(w.remote, "rev-parse", REF).trim()).toBe(tip);
+		expect(await pushThread(payload, deps.cwd, log)).toBe("up-to-date");
+		expect(await pushThread({ issue: { number: 7 } }, deps.cwd, log)).toBe(
+			"nothing",
+		);
+		expect(await pushThread({}, deps.cwd, log)).toBe("nothing");
+
+		// Another run moved the remote on: never overwrite it.
+		git(
+			w.remote,
+			"update-ref",
+			REF,
+			git(w.remote, "commit-tree", "-m", "other", `${REF}^{tree}`).trim(),
+		);
+		expect(await pushThread(payload, deps.cwd, log)).toBe("failed");
+		expect(log.warning).toHaveBeenCalled();
+	});
+});
+
+describe("run (durable) with main's modes", () => {
+	const outputs = (deps: ActionDependencies) =>
+		Object.fromEntries(vi.mocked(deps.log.setOutput).mock.calls);
+
+	it("output mode answers a trigger without comments or reactions, and keeps the thread", async () => {
+		const w = world();
+		w.faux.setResponses([fauxAssistantMessage("All good.")]);
+		const deps = w.deps(w.comment("@pi check"), { outputMode: "output" });
 
 		await run(deps);
 
-		// Should add reaction to comment, not issue
-		expect(mockClient.addReactionToComment).toHaveBeenCalledWith(123, "eyes");
-		expect(mockClient.addReactionToComment).toHaveBeenCalledWith(123, "rocket");
-		expect(mockClient.addReactionToIssue).not.toHaveBeenCalled();
+		expect(outputs(deps)).toEqual({ success: "true", response: "All good." });
+		expect(w.gh.posted).toHaveLength(0);
+		expect(w.gh.addReactionToComment).not.toHaveBeenCalled();
+		expect(git(w.remote, "rev-parse", REF).trim()).toMatch(COMMIT_ID);
 	});
 
-	it("sanitizes input before processing", async () => {
-		const mockClient = createMockGitHubClient();
-		const deps = createMockDeps({
-			context: {
-				payload: {
-					issue: {
-						number: 1,
-						title: "Test",
-						body: "@pi <!-- hidden --> do something\u200B",
-						user: { login: "user", type: "User" },
-						author_association: "OWNER",
-					},
-				},
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => mockClient),
-		});
-
-		vi.mocked(runAgent).mockResolvedValue({
-			success: true,
-			response: "Done",
-		});
+	it("a direct prompt runs in memory and stores nothing", async () => {
+		const w = world();
+		w.faux.setResponses([fauxAssistantMessage("Release notes.")]);
+		const deps = w.deps(
+			undefined,
+			{ outputMode: "output", prompt: "Write release notes" },
+			{},
+		);
 
 		await run(deps);
 
-		expect(runAgent).toHaveBeenCalledWith(
-			expect.objectContaining({
-				task: "do something",
-				triggerComment: "@pi  do something", // HTML comment and invisible char removed
-			}),
-			expect.anything(),
-		);
+		expect(outputs(deps)).toMatchObject({
+			success: "true",
+			response: "Release notes.",
+		});
+		expect(git(w.remote, "for-each-ref", "refs/pi")).toBe("");
 	});
 
-	it("shares session when shareSession is enabled", async () => {
-		const mockClient = createMockGitHubClient();
-		const mockSession = { exportToHtml: vi.fn(), exportToJsonl: vi.fn() };
-
-		// Mock shareSession to return a result
-		vi.mocked(shareSession).mockResolvedValue({
-			artifactName: "pi-session-test",
-			artifactDir: "/tmp/pi-session-test",
-			artifactUrl: "https://github.com/cv/pi-action/actions/runs/1",
-		});
-
-		const deps = createMockDeps({
-			context: {
-				payload: {
-					issue: {
-						number: 1,
-						title: "Test Issue",
-						body: "@pi test task",
-						user: { login: "user", type: "User" },
-						author_association: "OWNER",
-					},
-				},
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => mockClient),
-			inputs: {
-				...createMockDeps().inputs,
-				shareSession: true,
-			},
-		});
-
-		vi.mocked(runAgent).mockResolvedValue({
-			success: true,
-			response: "Task completed!",
-			session: mockSession,
-		});
-
-		await run(deps);
-
-		// Check that comment includes session link
-		expect(mockClient.createComment).toHaveBeenCalledWith(
-			1,
-			expect.stringContaining(
-				"📎 [Download session artifact](https://github.com/cv/pi-action/actions/runs/1)",
-			),
-		);
-	});
-
-	it("works without session sharing when shareSession is disabled", async () => {
-		const mockClient = createMockGitHubClient();
-
-		const deps = createMockDeps({
-			context: {
-				payload: {
-					issue: {
-						number: 1,
-						title: "Test Issue",
-						body: "@pi test task",
-						user: { login: "user", type: "User" },
-						author_association: "OWNER",
-					},
-				},
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => mockClient),
-			inputs: {
-				...createMockDeps().inputs,
-				shareSession: false,
-			},
-		});
-
-		vi.mocked(runAgent).mockResolvedValue({
-			success: true,
-			response: "Task completed!",
-		});
-
-		await run(deps);
-
-		// Check that comment does not include session link
-		expect(mockClient.createComment).toHaveBeenCalledWith(
-			1,
-			"### 🤖 pi Response\n\nTask completed!",
-		);
-	});
-
-	it("shares session on error response when session is available", async () => {
-		const mockClient = createMockGitHubClient();
-		const mockSession = { exportToHtml: vi.fn(), exportToJsonl: vi.fn() };
-
-		// Mock shareSession to return a result
-		vi.mocked(shareSession).mockResolvedValue({
-			artifactName: "pi-session-error",
-			artifactDir: "/tmp/pi-session-error",
-			artifactUrl: "https://github.com/cv/pi-action/actions/runs/1",
-		});
-
-		const deps = createMockDeps({
-			context: {
-				payload: {
-					issue: {
-						number: 1,
-						title: "Test Issue",
-						body: "@pi test task",
-						user: { login: "user", type: "User" },
-						author_association: "OWNER",
-					},
-				},
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => mockClient),
-			inputs: {
-				...createMockDeps().inputs,
-				shareSession: true,
-			},
-		});
-
-		vi.mocked(runAgent).mockResolvedValue({
-			success: false,
-			error: "Something went wrong",
-			session: mockSession,
-		});
-
-		await run(deps);
-
-		// Check that error comment includes session link
-		expect(mockClient.createComment).toHaveBeenCalledWith(
-			1,
-			expect.stringContaining(
-				"📎 [Download session artifact](https://github.com/cv/pi-action/actions/runs/1)",
-			),
-		);
-		expect(mockClient.createComment).toHaveBeenCalledWith(
-			1,
-			expect.stringContaining("### ❌ pi Error"),
-		);
-	});
-
-	it("posts response without session link when sharing fails", async () => {
-		const mockClient = createMockGitHubClient();
-		const mockSession = { exportToHtml: vi.fn(), exportToJsonl: vi.fn() };
-
-		// Mock shareSession to return null (failure)
-		vi.mocked(shareSession).mockResolvedValue(null);
-
-		const deps = createMockDeps({
-			context: {
-				payload: {
-					issue: {
-						number: 1,
-						title: "Test Issue",
-						body: "@pi test task",
-						user: { login: "user", type: "User" },
-						author_association: "OWNER",
-					},
-				},
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => mockClient),
-			inputs: {
-				...createMockDeps().inputs,
-				shareSession: true,
-			},
-		});
-
-		vi.mocked(runAgent).mockResolvedValue({
-			success: true,
-			response: "Task completed!",
-			session: mockSession,
-		});
-
-		await run(deps);
-
-		// Should still post the response without session link
-		expect(mockClient.createComment).toHaveBeenCalledWith(
-			1,
-			"### 🤖 pi Response\n\nTask completed!",
-		);
-	});
-
-	it("posts response without session link when no session is returned", async () => {
-		const mockClient = createMockGitHubClient();
-
-		const deps = createMockDeps({
-			context: {
-				payload: {
-					issue: {
-						number: 1,
-						title: "Test Issue",
-						body: "@pi test task",
-						user: { login: "user", type: "User" },
-						author_association: "OWNER",
-					},
-				},
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => mockClient),
-			inputs: {
-				...createMockDeps().inputs,
-				shareSession: true,
-			},
-		});
-
-		// No session returned (undefined)
-		vi.mocked(runAgent).mockResolvedValue({
-			success: true,
-			response: "Task completed!",
-		});
-
-		await run(deps);
-
-		// shareSession should not be called when no session
-		expect(shareSession).not.toHaveBeenCalled();
-		// Should still post the response without session link
-		expect(mockClient.createComment).toHaveBeenCalledWith(
-			1,
-			"### 🤖 pi Response\n\nTask completed!",
-		);
-	});
-
-	it("logs warning when session sharing throws", async () => {
-		const mockClient = createMockGitHubClient();
-		const mockSession = { exportToHtml: vi.fn(), exportToJsonl: vi.fn() };
-
-		// Mock shareSession to throw an error
-		vi.mocked(shareSession).mockRejectedValue(
-			new Error("Artifact upload error"),
-		);
-
-		const deps = createMockDeps({
-			context: {
-				payload: {
-					issue: {
-						number: 1,
-						title: "Test Issue",
-						body: "@pi test task",
-						user: { login: "user", type: "User" },
-						author_association: "OWNER",
-					},
-				},
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => mockClient),
-			inputs: {
-				...createMockDeps().inputs,
-				shareSession: true,
-			},
-		});
-
-		vi.mocked(runAgent).mockResolvedValue({
-			success: true,
-			response: "Task completed!",
-			session: mockSession,
-		});
-
-		await run(deps);
-
-		// Should log warning
-		expect(deps.log.warning).toHaveBeenCalledWith(
-			expect.stringContaining("Failed to share session"),
-		);
-		// Should still post the response without session link
-		expect(mockClient.createComment).toHaveBeenCalledWith(
-			1,
-			"### 🤖 pi Response\n\nTask completed!",
-		);
-	});
-
-	it("in output mode, sets outputs instead of posting comments", async () => {
-		const mockClient = createMockGitHubClient();
-		const deps = createMockDeps({
-			context: {
-				payload: {
-					issue: {
-						number: 42,
-						title: "Test Issue",
-						body: "@pi help me",
-						user: { login: "user", type: "User" },
-						author_association: "OWNER",
-					},
-				},
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => mockClient),
-			inputs: {
-				...createMockDeps().inputs,
-				outputMode: "output",
-			},
-		});
-		vi.mocked(runAgent).mockResolvedValue({
-			success: true,
-			response: "Here is your help!",
-		});
-
-		await run(deps);
-
-		expect(mockClient.createComment).not.toHaveBeenCalled();
-		expect(mockClient.addReactionToIssue).not.toHaveBeenCalled();
-		expect(deps.log.setOutput).toHaveBeenCalledWith("success", "true");
-		expect(deps.log.setOutput).toHaveBeenCalledWith(
-			"response",
-			"Here is your help!",
-		);
-	});
-
-	it("uses direct prompt when output mode has no issue context", async () => {
-		const mockClient = createMockGitHubClient();
-		const deps = createMockDeps({
-			createClient: vi.fn(() => mockClient),
-			inputs: {
-				...createMockDeps().inputs,
-				outputMode: "output",
-				prompt: "Generate release notes",
-			},
-		});
-		vi.mocked(runAgent).mockResolvedValue({
-			success: true,
-			response: "Release notes",
-		});
-
-		await run(deps);
-
-		expect(runAgent).toHaveBeenCalledWith(
-			expect.objectContaining({
-				type: "direct",
-				task: "Generate release notes",
-			}),
-			expect.anything(),
-		);
-		expect(deps.log.setOutput).toHaveBeenCalledWith(
-			"response",
-			"Release notes",
-		);
-	});
-
-	it("loads PR context from pr_number", async () => {
-		const mockClient = createMockGitHubClient();
-		mockClient.getPullRequest = vi.fn().mockResolvedValue({
-			number: 99,
+	it("pr_number reviews join that PR's thread and can post to it", async () => {
+		const w = world();
+		vi.mocked(w.gh.getPullRequest).mockResolvedValue({
+			number: 42,
 			title: "Add feature",
-			body: "PR body",
-			user: { login: "author", type: "User" },
+			body: "Adds it",
+			user: { login: "o", type: "User" },
 			author_association: "OWNER",
 		});
-		mockClient.getPullRequestDiff = vi.fn().mockResolvedValue("+added");
-		const deps = createMockDeps({
-			createClient: vi.fn(() => mockClient),
-			inputs: {
-				...createMockDeps().inputs,
-				outputMode: "output",
-				prNumber: 99,
-				prompt: "Review this PR",
+		let first: string[] = [];
+		w.faux.setResponses([
+			(context) => {
+				first = userTexts(context.messages as never);
+				return fauxAssistantMessage("Looks fine.");
 			},
-		});
-		vi.mocked(runAgent).mockResolvedValue({
-			success: true,
-			response: "LGTM",
-		});
-
-		await run(deps);
-
-		expect(mockClient.getPullRequest).toHaveBeenCalledWith(99);
-		expect(mockClient.getPullRequestDiff).toHaveBeenCalledWith(99);
-		expect(runAgent).toHaveBeenCalledWith(
-			expect.objectContaining({
-				type: "pull_request",
-				number: 99,
-				task: "Review this PR",
-				diff: "+added",
-			}),
-			expect.anything(),
-		);
-	});
-
-	it("includes PR review comments in PR context", async () => {
-		const mockClient = createMockGitHubClient();
-		mockClient.getPullRequestDiff = vi.fn().mockResolvedValue("+added");
-		mockClient.getPullRequestReviewComments = vi.fn().mockResolvedValue([
-			{
-				id: 1,
-				body: "Please simplify",
-				user: { login: "reviewer", type: "User" },
-				path: "src/file.ts",
-				line: 12,
-				created_at: "2026-04-29T00:00:00Z",
-			},
+			fauxAssistantMessage("Still fine."),
 		]);
-		const deps = createMockDeps({
-			context: {
-				payload: createPullRequestPayload({ number: 42 }),
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => mockClient),
-		});
-		vi.mocked(runAgent).mockResolvedValue({
-			success: true,
-			response: "Reviewed",
-		});
+		await run(w.deps(undefined, { prNumber: 42, prompt: "Review it" }, {}));
+		expect(first[0]).toContain("Add feature");
+		expect(first[0]).toContain("Review it");
+		expect(w.gh.posted[0]).toContain("Looks fine.");
+		expect(git(w.remote, "rev-parse", REF).trim()).toMatch(COMMIT_ID);
 
-		await run(deps);
-
-		expect(runAgent).toHaveBeenCalledWith(
-			expect.objectContaining({
-				reviewComments: expect.stringContaining("Please simplify"),
-			}),
-			expect.anything(),
+		// A second dispatch continues the thread as a follow-up from the workflow's actor.
+		const deps = w.deps(
+			undefined,
+			{ prNumber: 42, prompt: "Again", outputMode: "output" },
+			{},
 		);
+		deps.env = { ...deps.env, GITHUB_RUN_ID: "778" };
+		await run(deps);
+		expect(outputs(deps)).toMatchObject({ response: "Still fine." });
 	});
 
-	it("retries once when the agent returns an empty response", async () => {
-		const mockClient = createMockGitHubClient();
-		const deps = createMockDeps({
-			context: {
-				payload: {
-					issue: {
-						number: 1,
-						title: "Test Issue",
-						body: "@pi do work",
-						user: { login: "user", type: "User" },
-						author_association: "OWNER",
-					},
-				},
-				repo: createRepoRef(),
-			},
-			createClient: vi.fn(() => mockClient),
-		});
-		vi.mocked(runAgent)
-			.mockResolvedValueOnce({
-				success: false,
-				error: "Agent returned empty response",
-			})
-			.mockResolvedValueOnce({
-				success: true,
-				response: "Summary after retry",
-			});
+	it("re-prompts once for a summary when the answer is empty", async () => {
+		const w = world();
+		w.faux.setResponses([
+			fauxAssistantMessage(""),
+			fauxAssistantMessage("Summary: done."),
+		]);
+		await run(w.deps(w.comment("@pi do it")));
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain("Summary: done.");
+	});
 
+	it("reports two empty answers as a failure", async () => {
+		const w = world();
+		w.faux.setResponses([fauxAssistantMessage(""), fauxAssistantMessage("")]);
+		const deps = w.deps(w.comment("@pi do it"), { outputMode: "output" });
 		await run(deps);
+		expect(outputs(deps)).toMatchObject({
+			success: "false",
+			response:
+				"Agent failed to provide a response after two attempts. First attempt: Agent returned empty response. Retry attempt: Agent returned empty response.",
+		});
+	});
 
-		expect(runAgent).toHaveBeenCalledTimes(2);
-		expect(runAgent).toHaveBeenLastCalledWith(
-			expect.objectContaining({
-				task: expect.stringContaining("final text summary"),
-			}),
-			expect.objectContaining({ toolNames: [] }),
-		);
-		expect(mockClient.createComment).toHaveBeenCalledWith(
-			1,
-			"### 🤖 pi Response\n\nSummary after retry",
-		);
+	it("output mode reports setup failures as outputs", async () => {
+		const w = world();
+		const deps = w.deps(w.comment("@pi hi"), {
+			outputMode: "output",
+			modelConfig: { provider: "nope", model: "missing", timeout: 30 },
+		});
+		await run(deps);
+		expect(outputs(deps)).toMatchObject({ success: "false" });
+		expect(outputs(deps)).toMatchObject({
+			response: expect.stringContaining("Model not found: nope/missing"),
+		});
+		expect(w.gh.posted).toHaveLength(0);
 	});
 });

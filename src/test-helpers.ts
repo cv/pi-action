@@ -1,22 +1,41 @@
 /**
  * Test helper functions to reduce duplication in test files
  */
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { vi } from "vitest";
-import type { AgentConfig } from "./agent.js";
-import type { PIContext } from "./context.js";
-import { DEFAULTS } from "./defaults.js";
-import type { GitHubClient } from "./github.js";
-import type { ActionInputs } from "./run.js";
-import type { ModelConfig, RepoRef, TriggerInfo } from "./types.js";
+import { DEFAULTS } from "./defaults.ts";
+import type { GitHubClient } from "./github.ts";
+import type { ActionInputs } from "./run.ts";
+import type { GitHubComment, ModelConfig, TriggerInfo } from "./types.ts";
+
+const since = (list: GitHubComment[], iso?: string) =>
+	iso
+		? list.filter((c) => Date.parse(c.created_at) >= Date.parse(iso))
+		: [...list];
 
 /**
- * Creates a mock GitHub client with all required methods
+ * Creates a mock GitHub client with all required methods. `comments` and `reviewComments` back the list
+ * methods (live arrays: tests may push to them), and posted comment bodies are recorded in `posted`.
  */
-export function createMockGitHubClient(): GitHubClient {
+export function createMockGitHubClient(
+	comments: GitHubComment[] = [],
+	reviewComments: GitHubComment[] = [],
+): GitHubClient & { posted: string[] } {
+	const posted: string[] = [];
 	return {
+		posted,
 		addReactionToComment: vi.fn(),
 		addReactionToIssue: vi.fn(),
-		createComment: vi.fn(),
+		createComment: vi.fn((_issue: number, body: string) => {
+			posted.push(body);
+			return Promise.resolve({
+				id: 1000 + posted.length,
+				url: `https://github.com/o/r/issues/1#c${posted.length}`,
+			});
+		}),
 		getPullRequest: vi.fn().mockResolvedValue({
 			number: 1,
 			title: "Test PR",
@@ -26,6 +45,26 @@ export function createMockGitHubClient(): GitHubClient {
 		}),
 		getPullRequestDiff: vi.fn().mockResolvedValue(""),
 		getPullRequestReviewComments: vi.fn().mockResolvedValue([]),
+		listIssueComments: vi.fn((_issue: number, iso?: string) =>
+			Promise.resolve(since(comments, iso)),
+		),
+		listReviewComments: vi.fn((_pr: number, iso?: string) =>
+			Promise.resolve(since(reviewComments, iso)),
+		),
+	};
+}
+
+export function createComment(
+	overrides: Partial<GitHubComment> = {},
+): GitHubComment {
+	return {
+		id: 1,
+		body: "@pi do something",
+		user: { login: "user", type: "User" },
+		author_association: "MEMBER",
+		created_at: "2026-01-01T00:00:00Z",
+		html_url: "https://github.com/o/r/issues/1#issuecomment-1",
+		...overrides,
 	};
 }
 
@@ -49,41 +88,9 @@ export function createTriggerInfo(
 }
 
 /**
- * Creates a PIContext object with sensible defaults and optional overrides
- */
-export function createPIContext(overrides: Partial<PIContext> = {}): PIContext {
-	return {
-		type: "issue",
-		title: "Test Issue",
-		body: "Issue body",
-		number: 1,
-		triggerComment: "@pi do something",
-		task: "do something",
-		...overrides,
-	};
-}
-
-/**
- * Creates an AgentConfig object with sensible defaults and optional overrides
- */
-export function createAgentConfig(
-	overrides: Partial<AgentConfig> = {},
-): AgentConfig {
-	return {
-		provider: DEFAULTS.provider,
-		model: DEFAULTS.model,
-		timeout: DEFAULTS.timeout,
-		cwd: "/test/dir",
-		...overrides,
-	};
-}
-
-/**
  * Creates a ModelConfig object with sensible defaults and optional overrides
  */
-export function createModelConfig(
-	overrides: Partial<ModelConfig> = {},
-): ModelConfig {
+function createModelConfig(overrides: Partial<ModelConfig> = {}): ModelConfig {
 	return {
 		provider: DEFAULTS.provider,
 		model: DEFAULTS.model,
@@ -108,69 +115,27 @@ export function createActionInputs(
 		apiKey: undefined,
 		customProvider: undefined,
 		promptTemplate: undefined,
-		shareSession: DEFAULTS.shareSession,
 		outputMode: DEFAULTS.outputMode,
 		prompt: undefined,
 		prNumber: undefined,
+		pollInterval: DEFAULTS.pollInterval,
 		...overrides,
 	};
 }
 
-/**
- * Creates a minimal issue payload for run tests.
- */
-export function createIssuePayload(
-	overrides: Record<string, unknown> = {},
-): Record<string, unknown> {
+/** A fresh, empty git repository in a temp directory. */
+export function tempRepo(): {
+	dir: string;
+	git: (...args: string[]) => string;
+	cleanup: () => void;
+} {
+	const dir = mkdtempSync(join(tmpdir(), "git-pi-durable-"));
+	const git = (...args: string[]) =>
+		execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+	git("init", "-q", "-b", "main");
 	return {
-		issue: {
-			number: 1,
-			title: "Test Issue",
-			body: "@pi do something",
-			user: { login: "user", type: "User" },
-			author_association: "OWNER",
-			...overrides,
-		},
-	};
-}
-
-/**
- * Creates a minimal pull_request payload for run tests.
- */
-export function createPullRequestPayload(
-	overrides: Record<string, unknown> = {},
-): Record<string, unknown> {
-	return {
-		pull_request: {
-			number: 1,
-			title: "Test PR",
-			body: "@pi review",
-			user: { login: "user", type: "User" },
-			author_association: "OWNER",
-			...overrides,
-		},
-	};
-}
-
-/**
- * Creates a RepoRef object with sensible defaults and optional overrides
- */
-export function createRepoRef(overrides: Partial<RepoRef> = {}): RepoRef {
-	return {
-		owner: "testowner",
-		name: "testrepo",
-		...overrides,
-	};
-}
-
-/**
- * Creates a mock session for pi agent testing
- */
-export function createMockSession() {
-	return {
-		exportToHtml: vi.fn(),
-		exportToJsonl: vi.fn(),
-		subscribe: vi.fn(),
-		prompt: vi.fn(),
+		dir,
+		git,
+		cleanup: () => rmSync(dir, { recursive: true, force: true }),
 	};
 }

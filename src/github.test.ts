@@ -4,8 +4,8 @@ import {
 	createGitHubClient,
 	extractTriggerInfo,
 	type GitHubContext,
-} from "./github.js";
-import { createMockGitHubClient, createTriggerInfo } from "./test-helpers.js";
+} from "./github.ts";
+import { createMockGitHubClient, createTriggerInfo } from "./test-helpers.ts";
 
 describe("extractTriggerInfo", () => {
 	describe("comment events", () => {
@@ -37,6 +37,7 @@ describe("extractTriggerInfo", () => {
 				issueBody: "Issue body",
 				commentId: 123,
 				isPullRequest: false,
+				source: "comment",
 			});
 		});
 
@@ -68,6 +69,7 @@ describe("extractTriggerInfo", () => {
 				issueBody: "PR description",
 				commentId: 456,
 				isPullRequest: true,
+				source: "review_comment",
 			});
 		});
 
@@ -126,6 +128,7 @@ describe("extractTriggerInfo", () => {
 				issueBody: "@pi help me with this",
 				commentId: undefined,
 				isPullRequest: false,
+				source: "body",
 			});
 		});
 
@@ -151,6 +154,7 @@ describe("extractTriggerInfo", () => {
 				issueBody: "@pi please review",
 				commentId: undefined,
 				isPullRequest: true,
+				source: "body",
 			});
 		});
 	});
@@ -224,10 +228,14 @@ describe("createGitHubClient", () => {
 			rest: {
 				reactions: {
 					createForIssueComment: vi.fn(),
+					createForPullRequestReviewComment: vi.fn(),
 					createForIssue: vi.fn(),
 				},
 				issues: {
-					createComment: vi.fn(),
+					createComment: vi.fn().mockResolvedValue({
+						data: { id: 7, html_url: "https://github.com/c/7" },
+					}),
+					listComments: vi.fn(),
 				},
 				pulls: {
 					get: vi.fn(),
@@ -342,6 +350,8 @@ describe("createGitHubClient", () => {
 			owner: "testowner",
 			repo: "testrepo",
 			pull_number: 99,
+			per_page: 100,
+			page: 1,
 		});
 		expect(comments).toEqual([
 			{
@@ -392,7 +402,11 @@ describe("addReaction", () => {
 
 		await addReaction(client, triggerInfo, "eyes");
 
-		expect(client.addReactionToComment).toHaveBeenCalledWith(123, "eyes");
+		expect(client.addReactionToComment).toHaveBeenCalledWith(
+			123,
+			"eyes",
+			undefined,
+		);
 		expect(client.addReactionToIssue).not.toHaveBeenCalled();
 	});
 
@@ -421,5 +435,137 @@ describe("addReaction", () => {
 		// When commentId is undefined, should fall back to issue reaction
 		expect(client.addReactionToIssue).toHaveBeenCalledWith(42, "confused");
 		expect(client.addReactionToComment).not.toHaveBeenCalled();
+	});
+});
+
+describe("createGitHubClient (durable threads)", () => {
+	const context: GitHubContext = { repo: { owner: "o", name: "r" } };
+	function octokit() {
+		return {
+			rest: {
+				reactions: {
+					createForIssueComment: vi.fn(),
+					createForPullRequestReviewComment: vi.fn(),
+					createForIssue: vi.fn(),
+				},
+				issues: {
+					createComment: vi.fn().mockResolvedValue({
+						data: { id: 7, html_url: "https://github.com/c/7" },
+					}),
+					listComments: vi.fn(),
+				},
+				pulls: { get: vi.fn(), listReviewComments: vi.fn() },
+			},
+		};
+	}
+	const page = (n: number, start: number) =>
+		Array.from({ length: n }, (_, i) => ({ id: start + i }));
+
+	it("returns the posted comment's id and URL", async () => {
+		const client = createGitHubClient(octokit(), context);
+		expect(await client.createComment(1, "hi")).toEqual({
+			id: 7,
+			url: "https://github.com/c/7",
+		});
+	});
+
+	it("routes review comment reactions to the review comment API", async () => {
+		const mock = octokit();
+		await createGitHubClient(mock, context).addReactionToComment(
+			5,
+			"rocket",
+			"review_comment",
+		);
+		expect(
+			mock.rest.reactions.createForPullRequestReviewComment,
+		).toHaveBeenCalledWith({
+			owner: "o",
+			repo: "r",
+			comment_id: 5,
+			content: "rocket",
+		});
+		expect(mock.rest.reactions.createForIssueComment).not.toHaveBeenCalled();
+	});
+
+	it("lists every page of issue comments since a time", async () => {
+		const mock = octokit();
+		mock.rest.issues.listComments
+			.mockResolvedValueOnce({ data: page(100, 0) })
+			.mockResolvedValueOnce({ data: page(3, 100) });
+		const comments = await createGitHubClient(mock, context).listIssueComments(
+			42,
+			"2026-01-01T00:00:00Z",
+		);
+		expect(comments).toHaveLength(103);
+		expect(mock.rest.issues.listComments).toHaveBeenLastCalledWith({
+			owner: "o",
+			repo: "r",
+			issue_number: 42,
+			since: "2026-01-01T00:00:00Z",
+			per_page: 100,
+			page: 2,
+		});
+	});
+
+	it("lists review comments without a since filter", async () => {
+		const mock = octokit();
+		mock.rest.pulls.listReviewComments.mockResolvedValueOnce({
+			data: page(2, 0),
+		});
+		expect(
+			await createGitHubClient(mock, context).listReviewComments(9),
+		).toHaveLength(2);
+		expect(mock.rest.pulls.listReviewComments).toHaveBeenCalledWith({
+			owner: "o",
+			repo: "r",
+			pull_number: 9,
+			per_page: 100,
+			page: 1,
+		});
+	});
+
+	it("maps review comments without a user to a placeholder author", async () => {
+		const mock = octokit();
+		mock.rest.pulls.listReviewComments.mockResolvedValueOnce({
+			data: [
+				{ id: 1, body: null, user: null, created_at: "2026-01-01T00:00:00Z" },
+			],
+		});
+		const [comment] = await createGitHubClient(
+			mock,
+			context,
+		).getPullRequestReviewComments(9);
+		expect(comment).toEqual({
+			id: 1,
+			body: "",
+			user: { login: "ghost", type: "User" },
+			created_at: "2026-01-01T00:00:00Z",
+		});
+	});
+});
+
+describe("extractTriggerInfo (durable threads)", () => {
+	it("records when and where the trigger was posted", () => {
+		const info = extractTriggerInfo({
+			comment: {
+				id: 3,
+				body: "@pi go",
+				user: { login: "a", type: "User" },
+				author_association: "OWNER",
+				created_at: "2026-02-02T00:00:00Z",
+				html_url: "https://github.com/o/r/issues/1#issuecomment-3",
+			},
+			issue: {
+				number: 1,
+				title: "t",
+				body: "b",
+				user: { login: "a", type: "User" },
+			},
+		});
+		expect(info).toMatchObject({
+			source: "comment",
+			createdAt: "2026-02-02T00:00:00Z",
+			url: "https://github.com/o/r/issues/1#issuecomment-3",
+		});
 	});
 });

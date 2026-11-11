@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { DEFAULTS } from "./defaults.js";
+import { DEFAULTS } from "./defaults.ts";
 
 const ACTION_YML = readFileSync("action.yml", "utf-8");
 const README = readFileSync("README.md", "utf-8");
@@ -12,6 +12,7 @@ const DEFAULT_CASES = [
 	["trigger_phrase", DEFAULTS.triggerPhrase],
 	["allowed_associations", DEFAULTS.allowedAssociations.join(",")],
 	["timeout", String(DEFAULTS.timeout)],
+	["poll_interval", String(DEFAULTS.pollInterval)],
 	["provider", DEFAULTS.provider],
 	["model", DEFAULTS.model],
 	["provider_api", DEFAULTS.customProviderApi],
@@ -20,7 +21,6 @@ const DEFAULT_CASES = [
 	["model_input", DEFAULTS.customModelInput],
 	["model_context_window", String(DEFAULTS.customModelContextWindow)],
 	["model_max_tokens", String(DEFAULTS.customModelMaxTokens)],
-	["share_session", String(DEFAULTS.shareSession)],
 	["output_mode", DEFAULTS.outputMode],
 ] as const;
 

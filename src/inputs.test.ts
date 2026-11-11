@@ -6,7 +6,7 @@ import {
 	parseModelInputModes,
 	parseOptionalBooleanInput,
 	parsePositiveIntegerInput,
-} from "./inputs.js";
+} from "./inputs.ts";
 
 describe("getInputOrDefault", () => {
 	it("returns the input value when present", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { readActionInputs } from "./action-inputs.js";
-import { DEFAULTS } from "./defaults.js";
+import { readActionInputs } from "./action-inputs.ts";
+import { DEFAULTS } from "./defaults.ts";
 
 function createInputReader(
 	values: Record<string, string>,
@@ -28,10 +28,10 @@ describe("readActionInputs", () => {
 			apiKey: undefined,
 			customProvider: undefined,
 			promptTemplate: undefined,
-			shareSession: DEFAULTS.shareSession,
 			outputMode: DEFAULTS.outputMode,
 			prompt: undefined,
 			prNumber: undefined,
+			pollInterval: DEFAULTS.pollInterval,
 		});
 	});
 
@@ -52,7 +52,6 @@ describe("readActionInputs", () => {
 				model_reasoning: "true",
 				model_input: "text,image",
 				prompt_template: "Task: {{task}}",
-				share_session: "false",
 				output_mode: "output",
 				prompt: "Generate release notes",
 				pr_number: "42",
@@ -80,7 +79,6 @@ describe("readActionInputs", () => {
 			}),
 		);
 		expect(inputs.promptTemplate).toBe("Task: {{task}}");
-		expect(inputs.shareSession).toBe(false);
 		expect(inputs.outputMode).toBe("output");
 		expect(inputs.prompt).toBe("Generate release notes");
 		expect(inputs.prNumber).toBe(42);

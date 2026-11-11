@@ -9,7 +9,7 @@ export type GitHubReaction =
 	| "rocket"
 	| "eyes";
 
-interface GitHubUser {
+export interface GitHubUser {
 	login: string;
 	type: "User" | "Bot" | "Organization";
 }
@@ -20,14 +20,6 @@ interface GitHubUser {
 export interface RepoRef {
 	owner: string;
 	name: string;
-}
-
-/**
- * Session interface for session sharing
- */
-export interface Session {
-	exportToHtml: (outputPath?: string) => string | Promise<string>;
-	exportToJsonl: (outputPath?: string) => string | Promise<string>;
 }
 
 /**
@@ -44,6 +36,7 @@ export type ModelInputMode = "text" | "image";
 export interface CustomProviderCompatConfig {
 	supportsDeveloperRole?: boolean;
 	supportsReasoningEffort?: boolean;
+	forceAdaptiveThinking?: boolean;
 }
 
 /**
@@ -71,7 +64,9 @@ export interface PullRequestReviewComment {
 	created_at: string;
 }
 
-// Updated TriggerInfo interface using proper types
+/** Where a trigger came from: an issue/PR body, an issue comment, or a PR review comment. */
+export type TriggerSource = "body" | "comment" | "review_comment";
+
 export interface TriggerInfo {
 	isCommentEvent: boolean;
 	triggerText: string;
@@ -82,50 +77,63 @@ export interface TriggerInfo {
 	issueBody: string;
 	commentId?: number;
 	isPullRequest: boolean;
+	source?: TriggerSource;
+	createdAt?: string;
+	url?: string;
 }
 
-// Improved AgentResult using discriminated union
-export type AgentResult =
-	| { success: true; response: string; session?: Session }
-	| { success: false; error: string; session?: Session };
+/** An issue or review comment as listed by the REST API. */
+export interface GitHubComment {
+	id: number;
+	body?: string | null;
+	user?: { login: string; type: string } | null;
+	author_association: string;
+	created_at: string;
+	html_url: string;
+	path?: string | null;
+	line?: number | null;
+}
+
+type Params<T> = { owner: string; repo: string; [key: string]: unknown } & T;
+
+interface ListParams {
+	since?: string;
+	per_page?: number;
+	page?: number;
+}
 
 // Minimal Octokit interface to replace 'any' type
 export interface OctokitClient {
 	rest: {
 		reactions: {
-			createForIssueComment: (params: {
-				owner: string;
-				repo: string;
-				comment_id: number;
-				content: GitHubReaction;
-			}) => Promise<unknown>;
-			createForIssue: (params: {
-				owner: string;
-				repo: string;
-				issue_number: number;
-				content: GitHubReaction;
-			}) => Promise<unknown>;
+			createForIssueComment: (
+				params: Params<{ comment_id: number; content: GitHubReaction }>,
+			) => Promise<unknown>;
+			createForPullRequestReviewComment: (
+				params: Params<{ comment_id: number; content: GitHubReaction }>,
+			) => Promise<unknown>;
+			createForIssue: (
+				params: Params<{ issue_number: number; content: GitHubReaction }>,
+			) => Promise<unknown>;
 		};
 		issues: {
-			createComment: (params: {
-				owner: string;
-				repo: string;
-				issue_number: number;
-				body: string;
-			}) => Promise<unknown>;
+			createComment: (
+				params: Params<{ issue_number: number; body: string }>,
+			) => Promise<{ data: { id: number; html_url: string } }>;
+			listComments: (
+				params: Params<{ issue_number: number } & ListParams>,
+			) => Promise<{ data: unknown }>;
 		};
 		pulls: {
-			get: (params: {
-				owner: string;
-				repo: string;
-				pull_number: number;
-				mediaType?: { format: string };
-			}) => Promise<{ data: unknown }>;
-			listReviewComments: (params: {
-				owner: string;
-				repo: string;
-				pull_number: number;
-			}) => Promise<{ data: unknown }>;
+			get: (
+				params: Params<{
+					pull_number: number;
+					mediaType?: { format: string };
+				}>,
+			) => Promise<{ data: unknown }>;
+			listReviewComments: (
+				params: Params<{ pull_number: number } & ListParams>,
+			) => Promise<{ data: unknown }>;
 		};
 	};
 }

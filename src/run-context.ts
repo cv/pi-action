@@ -1,11 +1,11 @@
-import type { PIContext } from "./context.js";
-import { extractTask, hasTrigger } from "./context.js";
-import { formatReviewComments } from "./formatting.js";
-import { extractTriggerInfo, type GitHubClient } from "./github.js";
-import type { ActionDependencies, Logger } from "./run.js";
-import type { SecurityContext } from "./security.js";
-import { sanitizeInput, validatePermissions } from "./security.js";
-import type { TriggerInfo } from "./types.js";
+import type { PIContext } from "./context.ts";
+import { extractTask, hasTrigger } from "./context.ts";
+import { formatReviewComments } from "./formatting.ts";
+import { extractTriggerInfo, type GitHubClient } from "./github.ts";
+import type { ActionDependencies, Logger } from "./run.ts";
+import type { SecurityContext } from "./security.ts";
+import { sanitizeInput, validatePermissions } from "./security.ts";
+import type { TriggerInfo } from "./types.ts";
 
 export interface ResolvedRunContext {
 	piContext: PIContext;

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { readCustomProviderConfig } from "./custom-provider.js";
-import { DEFAULTS } from "./defaults.js";
+import {
+	createCustomProvider,
+	readCustomProviderConfig,
+	resolveApiKey,
+} from "./custom-provider.ts";
+import { DEFAULTS } from "./defaults.ts";
 
 function createInputReader(
 	values: Record<string, string>,
@@ -27,6 +31,7 @@ describe("readCustomProviderConfig", () => {
 				model_max_tokens: "16384",
 				compat_supports_developer_role: "false",
 				compat_supports_reasoning_effort: "false",
+				compat_force_adaptive_thinking: "true",
 			}),
 		);
 
@@ -43,6 +48,7 @@ describe("readCustomProviderConfig", () => {
 			compat: {
 				supportsDeveloperRole: false,
 				supportsReasoningEffort: false,
+				forceAdaptiveThinking: true,
 			},
 		});
 	});
@@ -61,5 +67,109 @@ describe("readCustomProviderConfig", () => {
 			contextWindow: DEFAULTS.customModelContextWindow,
 			maxTokens: DEFAULTS.customModelMaxTokens,
 		});
+	});
+});
+
+describe("resolveApiKey", () => {
+	it("reads environment variable names and passes literal keys through", () => {
+		expect(resolveApiKey("MY_KEY", { MY_KEY: "from-env" })).toBe("from-env");
+		expect(resolveApiKey("MISSING_KEY", {})).toBeUndefined();
+		expect(resolveApiKey("sk-literal-123", {})).toBe("sk-literal-123");
+		expect(resolveApiKey(undefined)).toBeUndefined();
+	});
+});
+
+const UNSUPPORTED_API = /Unsupported provider_api "google-generative-ai"/u;
+
+describe("createCustomProvider", () => {
+	const config = {
+		baseUrl: "https://inference-api.nvidia.com",
+		api: "openai-responses",
+		authHeader: true,
+		reasoning: true,
+		input: ["text" as const],
+		contextWindow: 1000,
+		maxTokens: 100,
+		compat: { supportsDeveloperRole: false },
+	};
+	const ctx = {
+		env: () => Promise.resolve(undefined),
+		fileExists: () => Promise.resolve(false),
+	};
+	const { signal } = new AbortController();
+
+	it("describes one model with the configured API and limits", () => {
+		const provider = createCustomProvider("nvidia", "gpt", true, config);
+		expect(provider.getModels()).toEqual([
+			expect.objectContaining({
+				id: "gpt",
+				name: "gpt",
+				provider: "nvidia",
+				api: "openai-responses",
+				baseUrl: "https://inference-api.nvidia.com",
+				contextWindow: 1000,
+				maxTokens: 100,
+				compat: { supportsDeveloperRole: false },
+			}),
+		]);
+	});
+
+	it("authenticates with the stored api_key, else provider_api_key, and adds the bearer header", async () => {
+		const provider = createCustomProvider(
+			"nvidia",
+			"gpt",
+			false,
+			{ ...config, apiKey: "NV_KEY" },
+			{ NV_KEY: "from-env" },
+		);
+		const resolve = provider.auth.apiKey?.resolve;
+		expect(await resolve?.({ ctx, signal })).toEqual({
+			auth: {
+				apiKey: "from-env",
+				headers: { Authorization: "Bearer from-env" },
+			},
+			source: "action inputs",
+		});
+		expect(
+			await resolve?.({
+				ctx,
+				signal,
+				credential: { type: "api_key", key: "stored" },
+			}),
+		).toMatchObject({ auth: { apiKey: "stored" } });
+		const unset = createCustomProvider(
+			"nvidia",
+			"gpt",
+			false,
+			{ ...config, apiKey: "NV_KEY" },
+			{},
+		);
+		expect(await unset.auth.apiKey?.resolve({ ctx, signal })).toBeUndefined();
+	});
+
+	it("omits the header unless provider_auth_header is set", async () => {
+		const provider = createCustomProvider(
+			"p",
+			"m",
+			false,
+			{ ...config, authHeader: false, apiKey: "lit-key" },
+			{},
+		);
+		expect(await provider.auth.apiKey?.resolve({ ctx, signal })).toEqual({
+			auth: { apiKey: "lit-key" },
+			source: "action inputs",
+		});
+	});
+
+	it("requires a key and a supported API", () => {
+		expect(() => createCustomProvider("p", "m", false, config)).toThrow(
+			"api_key or provider_api_key is required when provider_base_url is set",
+		);
+		expect(() =>
+			createCustomProvider("p", "m", true, {
+				...config,
+				api: "google-generative-ai",
+			}),
+		).toThrow(UNSUPPORTED_API);
 	});
 });

@@ -89,12 +89,7 @@
 				"noUnresolvedImports": "error",
 				"noUnusedLabels": "error",
 				"noVoidTypeReturn": "error",
-				"useImportExtensions": {
-					"level": "error",
-					"options": {
-						"forceJsExtensions": true
-					}
-				},
+				"useImportExtensions": "error",
 				"useParseIntRadix": "error",
 				"useSingleJsDocAsterisk": "error",
 				"noDuplicateArgumentNames": "error",

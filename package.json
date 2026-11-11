@@ -1,6 +1,6 @@
 {
 	"name": "pi-action",
-	"version": "1.10.0",
+	"version": "2.0.0",
 	"description": "GitHub Action to invoke the pi coding agent on issues and PRs",
 	"type": "module",
 	"scripts": {
@@ -39,9 +39,9 @@
 	"dependencies": {
 		"@actions/core": "^3.0.1",
 		"@actions/github": "^9.1.1",
-		"@earendil-works/pi-ai": "^0.84.2",
-		"@earendil-works/pi-coding-agent": "^0.84.2",
-		"tsx": "^4.23.12"
+		"@earendil-works/chord": "1.5.2",
+		"@earendil-works/pi-ai": "1.5.2",
+		"@earendil-works/pi-durable": "1.5.2"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.9",

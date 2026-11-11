@@ -24,7 +24,7 @@ Use these placeholder variables in your custom templates:
 Simple structure modification:
 
 ```yaml
-- uses: cv/pi-action@v1
+- uses: cv/pi-action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     prompt_template: |
@@ -44,7 +44,7 @@ Simple structure modification:
 Focused on pull request reviews:
 
 ```yaml
-- uses: cv/pi-action@v1
+- uses: cv/pi-action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     prompt_template: |
@@ -76,7 +76,7 @@ Focused on pull request reviews:
 Just the essential information:
 
 ```yaml
-- uses: cv/pi-action@v1
+- uses: cv/pi-action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     prompt_template: |
@@ -91,7 +91,7 @@ Just the essential information:
 Specialized for bug reports and feature requests:
 
 ```yaml
-- uses: cv/pi-action@v1
+- uses: cv/pi-action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     prompt_template: |
@@ -118,7 +118,7 @@ Specialized for bug reports and feature requests:
 For documentation-focused assistance:
 
 ```yaml
-- uses: cv/pi-action@v1
+- uses: cv/pi-action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     prompt_template: |
@@ -145,7 +145,7 @@ For documentation-focused assistance:
 Focused on test-related tasks:
 
 ```yaml
-- uses: cv/pi-action@v1
+- uses: cv/pi-action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     prompt_template: |
@@ -177,7 +177,7 @@ Focused on test-related tasks:
 For security-focused reviews:
 
 ```yaml
-- uses: cv/pi-action@v1
+- uses: cv/pi-action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     prompt_template: |

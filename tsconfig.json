@@ -1,6 +1,6 @@
 {
 	"compilerOptions": {
-		"target": "ES2022",
+		"target": "ES2024",
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
 		"strict": true,
@@ -21,9 +21,9 @@
 		"allowUnusedLabels": false,
 		"esModuleInterop": true,
 		"skipLibCheck": true,
-		"outDir": "dist",
-		"rootDir": "src",
-		"declaration": true
+		"allowImportingTsExtensions": true,
+		"erasableSyntaxOnly": true,
+		"noEmit": true
 	},
 	"include": ["src/**/*"],
 	"exclude": ["src/**/*.test.ts", "src/test-helpers.ts"]
