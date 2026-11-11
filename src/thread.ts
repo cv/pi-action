@@ -9,7 +9,6 @@ import {
 	type Conversation,
 	createRegistry,
 	type EntryId,
-	type EntryRecord,
 	Harness,
 	MemoryStorage,
 	type Storage,
@@ -19,7 +18,9 @@ import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 
 import { GitStorage } from "./storage/git-storage.ts";
-import { GitSync, isTurnBoundary, runGit } from "./storage/sync.ts";
+import { git } from "./storage/git.ts";
+import { GitSync, isTurnBoundary } from "./storage/sync.ts";
+import type { Log } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
 
 const context: Context = BACKGROUND_CONTEXT;
@@ -32,18 +33,13 @@ const URL_FIELD = "url";
 export const threadRef = (issueNumber: number): string =>
 	`refs/pi/threads/${issueNumber}`;
 
-interface ThreadLogger {
-	info: (msg: string) => void;
-	warning: (msg: string) => void;
-}
-
 export interface ThreadOptions {
 	cwd: string;
 	/** The issue or PR; undefined for a one-off prompt, which is kept in memory only. */
 	issueNumber?: number | undefined;
 	models: Models;
 	model: Model<Api>;
-	log: ThreadLogger;
+	log: Log;
 	remote?: string | undefined;
 }
 
@@ -72,7 +68,7 @@ async function openPersistence(
 		repo: cwd,
 		ref,
 		log: log.info,
-		...(options.remote ? { remote: options.remote } : {}),
+		remote: options.remote,
 	});
 	const remoteTip = await sync.fetch();
 	const storage = await GitStorage.open({
@@ -192,8 +188,9 @@ export class Thread {
 			.trim();
 	}
 
-	async entries(): Promise<EntryRecord[]> {
-		const all: EntryRecord[] = [];
+	/** Results already posted (`answer-<entryId>`, `error-<submissionId>`), with their comment URLs. */
+	async postedResults(): Promise<Map<string, string>> {
+		const posted = new Map<string, string>();
 		let cursor: Parameters<Conversation["entries"]>[2];
 		do {
 			// oxlint-disable-next-line eslint/no-await-in-loop -- pages follow each other
@@ -203,29 +200,17 @@ export class Thread {
 				cursor,
 				context,
 			);
-			all.push(...page.items);
-			cursor = page.next;
-		} while (cursor !== undefined);
-		return all;
-	}
-
-	/** Results already posted (`answer-<entryId>`, `error-<submissionId>`), with their comment URLs. */
-	async postedResults(): Promise<Map<string, string>> {
-		const posted = new Map<string, string>();
-		for (const entry of await this.entries()) {
-			const { data } = entry;
-			if (
-				entry.kind === POSTED_KIND &&
-				typeof data === "object" &&
-				data !== null
-			) {
-				const key: unknown = Reflect.get(data, KEY_FIELD);
-				const url: unknown = Reflect.get(data, URL_FIELD);
-				if (typeof key === "string") {
-					posted.set(key, typeof url === "string" ? url : "");
+			for (const { kind, data } of page.items) {
+				if (kind === POSTED_KIND && typeof data === "object" && data !== null) {
+					const key: unknown = Reflect.get(data, KEY_FIELD);
+					const url: unknown = Reflect.get(data, URL_FIELD);
+					if (typeof key === "string") {
+						posted.set(key, typeof url === "string" ? url : "");
+					}
 				}
 			}
-		}
+			cursor = page.next;
+		} while (cursor !== undefined);
 		return posted;
 	}
 
@@ -259,19 +244,17 @@ export class Thread {
 	}
 }
 
+/** When the thread's root commit was made. */
 async function rootCommitTime(
 	cwd: string,
 	ref: string,
 ): Promise<Date | undefined> {
-	try {
-		const { stdout } = await runGit(["rev-list", "--max-parents=0", ref], cwd);
-		const [root = ref] = stdout.trim().split("\n");
-		const { stdout: time } = await runGit(
-			["show", "-s", "--format=%cI", root],
-			cwd,
-		);
-		return new Date(time.trim());
-	} catch {
-		return undefined;
-	}
+	const out = await git(cwd, [
+		"log",
+		"--max-parents=0",
+		"--format=%cI",
+		ref,
+	]).catch(() => "");
+	const [time] = out.trim().split("\n");
+	return time ? new Date(time) : undefined;
 }

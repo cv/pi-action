@@ -1,8 +1,6 @@
 // Moving a GitStorage ref between a local repository and a remote: fetch it before opening, push it as it grows.
-import { execFile } from "node:child_process";
-
 import type { Batch } from "./git-storage.ts";
-import { assertRefName } from "./git.ts";
+import { assertRefName, git, GitError } from "./git.ts";
 
 export class GitSyncConflictError extends Error {
 	readonly ref: string;
@@ -13,20 +11,13 @@ export class GitSyncConflictError extends Error {
 	}
 }
 
-export type GitRunner = (
-	args: readonly string[],
-	cwd: string,
-) => Promise<{ stdout: string; stderr: string }>;
-
 export interface GitSyncOptions {
 	/** The work tree (or git dir) to run git in. */
 	readonly repo: string;
 	readonly ref: string;
 	/** Default "origin". */
-	readonly remote?: string;
+	readonly remote?: string | undefined;
 	readonly log?: (message: string) => void;
-	/** Runs git; injectable for tests. Rejects with { stdout, stderr } attached on a nonzero exit. */
-	readonly git?: GitRunner;
 }
 
 const REJECTED_PATTERN = /rejected|non-fast-forward|fetch first|stale info/iu;
@@ -41,28 +32,6 @@ export function isTurnBoundary(batches: readonly Batch[]): boolean {
 	);
 }
 
-/** Runs git in `cwd`; rejects with an Error carrying `stdout` and `stderr`. */
-export const runGit: GitRunner = async (args, cwd) =>
-	new Promise((resolve, reject) => {
-		execFile(
-			"git",
-			[...args],
-			{ cwd, maxBuffer: 64 * 1024 * 1024 },
-			(error, stdout, stderr) => {
-				if (error) {
-					reject(
-						Object.assign(new Error(error.message, { cause: error }), {
-							stdout,
-							stderr,
-						}),
-					);
-				} else {
-					resolve({ stdout, stderr });
-				}
-			},
-		);
-	});
-
 /**
  * Pushes are fast-forward only, so a concurrent writer on the same ref makes the later push fail
  * (GitSyncConflictError) instead of overwriting the other's history. Pushes are coalesced: at most one runs,
@@ -73,7 +42,6 @@ export class GitSync {
 	readonly remote: string;
 	private readonly repo: string;
 	private readonly log: (message: string) => void;
-	private readonly git: GitRunner;
 	/** What the remote ref is known to point at. */
 	private remoteTip: string | undefined;
 	private wanted: string | undefined;
@@ -86,17 +54,6 @@ export class GitSync {
 		this.ref = options.ref;
 		this.remote = options.remote ?? "origin";
 		this.log = options.log ?? (() => undefined);
-		this.git = options.git ?? runGit;
-	}
-
-	/** The remote tip as of the last fetch or push. */
-	get pushed(): string | undefined {
-		return this.remoteTip;
-	}
-
-	/** The error that stopped pushing, if any. */
-	get error(): Error | undefined {
-		return this.failure;
 	}
 
 	/**
@@ -106,22 +63,19 @@ export class GitSync {
 	async fetch(): Promise<string | undefined> {
 		const tip = await this.remoteHead();
 		if (tip === undefined) {
-			await this.git(["update-ref", "-d", this.ref], this.repo).catch(
+			await git(this.repo, ["update-ref", "-d", this.ref]).catch(
 				() => undefined,
 			);
 			this.log(`${this.ref}: new on ${this.remote}`);
 		} else {
-			await this.git(
-				[
-					"fetch",
-					"--quiet",
-					"--no-tags",
-					"--no-write-fetch-head",
-					this.remote,
-					`+${this.ref}:${this.ref}`,
-				],
-				this.repo,
-			);
+			await git(this.repo, [
+				"fetch",
+				"--quiet",
+				"--no-tags",
+				"--no-write-fetch-head",
+				this.remote,
+				`+${this.ref}:${this.ref}`,
+			]);
 			this.log(`${this.ref}: fetched ${tip.slice(0, 7)}`);
 		}
 		return tip;
@@ -129,10 +83,12 @@ export class GitSync {
 
 	/** Look up the remote tip without touching the local ref; undefined when the remote has no such ref. */
 	async remoteHead(): Promise<string | undefined> {
-		const { stdout } = await this.git(
-			["ls-remote", "--refs", this.remote, this.ref],
-			this.repo,
-		);
+		const stdout = await git(this.repo, [
+			"ls-remote",
+			"--refs",
+			this.remote,
+			this.ref,
+		]);
 		const line = stdout.split("\n").find((l) => l.endsWith(`\t${this.ref}`));
 		this.remoteTip = line?.split("\t")[0];
 		return this.remoteTip;
@@ -168,18 +124,16 @@ export class GitSync {
 			const tip = this.wanted;
 			try {
 				// oxlint-disable-next-line eslint/no-await-in-loop -- pushes go one at a time, newest tip next
-				await this.git(
-					["push", "--quiet", "--no-verify", this.remote, `${tip}:${this.ref}`],
-					this.repo,
-				);
+				await git(this.repo, [
+					"push",
+					"--quiet",
+					"--no-verify",
+					this.remote,
+					`${tip}:${this.ref}`,
+				]);
 			} catch (error) {
-				const stderr: unknown =
-					typeof error === "object" && error !== null
-						? Reflect.get(error, "stderr")
-						: undefined;
-				const detail = (
-					typeof stderr === "string" && stderr !== "" ? stderr : String(error)
-				).trim();
+				const detail =
+					(error instanceof GitError && error.stderr) || String(error);
 				this.failure = REJECTED_PATTERN.test(detail)
 					? new GitSyncConflictError(this.ref, detail)
 					: new Error(`Push of ${this.ref} failed: ${detail}`);

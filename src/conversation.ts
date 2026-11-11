@@ -1,8 +1,11 @@
+import { setTimeout as sleep } from "node:timers/promises";
+
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Submission } from "@earendil-works/pi-durable";
 
 import type { Thread } from "./thread.ts";
 import type { Trigger } from "./triggers.ts";
+import type { Log } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
 
 type SettledRecord = Awaited<ReturnType<Submission["wait"]>>;
@@ -11,14 +14,9 @@ export type ThreadResult =
 	| { success: true; response: string }
 	| { success: false; error: string };
 
-interface ConversationLogger {
-	info: (msg: string) => void;
-	warning: (msg: string) => void;
-}
-
 export interface ConversationOptions {
 	thread: Thread;
-	log: ConversationLogger;
+	log: Log;
 	timeoutSeconds: number;
 	pollIntervalMs: number;
 	/** The message to submit for a trigger; `first` is true for the first one of a new thread. */
@@ -45,19 +43,6 @@ const SUMMARY_PROMPT = `IMPORTANT: You completed your work but did not provide a
 - Confirmation that your work is complete
 
 Do NOT call any tools - just provide the text summary.`;
-
-function sleep(ms: number): { promise: Promise<void>; cancel: () => void } {
-	let timer: NodeJS.Timeout | undefined;
-	const promise = new Promise<void>((resolve) => {
-		timer = setTimeout(resolve, Math.max(0, ms));
-	});
-	return {
-		promise,
-		cancel: () => {
-			clearTimeout(timer);
-		},
-	};
-}
 
 function describeUnanswered(
 	record: SettledRecord,
@@ -105,10 +90,13 @@ export class ThreadConversation {
 				break;
 			}
 			if (this.pending.size > 0) {
-				const timer = sleep(Math.min(pollIntervalMs, remaining));
+				const wait = new AbortController();
+				const timer = sleep(Math.min(pollIntervalMs, remaining), undefined, {
+					signal: wait.signal,
+				}).catch(() => undefined);
 				// oxlint-disable-next-line eslint/no-await-in-loop -- the poll loop waits between rounds by design
-				await Promise.race([Promise.allSettled(this.pending), timer.promise]);
-				timer.cancel();
+				await Promise.race([Promise.allSettled(this.pending), timer]);
+				wait.abort();
 			}
 			const fresh = poll
 				? // oxlint-disable-next-line eslint/no-await-in-loop -- each round polls once, after the wait

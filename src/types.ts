@@ -1,3 +1,9 @@
+/** The logging that every part of a run needs. */
+export interface Log {
+	info: (msg: string) => void;
+	warning: (msg: string) => void;
+}
+
 // GitHub-specific types
 export type GitHubReaction =
 	| "+1"

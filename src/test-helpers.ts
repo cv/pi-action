@@ -6,7 +6,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { vi } from "vitest";
+import type { Api, Model } from "@earendil-works/pi-ai";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { fauxProvider } from "@earendil-works/pi-ai/providers/faux";
+import { onTestFinished, vi } from "vitest";
 
 import { DEFAULTS } from "./defaults.ts";
 import type { GitHubClient } from "./github.ts";
@@ -136,21 +139,69 @@ export function createActionInputs(
 	};
 }
 
-/** A fresh, empty git repository in a temp directory. */
+/** A faux provider in a fresh model registry, and the pi-durable agent config that uses its model. */
+export function fauxModels(): {
+	faux: ReturnType<typeof fauxProvider>;
+	models: ReturnType<typeof createModels>;
+	model: Model<Api>;
+	agent: { model: { provider: string; modelId: string } };
+} {
+	const faux = fauxProvider();
+	const models = createModels();
+	models.setProvider(faux.provider);
+	const model = faux.getModel();
+	return {
+		faux,
+		models,
+		model,
+		agent: { model: { provider: model.provider, modelId: model.id } },
+	};
+}
+
+/** Run git in `cwd` and return its output. */
+export function git(cwd: string, ...args: string[]): string {
+	return execFileSync("git", args, { cwd, encoding: "utf8" });
+}
+
+/** A temp directory, removed when the current test finishes. */
+function tempDir(prefix: string): string {
+	const dir = mkdtempSync(join(tmpdir(), prefix));
+	onTestFinished(() => {
+		rmSync(dir, { recursive: true, force: true });
+	});
+	return dir;
+}
+
+/** A fresh, empty git repository. */
 export function tempRepo(): {
 	dir: string;
 	git: (...args: string[]) => string;
-	cleanup: () => void;
 } {
-	const dir = mkdtempSync(join(tmpdir(), "git-pi-durable-"));
-	const git = (...args: string[]) =>
-		execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
-	git("init", "-q", "-b", "main");
+	const dir = tempDir("git-pi-durable-");
+	git(dir, "init", "-q", "-b", "main");
+	return { dir, git: (...args) => git(dir, ...args) };
+}
+
+/** A bare "GitHub" remote with one commit on main, and a way to make fresh clones of it (runner checkouts). */
+export function tempRemote(): {
+	remote: string;
+	clone: (...flags: string[]) => string;
+} {
+	const root = tempDir("pi-action-remote-");
+	const remote = join(root, "remote.git");
+	const seed = join(root, "seed");
+	git(root, "init", "-q", "--bare", "-b", "main", remote);
+	git(root, "init", "-q", "-b", "main", seed);
+	git(seed, "commit", "-q", "--allow-empty", "-m", "init");
+	git(seed, "push", "-q", remote, "main");
+	let clones = 0;
 	return {
-		dir,
-		git,
-		cleanup: () => {
-			rmSync(dir, { recursive: true, force: true });
+		remote,
+		clone: (...flags) => {
+			clones += 1;
+			const dir = join(root, `clone-${clones}`);
+			git(root, "clone", "-q", ...flags, `file://${remote}`, dir);
+			return dir;
 		},
 	};
 }

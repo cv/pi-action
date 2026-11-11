@@ -82,23 +82,33 @@ export function assertRefName(ref: string): void {
 	}
 }
 
-class GitError extends Error {
+export class GitError extends Error {
+	readonly stderr: string;
 	constructor(args: readonly string[], stderr: string) {
 		super(`git ${args.join(" ")} failed: ${stderr.trim()}`);
 		this.name = "GitError";
+		this.stderr = stderr.trim();
 	}
 }
 
 /** Run git in `dir`; resolves with stdout, rejects with a GitError on a nonzero exit. */
-async function git(dir: string, args: readonly string[]): Promise<string> {
+export async function git(
+	dir: string,
+	args: readonly string[],
+): Promise<string> {
 	return new Promise((resolve, reject) => {
-		execFile("git", ["-C", dir, ...args], (error, stdout, stderr) => {
-			if (error) {
-				reject(new GitError(args, stderr || error.message));
-			} else {
-				resolve(stdout);
-			}
-		});
+		execFile(
+			"git",
+			["-C", dir, ...args],
+			{ maxBuffer: 64 * 1024 * 1024 },
+			(error, stdout, stderr) => {
+				if (error) {
+					reject(new GitError(args, stderr || error.message));
+				} else {
+					resolve(stdout);
+				}
+			},
+		);
 	});
 }
 
@@ -260,17 +270,12 @@ export class GitRepo {
 		ref: string,
 		value: string,
 		expected: string | undefined,
-		reflogMessage?: string,
 	): Promise<void> {
 		assertRefName(ref);
 		assertObjectId(value);
-		const args = ["update-ref"];
-		if (reflogMessage !== undefined) {
-			args.push("--create-reflog", "-m", reflogMessage);
-		}
 		try {
 			// An empty old value means "must not exist yet".
-			await git(this.dir, [...args, ref, value, expected ?? ""]);
+			await git(this.dir, ["update-ref", ref, value, expected ?? ""]);
 		} catch (error) {
 			if (!(error instanceof GitError)) {
 				throw error;

@@ -1,18 +1,14 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { createModels } from "@earendil-works/pi-ai/models";
-import {
-	fauxAssistantMessage,
-	fauxProvider,
-} from "@earendil-works/pi-ai/providers/faux";
+import { fauxAssistantMessage } from "@earendil-works/pi-ai/providers/faux";
 import {
 	AssistantEntry,
 	type ConversationRecord,
 	createRegistry,
 	Harness,
 } from "@earendil-works/pi-durable";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { tempRepo } from "../test-helpers.ts";
+import { fauxModels, tempRepo } from "../test-helpers.ts";
 import { GitStorage } from "./git-storage.ts";
 import { GitRepo, RefConflictError } from "./git.ts";
 
@@ -21,21 +17,9 @@ const REF = "refs/pi/threads/42";
 const FIRST_COMMIT = /^pi-durable: seq 1 /u;
 const NO_LOOSE_OBJECTS = /^count: 0$/mu;
 const POISONED = /poisoned/u;
-const cleanups: (() => void)[] = [];
-afterEach(() => {
-	for (const c of cleanups.splice(0)) {
-		c();
-	}
-});
-
 function setup() {
 	const repo = tempRepo();
-	cleanups.push(repo.cleanup);
-	const faux = fauxProvider();
-	const models = createModels();
-	models.setProvider(faux.provider);
-	const model = faux.getModel();
-	const agent = { model: { provider: model.provider, modelId: model.id } };
+	const { faux, models, agent } = fauxModels();
 	const open = async (storage?: GitStorage) => {
 		const s = storage ?? (await GitStorage.open({ repo: repo.dir, ref: REF }));
 		const harness = await Harness.open(
