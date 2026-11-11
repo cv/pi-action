@@ -258,7 +258,7 @@ A package that ships a [pi-durable](https://www.npmjs.com/package/@earendil-work
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     extensions: |
-      @acme/pi-durable-tools@1.0.0
+      github:cv/pit#v0.35.0   # pit's typescript tool (pit/durable)
 ```
 
 - **Discovery**: a package whose `package.json` has `pi.durable` (a module path, such as `"pi": { "durable": "./src/durable/index.ts" }`) is a pi-durable extension package. Its module exports `createPiDurableExtension(options)` (or a default export with the same signature), which returns a pi-durable `Extension` (`{ name, tools?, sections?, hooks?, wraps?, tasks? }`). A package with both `pi.durable` and `pi.extensions` loads only its pi-durable entry (its pi extensions need pi's coding agent), and says so in the log.
