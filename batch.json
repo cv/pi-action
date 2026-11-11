@@ -1,1 +1,1 @@
-{"format":1,"seq":242,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"text"],"ooks.\n\n**Design decisions I reached (none of them in"]]}}]}
+{"format":1,"seq":243,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"text"]," code yet):**\n- **When the pointer is visible to a fork.** A fork sees a document's value as of the commit that hol"]]}}]}
