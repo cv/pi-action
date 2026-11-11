@@ -1,1 +1,1 @@
-{"format":1,"seq":243,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"text"]," code yet):**\n- **When the pointer is visible to a fork.** A fork sees a document's value as of the commit that hol"]]}}]}
+{"format":1,"seq":244,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"text"],"ds the fork entry. Writing the snapshot pointer in a separate commit after a turn would leave forks one step behind."]]}}]}
