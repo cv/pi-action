@@ -13,7 +13,7 @@ Each issue or pull request is one conversation (a **thread**). The thread contin
 - **Tools from pi-durable extensions.** Extensions such as [pit](https://github.com/cv/pit) add tools. When a tool asks a question, pi-action posts it on the issue, and an answer starts a new run. See [Extensions](docs/extensions.md).
 - **Pull request context.** On a pull request, the first prompt includes the diff and the existing review comments.
 - **Automation.** Use `output_mode: output` to get the answer as a step output, with no comments. See [Workflow recipes](docs/workflows.md).
-- **Conventional commits.** pi-action installs git hooks that make the agent use [Conventional Commits](https://www.conventionalcommits.org/). See [How it works](docs/how-it-works.md#git-hooks-for-the-agent).
+- **Your conventions.** pi follows the conventions of your repository: its git hooks, `AGENTS.md`, and `CONTRIBUTING.md`. pi-action installs no git hooks of its own. See [Commit conventions](docs/how-it-works.md#commit-conventions).
 
 ## Quick start
 
@@ -130,7 +130,7 @@ pi-action sets these outputs only when `output_mode` is `output`:
 | [Prompts and templates](docs/prompts.md) | What pi receives, and how to change it with `prompt_template` |
 | [Durable threads](docs/threads.md) | How pi-action stores, continues, reads, and deletes threads |
 | [Security](docs/security.md) | Who can start pi, what the agent can access, and what to trust |
-| [How it works](docs/how-it-works.md) | The steps of a run, and the git hooks for the agent |
+| [How it works](docs/how-it-works.md) | The steps of a run, and the commit conventions that pi follows |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, architecture, tests, and releases |
 
 ## License

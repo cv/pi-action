@@ -8,9 +8,10 @@ The action is a composite action ([`action.yml`](../action.yml)). Its steps are:
 
 1. **Node.js.** If the Node.js of the job is older than version 24, the action installs Node.js 24.
 2. **Dependencies.** The action installs its runtime npm dependencies (`npm ci --omit=dev --ignore-scripts`) in its own directory.
-3. **Git hooks.** The action installs [git hooks for the agent](#git-hooks-for-the-agent) in your checkout.
-4. **The run** ([`src/index.ts`](../src/index.ts)). See [The run](#the-run).
-5. **Save pi thread state** ([`src/push.ts`](../src/push.ts)). This step has `if: always()`. It pushes the thread if the run did not push all of it, for example after a cancellation, a timeout, or a crash.
+3. **The run** ([`src/index.ts`](../src/index.ts)). See [The run](#the-run).
+4. **Save pi thread state** ([`src/push.ts`](../src/push.ts)). This step has `if: always()`. It pushes the thread if the run did not push all of it, for example after a cancellation, a timeout, or a crash.
+
+The action does not change your checkout before the run. In particular, it installs no git hooks: pi follows the conventions of your repository. See [Commit conventions](#commit-conventions).
 
 ## The run
 
@@ -26,15 +27,10 @@ The action is a composite action ([`action.yml`](../action.yml)). Its steps are:
 
 When a tool from a pi-durable extension asks a question, the run ends after step 7 without a `pi Response` comment. See [Questions on GitHub](extensions.md#questions-on-github).
 
-## Git hooks for the agent
+## Commit conventions
 
-Before the run, the action installs two git hooks in your checkout ([`scripts/install-agent-hooks.js`](../scripts/install-agent-hooks.js)). The hooks make the commits of the agent follow the conventions of this project. The hooks are small Node.js scripts without dependencies, so they work with all project types.
+pi-action installs no git hooks and does not check commit messages. pi follows the conventions of your repository:
 
-| Hook | What it does |
-|------|--------------|
-| `commit-msg` | Rejects a commit message that does not start with `type(scope): subject`. The types are `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, and `revert`. The scope is optional. The hook does not accept the `!` breaking-change marker (for example `feat!:`) |
-| `prepare-commit-msg` | Adds `Refs #<number>` to the message. The number is the first number in the branch name (`fix/123-login` gives `Refs #123`). The hook does nothing when the message already contains `#<number>`, or when git gives a commit source. Git gives a commit source for `git commit -m` and `-F`, templates, merges, squashes, and amends. Thus, the hook adds the reference only when git opens an editor for the message |
-
-- The action finds the hooks directory with `git rev-parse --git-path hooks`. Thus, it respects `core.hooksPath`.
-- The action **never replaces a hook**. If a hook with the same name exists, the action does not install its hook.
-- If the workspace is not a git repository, the action does not install hooks.
+- Your own git hooks (for example from husky, lefthook, or prek) run when pi commits, if your workflow installs them before pi-action.
+- Write your commit format in `AGENTS.md` or `CONTRIBUTING.md`. pi reads these files with its tools, as it reads the rest of your repository. pi-action does not add them to the prompt.
+- To enforce a commit format, check it in your repository, for example with a CI job. pi can skip hooks with `git commit --no-verify`, so only a check outside the checkout enforces a format.
