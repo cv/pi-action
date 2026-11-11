@@ -1,5 +1,5 @@
 name: 'pi-action'
-description: 'Invoke the pi coding agent on GitHub issues and PRs via comment triggers'
+description: 'Run a durable pi coding agent on GitHub issues and PRs: one conversation per thread, stored in git'
 author: 'Carlos Villela'
 branding:
   icon: 'cpu'
@@ -9,14 +9,8 @@ inputs:
   github_token:
     description: 'GitHub token for API access (issues, PRs, reactions, comments)'
     required: true
-  gist_token:
-    description: 'Deprecated and ignored: sessions are kept in git on refs/pi/threads/<number>'
-    required: false
-  pi_auth_json:
-    description: 'Contents of ~/.pi/agent/auth.json (API keys and OAuth credentials)'
-    required: false
-  models_json:
-    description: 'Contents of ~/.pi/agent/models.json, for custom providers (anthropic-messages, openai-completions and openai-responses APIs)'
+  api_key:
+    description: 'LLM provider API key (runtime-only; alternatively set provider-specific env vars like ANTHROPIC_API_KEY)'
     required: false
   trigger_phrase:
     description: 'Phrase to trigger pi (e.g., @pi)'
@@ -24,24 +18,97 @@ inputs:
   allowed_bots:
     description: 'Comma-separated list of allowed bot usernames'
     default: ''
+  allowed_users:
+    description: 'Comma-separated GitHub usernames allowed to trigger pi. If set, users must be in this list.'
+    default: ''
+  allowed_associations:
+    description: 'Comma-separated GitHub author associations allowed to trigger pi when allowed_users is empty'
+    default: 'OWNER,MEMBER'
   timeout:
-    description: 'Execution timeout in seconds'
+    description: 'Seconds before the run is aborted (its thread is still saved)'
     default: '1800'
+  poll_interval:
+    description: 'Seconds between checks for new comments while pi works; new trigger comments join the running conversation'
+    default: '15'
   provider:
     description: 'LLM provider (anthropic, openai, google, etc.)'
     default: 'anthropic'
   model:
     description: 'Model ID'
     default: 'claude-sonnet-5-5'
-  poll_interval:
-    description: 'Seconds between checks for new comments while pi works; new @pi comments join the running conversation'
-    default: '15'
+  provider_base_url:
+    description: 'Base URL for a single custom provider/model (e.g., https://inference-api.nvidia.com)'
+    required: false
+  provider_api:
+    description: 'API type for the custom provider/model'
+    required: false
+    default: 'openai-completions'
+  provider_api_key:
+    description: 'Provider apiKey config value for custom providers; can be a literal key or env var name'
+    required: false
+  provider_auth_header:
+    description: 'Add Authorization: Bearer <key> for custom provider requests'
+    required: false
+    default: 'false'
+  model_name:
+    description: 'Display name for the custom model'
+    required: false
+  model_reasoning:
+    description: 'Whether the custom model supports reasoning/thinking'
+    required: false
+    default: 'false'
+  model_input:
+    description: 'Comma-separated custom model input modalities (text or text,image)'
+    required: false
+    default: 'text'
+  model_context_window:
+    description: 'Context window tokens for the custom model'
+    required: false
+    default: '128000'
+  model_max_tokens:
+    description: 'Max output tokens for the custom model'
+    required: false
+    default: '16384'
+  compat_supports_developer_role:
+    description: 'Whether the OpenAI-compatible custom provider supports developer role messages'
+    required: false
+  compat_supports_reasoning_effort:
+    description: 'Whether the OpenAI-compatible custom provider supports reasoning_effort'
+    required: false
   prompt_template:
     description: 'Custom prompt template with placeholder variables'
     required: false
   share_session:
-    description: 'Deprecated and ignored: sessions are kept in git on refs/pi/threads/<number>'
+    description: 'Upload session.md and session.jsonl (the thread transcript) as a GitHub Actions artifact and link it in the response comment'
     required: false
+    default: 'true'
+  session_artifact_name:
+    description: 'GitHub Actions artifact name for shared session files; defaults to pi-session-<run_id>-<run_attempt>'
+    required: false
+    default: ''
+  output_mode:
+    description: 'How to deliver results: comment (post to issue/PR) or output (set action outputs only)'
+    required: false
+    default: 'comment'
+  prompt:
+    description: 'Direct prompt for the agent (requires output_mode: output when no issue/PR context is available)'
+    required: false
+    default: ''
+  pr_number:
+    description: 'Pull request number to load explicitly (useful for workflow_dispatch)'
+    required: false
+    default: ''
+
+outputs:
+  response:
+    description: 'The agent response text when output_mode is output'
+    value: ${{ steps.run-pi-action.outputs.response }}
+  success:
+    description: 'Whether the agent succeeded (true/false) when output_mode is output'
+    value: ${{ steps.run-pi-action.outputs.success }}
+  share_url:
+    description: 'URL to the workflow run containing the session artifact, if session sharing is enabled'
+    value: ${{ steps.run-pi-action.outputs.share_url }}
 
 runs:
   using: 'composite'
@@ -52,106 +119,53 @@ runs:
     
     - name: Install pi-agent git hooks
       shell: bash
-      run: |
-        # Install lightweight git hooks that enforce conventional commits
-        # These are standalone shell scripts with no dependencies
-        
-        HOOKS_DIR=".git/hooks"
-        
-        if [ ! -d "$HOOKS_DIR" ]; then
-          echo "⚠️ Not a git repository, skipping hooks installation"
-          exit 0
-        fi
-        
-        echo "🪝 Installing pi-agent git hooks..."
-        
-        # Create commit-msg hook for conventional commits (standalone, no deps)
-        # Only install if no existing hook
-        if [ ! -f "$HOOKS_DIR/commit-msg" ]; then
-          cat > "$HOOKS_DIR/commit-msg" << 'HOOK'
-        #!/bin/sh
-        # pi-agent: Enforce conventional commits format
-        # This hook is installed by pi-action to ensure agent commits follow conventions
-        
-        commit_msg=$(cat "$1")
-        
-        # Pattern for conventional commits: type(scope)?: description
-        pattern="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?: .{1,}"
-        
-        if ! echo "$commit_msg" | grep -qE "$pattern"; then
-          echo ""
-          echo "❌ Commit message does not follow Conventional Commits format!"
-          echo ""
-          echo "Expected format: type(scope?): description"
-          echo ""
-          echo "Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
-          echo ""
-          echo "Examples:"
-          echo "  feat: add new feature"
-          echo "  fix(auth): resolve login issue"
-          echo "  docs: update README"
-          echo ""
-          echo "Your message: $commit_msg"
-          echo ""
-          exit 1
-        fi
-        HOOK
-          chmod +x "$HOOKS_DIR/commit-msg"
-          echo "  ✓ commit-msg hook installed (conventional commits)"
-        else
-          echo "  ⏭️ commit-msg hook already exists, skipping"
-        fi
-        
-        # Create prepare-commit-msg hook for auto-linking issues
-        if [ ! -f "$HOOKS_DIR/prepare-commit-msg" ]; then
-          cat > "$HOOKS_DIR/prepare-commit-msg" << 'HOOK'
-        #!/bin/sh
-        # pi-agent: Auto-append issue number from branch name
-        
-        COMMIT_MSG_FILE=$1
-        COMMIT_SOURCE=$2
-        
-        # Only for regular commits (not merge, squash, etc.)
-        if [ -z "$COMMIT_SOURCE" ]; then
-          BRANCH_NAME=$(git symbolic-ref --short HEAD 2>/dev/null)
-          ISSUE_NUMBER=$(echo "$BRANCH_NAME" | grep -oE '[0-9]+' | head -1)
-          
-          if [ -n "$ISSUE_NUMBER" ]; then
-            if ! grep -qE "#$ISSUE_NUMBER" "$COMMIT_MSG_FILE"; then
-              echo "" >> "$COMMIT_MSG_FILE"
-              echo "Refs #$ISSUE_NUMBER" >> "$COMMIT_MSG_FILE"
-            fi
-          fi
-        fi
-        HOOK
-          chmod +x "$HOOKS_DIR/prepare-commit-msg"
-          echo "  ✓ prepare-commit-msg hook installed (auto issue linking)"
-        else
-          echo "  ⏭️ prepare-commit-msg hook already exists, skipping"
-        fi
-        
-        echo "✅ Git hooks ready!"
+      run: node ${{ github.action_path }}/scripts/install-agent-hooks.js
     
     - name: Run pi-action
+      id: run-pi-action
       shell: bash
-      run: node ${{ github.action_path }}/dist/index.js
+      run: npx --prefix ${{ github.action_path }} tsx ${{ github.action_path }}/src/index.ts
       env:
         INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
-        INPUT_GIST_TOKEN: ${{ inputs.gist_token }}
-        INPUT_PI_AUTH_JSON: ${{ inputs.pi_auth_json }}
-        INPUT_MODELS_JSON: ${{ inputs.models_json }}
+        INPUT_API_KEY: ${{ inputs.api_key }}
         INPUT_TRIGGER_PHRASE: ${{ inputs.trigger_phrase }}
         INPUT_ALLOWED_BOTS: ${{ inputs.allowed_bots }}
+        INPUT_ALLOWED_USERS: ${{ inputs.allowed_users }}
+        INPUT_ALLOWED_ASSOCIATIONS: ${{ inputs.allowed_associations }}
         INPUT_TIMEOUT: ${{ inputs.timeout }}
+        INPUT_POLL_INTERVAL: ${{ inputs.poll_interval }}
         INPUT_PROVIDER: ${{ inputs.provider }}
         INPUT_MODEL: ${{ inputs.model }}
-        INPUT_POLL_INTERVAL: ${{ inputs.poll_interval }}
+        INPUT_PROVIDER_BASE_URL: ${{ inputs.provider_base_url }}
+        INPUT_PROVIDER_API: ${{ inputs.provider_api }}
+        INPUT_PROVIDER_API_KEY: ${{ inputs.provider_api_key }}
+        INPUT_PROVIDER_AUTH_HEADER: ${{ inputs.provider_auth_header }}
+        INPUT_MODEL_NAME: ${{ inputs.model_name }}
+        INPUT_MODEL_REASONING: ${{ inputs.model_reasoning }}
+        INPUT_MODEL_INPUT: ${{ inputs.model_input }}
+        INPUT_MODEL_CONTEXT_WINDOW: ${{ inputs.model_context_window }}
+        INPUT_MODEL_MAX_TOKENS: ${{ inputs.model_max_tokens }}
+        INPUT_COMPAT_SUPPORTS_DEVELOPER_ROLE: ${{ inputs.compat_supports_developer_role }}
+        INPUT_COMPAT_SUPPORTS_REASONING_EFFORT: ${{ inputs.compat_supports_reasoning_effort }}
         INPUT_PROMPT_TEMPLATE: ${{ inputs.prompt_template }}
         INPUT_SHARE_SESSION: ${{ inputs.share_session }}
+        INPUT_OUTPUT_MODE: ${{ inputs.output_mode }}
+        INPUT_PROMPT: ${{ inputs.prompt }}
+        INPUT_PR_NUMBER: ${{ inputs.pr_number }}
 
     # Pushes the thread's refs/pi/threads/<number> if the step above was cancelled, timed out, or crashed
     # before its own final push. Fast-forward only: it never overwrites another run's history.
     - name: Save pi thread state
       if: always()
       shell: bash
-      run: node ${{ github.action_path }}/dist/push.js
+      run: npx --prefix ${{ github.action_path }} tsx ${{ github.action_path }}/src/push.ts
+      env:
+        INPUT_PR_NUMBER: ${{ inputs.pr_number }}
+
+    - name: Upload pi session artifact
+      if: ${{ inputs.share_session == 'true' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.session_artifact_name || format('pi-session-{0}-{1}', github.run_id, github.run_attempt) }}
+        path: ${{ runner.temp }}/pi-action-session
+        if-no-files-found: ignore

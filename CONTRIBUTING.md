@@ -6,7 +6,7 @@ This document covers development setup, architecture details, and contribution g
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 24+ (LTS)
 - npm
 
 ### Getting Started
@@ -23,7 +23,7 @@ npm install
 npm test
 
 # Run tests with coverage
-npm test -- --coverage
+npm run coverage
 
 # Build
 npm run build
@@ -31,20 +31,29 @@ npm run build
 # Type check
 npm run typecheck
 
-# Lint and format
+# Run the complete quality gate
 npm run check
+
+# Run formatting and lint checks only
+npm run lint
+
+# Run dead-code and duplication analysis only
+npm run analyze
+
+# Apply safe lint/format fixes
+npm run fix
 ```
 
 ## Git Hooks
 
-This project uses [Husky](https://typicode.github.io/husky/) to enforce quality checks via git hooks. Hooks are automatically installed when you run `npm install`. See the [`.husky/`](.husky/) directory for hook scripts.
+This project uses [prek](https://github.com/j178/prek) to enforce quality checks via git hooks. Hooks are configured in [`.pre-commit-config.yaml`](.pre-commit-config.yaml) and are automatically installed when you run `npm install`.
 
 | Hook | What it does |
 |------|--------------|
-| [**pre-commit**](.husky/pre-commit) | Runs tests, type checking, linting, builds, and verifies `dist/` is up to date |
-| [**commit-msg**](.husky/commit-msg) | Enforces [Conventional Commits](https://www.conventionalcommits.org/) format via commitlint |
-| [**prepare-commit-msg**](.husky/prepare-commit-msg) | Auto-appends issue number from branch name (e.g., `feat/123-description` → `Refs #123`) |
-| [**pre-push**](.husky/pre-push) | Runs full test suite with coverage thresholds (80% lines/functions, 70% branches) |
+| **pre-commit** | Runs fast tests and linting |
+| **commit-msg** | Enforces [Conventional Commits](https://www.conventionalcommits.org/) format via commitlint |
+| **prepare-commit-msg** | Auto-appends issue number from branch name via [`scripts/prepare-commit-msg.js`](scripts/prepare-commit-msg.js) (e.g., `feat/123-description` → `Refs #123`) |
+| **pre-push** | Runs the test suite with coverage thresholds from [`vitest.config.ts`](vitest.config.ts) |
 
 ### Commit Message Format
 
@@ -81,14 +90,19 @@ The action is built with TypeScript on [pi-durable](https://www.npmjs.com/packag
 |------|-------------|
 | [`src/index.ts`](src/index.ts) | Entry point - wires up dependencies and runs the action |
 | [`src/run.ts`](src/run.ts) | Main orchestration logic |
+| [`src/run-context.ts`](src/run-context.ts) | Resolving what to run on: a trigger, `pr_number`, or a direct prompt |
 | [`src/thread.ts`](src/thread.ts) | One issue/PR as a durable pi conversation stored in git |
+| [`src/conversation.ts`](src/conversation.ts) | Submitting triggers, waiting within the timeout, delivering each result once |
 | [`src/triggers.ts`](src/triggers.ts) | Finding the `@pi` comments a thread still has to answer |
-| [`src/models.ts`](src/models.ts) | Providers, credentials (`pi_auth_json`) and custom providers (`models_json`) |
+| [`src/models.ts`](src/models.ts) | Built-in providers with the `api_key` input as an in-memory credential |
+| [`src/custom-provider.ts`](src/custom-provider.ts) | The single custom provider/model from the flat `provider_*`/`model_*` inputs |
+| [`src/share.ts`](src/share.ts) | Exporting the thread transcript for the session artifact |
 | [`src/push.ts`](src/push.ts) | The `if: always()` step that pushes unsaved thread state |
 | [`src/storage/git.ts`](src/storage/git.ts) | In-process git objects and compare-and-swap ref updates |
 | [`src/storage/git-storage.ts`](src/storage/git-storage.ts) | `GitStorage`: a pi-durable `Storage` whose log is a chain of commits on one ref |
 | [`src/storage/sync.ts`](src/storage/sync.ts) | `GitSync`: fetching a thread ref and pushing it (fast-forward only) at turn boundaries |
 | [`src/github.ts`](src/github.ts) | GitHub API client helpers |
+| [`src/inputs.ts`](src/inputs.ts) | GitHub Actions input parsing helpers |
 | [`src/context.ts`](src/context.ts) | Prompt building and trigger extraction |
 | [`src/security.ts`](src/security.ts) | Permission validation and input sanitization |
 | [`src/formatting.ts`](src/formatting.ts) | Response formatting utilities |
@@ -102,14 +116,17 @@ The action is built with TypeScript on [pi-durable](https://www.npmjs.com/packag
 #### [`index.ts`](src/index.ts)
 Entry point that reads GitHub Actions inputs, creates dependencies, and invokes `run()`. This is the only file with side effects (reading environment, calling APIs).
 
+#### [`inputs.ts`](src/inputs.ts)
+Pure helpers for parsing GitHub Actions inputs (CSV allowlists, booleans, and positive integer timeouts). Kept separate from `index.ts` so input behavior can be unit tested without loading the GitHub Actions runtime.
+
 #### [`run.ts`](src/run.ts)
 Main orchestration that:
-1. Extracts trigger information from the GitHub payload and validates permissions
-2. Sets up models and credentials
-3. Opens the thread (fetching `refs/pi/threads/<number>`)
-4. Submits every unanswered `@pi` comment, then polls for new ones while pi works
-5. Posts each answer (or failure) once, and aborts at the timeout
-6. Closes and pushes the thread
+1. Resolves the run context (trigger, `pr_number`, or direct prompt) and validates permissions
+2. Sets up models from environment variables, the runtime-only `api_key` input, and the custom provider inputs
+3. Opens the thread (fetching `refs/pi/threads/<number>`; in memory for direct prompts)
+4. Submits every unanswered `@pi` comment, then polls for new ones while pi works (comment mode), or runs one request (output mode, `pr_number`, direct prompts)
+5. Posts each answer (or failure) once, or sets the action outputs
+6. Exports the session artifact and pushes the thread
 
 #### [`thread.ts`](src/thread.ts)
 Wraps a pi-durable `Harness` on `GitStorage`:
@@ -133,7 +150,7 @@ Handles prompt construction:
 
 #### [`security.ts`](src/security.ts)
 Permission and input validation:
-- `validatePermissions()`: Checks if user has write access or is an allowed bot
+- `validatePermissions()`: Checks the author against configured user, association, and bot allowlists
 - `sanitizeInput()`: Removes HTML comments and invisible Unicode characters
 
 ### Action Configuration
@@ -142,9 +159,8 @@ The [`action.yml`](action.yml) file defines:
 - Input parameters
 - A composite action that:
   1. Installs npm dependencies
-  2. Installs standalone git hooks for conventional commits
-  3. Runs the action (`dist/index.js`)
-  4. Pushes unsaved thread state in an `if: always()` step (`dist/push.js`)
+  2. Installs standalone git hooks for conventional commits (see [`scripts/install-agent-hooks.js`](scripts/install-agent-hooks.js))
+  3. Runs the TypeScript entrypoint via `tsx`
 
 ### Testing
 
@@ -154,7 +170,7 @@ Tests use [Vitest](https://vitest.dev/) and are colocated with source files (`*.
 ```bash
 npm test                    # Run once
 npm run test:watch          # Watch mode
-npm test -- --coverage      # With coverage report
+npm run coverage            # With coverage report
 ```
 
 **Test philosophy:**
@@ -164,9 +180,12 @@ npm test -- --coverage      # With coverage report
 - Use [`test-helpers.ts`](src/test-helpers.ts) for common mock factories
 
 **Coverage thresholds (enforced by pre-push hook):**
-- Lines: 80%
-- Functions: 80%
-- Branches: 70%
+- Statements: 90%
+- Lines: 90%
+- Functions: 90%
+- Branches: 85%
+
+Thresholds and production coverage includes are configured in [`vitest.config.ts`](vitest.config.ts).
 
 ### Building
 
@@ -174,15 +193,13 @@ npm test -- --coverage      # With coverage report
 npm run build
 ```
 
-This compiles TypeScript to `dist/`. The `dist/` directory is committed to the repository (required for GitHub Actions).
-
-**Important:** The pre-commit hook verifies `dist/` is up to date. If you modify source files, you must rebuild and commit the changes to `dist/`.
+This verifies the TypeScript production entrypoint without emitting JavaScript. The action runs TypeScript directly with `tsx`, so generated `dist/` artifacts are not committed.
 
 ## CI/CD
 
 ### GitHub Actions Workflows
 
-- [**CI (`ci.yml`)**](.github/workflows/ci.yml): Runs on push/PR to main - type checking, linting, tests, build verification
+- [**CI (`ci.yml`)**](.github/workflows/ci.yml): Runs on push/PR to main - type checking, linting, and tests
 - [**pi Assistant (`pi-assistant.yml`)**](.github/workflows/pi-assistant.yml): Dogfooding - uses the action from this repo to respond to `@pi` triggers
 
 ### Release Process
@@ -190,7 +207,7 @@ This compiles TypeScript to `dist/`. The `dist/` directory is committed to the r
 1. Ensure all tests pass and coverage thresholds are met
 2. Update version in `package.json`
 3. Create a new release/tag (e.g., `v1.0.1`)
-4. Users reference the action via `cv/pi-action@v1`
+4. Users reference the action via `cv/pi-action@v2`
 
 ## Code Style
 

@@ -1,17 +1,28 @@
 {
 	"name": "pi-action",
-	"version": "2.0.0",
-	"description": "GitHub Action that runs a durable pi coding agent on issues and PRs, with each thread stored in git",
+	"version": "1.10.0",
+	"description": "GitHub Action to invoke the pi coding agent on issues and PRs",
 	"type": "module",
 	"scripts": {
-		"build": "tsc",
+		"build": "tsc --noEmit",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"check": "biome check --write .",
-		"typecheck": "tsc --noEmit",
-		"prepare": "husky"
+		"coverage": "vitest run --coverage",
+		"check": "npm run typecheck && npm run lint && npm run coverage && npm run analyze",
+		"lint": "biome check --error-on-warnings . && npm run lint:actions",
+		"analyze": "knip --treat-config-hints-as-errors && jscpd --config .jscpd.json src",
+		"fix": "biome check --write .",
+		"lint:actions": "node scripts/lint-actions.mjs",
+		"typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
+		"prepare": "prek install --allow-missing-config --hook-type pre-commit --hook-type commit-msg --hook-type prepare-commit-msg --hook-type pre-push"
 	},
-	"keywords": ["github-action", "pi", "ai", "coding-agent", "automation"],
+	"keywords": [
+		"github-action",
+		"pi",
+		"ai",
+		"coding-agent",
+		"automation"
+	],
 	"author": "Carlos Villela",
 	"license": "MIT",
 	"repository": {
@@ -22,24 +33,29 @@
 		"url": "https://github.com/cv/pi-action/issues"
 	},
 	"homepage": "https://github.com/cv/pi-action#readme",
+	"engines": {
+		"node": ">=24.0.0"
+	},
 	"dependencies": {
-		"@actions/core": "^1.10.1",
-		"@actions/github": "^6.0.0",
+		"@actions/core": "^3.0.1",
+		"@actions/github": "^9.1.1",
 		"@earendil-works/chord": "1.5.2",
 		"@earendil-works/pi-ai": "1.5.2",
-		"@earendil-works/pi-durable": "1.5.2"
+		"@earendil-works/pi-durable": "1.5.2",
+		"tsx": "^4.23.12"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^1.9.4",
-		"@commitlint/cli": "^20.3.0",
-		"@commitlint/config-conventional": "^20.3.0",
-		"@types/node": "^22.20.5",
-		"@vitest/coverage-v8": "^2.1.9",
-		"husky": "^9.1.7",
-		"typescript": "^5.7.2",
-		"vitest": "^2.1.8"
-	},
-	"engines": {
-		"node": ">=22.19.0"
+		"@biomejs/biome": "^2.5.9",
+		"@commitlint/cli": "^21.2.2",
+		"@commitlint/config-conventional": "^21.2.2",
+		"@j178/prek": "^0.4.14",
+		"@octokit/webhooks-types": "^7.6.1",
+		"@types/node": "^26.2.0",
+		"@vitest/coverage-v8": "^4.1.10",
+		"actionlint": "^2.0.6",
+		"jscpd": "^5.0.16",
+		"knip": "^6.32.2",
+		"typescript": "^7.0.2",
+		"vitest": "^4.1.10"
 	}
 }

@@ -22,9 +22,12 @@ export interface Trigger {
 	url?: string;
 }
 
+/** Who may run pi, as configured by the trigger_phrase and allowed_* inputs. */
 export interface TriggerFilter {
 	triggerPhrase: string;
 	allowedBots: string[];
+	allowedUsers: string[];
+	allowedAssociations: string[];
 }
 
 export function triggerKey(
@@ -50,13 +53,36 @@ export function triggerFromInfo(
 		key: triggerKey(source, info.issueNumber, info.commentId),
 		source,
 		issueNumber: info.issueNumber,
-		commentId: info.commentId,
+		...(info.commentId === undefined ? {} : { commentId: info.commentId }),
 		author: info.author,
 		text,
 		task: extractTask(text, triggerPhrase),
 		createdAt: info.createdAt ?? new Date().toISOString(),
-		url: info.url,
+		...(info.url ? { url: info.url } : {}),
 	};
+}
+
+function commentAuthor(
+	comment: GitHubComment,
+	filter: TriggerFilter,
+): GitHubUser | undefined {
+	const { user } = comment;
+	if (!(user && hasTrigger(comment.body ?? "", filter.triggerPhrase))) {
+		return;
+	}
+	const author: GitHubUser = {
+		login: user.login,
+		type: user.type as GitHubUser["type"],
+	};
+	const permitted = validatePermissions({
+		authorAssociation: comment.author_association,
+		authorLogin: author.login,
+		isBot: author.type === "Bot",
+		allowedBots: filter.allowedBots,
+		allowedUsers: filter.allowedUsers,
+		allowedAssociations: filter.allowedAssociations,
+	});
+	return permitted ? author : undefined;
 }
 
 /** The comments that mention the trigger phrase and whose authors may run pi. */
@@ -66,40 +92,57 @@ export function triggersFromComments(
 	issueNumber: number,
 	filter: TriggerFilter,
 ): Trigger[] {
-	const triggers: Trigger[] = [];
-	for (const comment of comments) {
-		const body = comment.body ?? "";
-		const user = comment.user;
-		if (!(user && hasTrigger(body, filter.triggerPhrase))) {
-			continue;
+	return comments.flatMap((comment) => {
+		const author = commentAuthor(comment, filter);
+		if (!author) {
+			return [];
 		}
-		const author: GitHubUser = {
-			login: user.login,
-			type: user.type as GitHubUser["type"],
-		};
-		const permitted = validatePermissions({
-			authorAssociation: comment.author_association,
-			authorLogin: author.login,
-			isBot: author.type === "Bot",
-			allowedBots: filter.allowedBots,
-		});
-		if (!permitted) {
-			continue;
-		}
-		const text = sanitizeInput(body);
-		triggers.push({
-			key: triggerKey(source, issueNumber, comment.id),
-			source,
-			issueNumber,
-			commentId: comment.id,
-			author,
-			text,
-			task: extractTask(text, filter.triggerPhrase),
-			createdAt: comment.created_at,
-			url: comment.html_url,
-		});
+		const text = sanitizeInput(comment.body ?? "");
+		return [
+			{
+				key: triggerKey(source, issueNumber, comment.id),
+				source,
+				issueNumber,
+				commentId: comment.id,
+				author,
+				text,
+				task: extractTask(text, filter.triggerPhrase),
+				createdAt: comment.created_at,
+				url: comment.html_url,
+			},
+		];
+	});
+}
+
+async function triggersSince(
+	client: GitHubClient,
+	info: Pick<TriggerInfo, "issueNumber" | "isPullRequest">,
+	filter: TriggerFilter,
+	since: Date,
+): Promise<Trigger[]> {
+	const iso = since.toISOString();
+	const comments = await client.listIssueComments(info.issueNumber, iso);
+	const found = triggersFromComments(
+		comments,
+		"comment",
+		info.issueNumber,
+		filter,
+	);
+	if (info.isPullRequest) {
+		const reviews = await client.listReviewComments(info.issueNumber, iso);
+		found.push(
+			...triggersFromComments(
+				reviews,
+				"review_comment",
+				info.issueNumber,
+				filter,
+			),
+		);
 	}
-	return triggers;
+	// `since` filters by update time; keep only comments created since.
+	return found.filter(
+		(trigger) => Date.parse(trigger.createdAt) >= since.getTime(),
+	);
 }
 
 /**
@@ -113,33 +156,11 @@ export async function collectTriggers(
 	since: Date | undefined,
 	current?: Trigger,
 ): Promise<Trigger[]> {
-	const found: Trigger[] = current ? [current] : [];
-	if (since) {
-		const iso = since.toISOString();
-		const comments = await client.listIssueComments(info.issueNumber, iso);
-		found.push(
-			...triggersFromComments(comments, "comment", info.issueNumber, filter),
-		);
-		if (info.isPullRequest) {
-			const reviews = await client.listReviewComments(info.issueNumber, iso);
-			found.push(
-				...triggersFromComments(
-					reviews,
-					"review_comment",
-					info.issueNumber,
-					filter,
-				),
-			);
-		}
-	}
+	const found = since ? await triggersSince(client, info, filter, since) : [];
 	const byKey = new Map<string, Trigger>();
-	for (const trigger of found) {
-		if (
-			!since ||
-			trigger === current ||
-			Date.parse(trigger.createdAt) >= since.getTime()
-		) {
-			byKey.set(trigger.key, byKey.get(trigger.key) ?? trigger);
+	for (const trigger of current ? [current, ...found] : found) {
+		if (!byKey.has(trigger.key)) {
+			byKey.set(trigger.key, trigger);
 		}
 	}
 	return [...byKey.values()].sort(

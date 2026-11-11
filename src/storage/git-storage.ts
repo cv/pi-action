@@ -15,7 +15,7 @@ import {
 } from "@earendil-works/pi-durable";
 import { GitRepo, type Signature } from "./git.js";
 
-export const FORMAT_VERSION = 1;
+const FORMAT_VERSION = 1;
 const BATCH_FILE = "batch.json";
 const DEFAULT_AUTHOR: Signature = {
 	name: "pi-durable",
@@ -42,7 +42,7 @@ export interface GitStorageOptions {
 	readonly onCommit?: (event: CommitEvent) => void;
 }
 
-export interface CommitEvent {
+interface CommitEvent {
 	readonly tip: string;
 	readonly batches: readonly Batch[];
 }
@@ -53,13 +53,13 @@ export interface Batch {
 	readonly writes: readonly StorageWrite[];
 }
 
-export class GitStorageCorruptionError extends Error {
-	constructor(message: string, cause?: unknown) {
-		super(message, cause === undefined ? undefined : { cause });
+class GitStorageCorruptionError extends Error {
+	constructor(message: string, options?: { cause?: unknown }) {
+		super(message, options);
 		this.name = "GitStorageCorruptionError";
 	}
 }
-export class GitStorageReadOnlyError extends Error {
+class GitStorageReadOnlyError extends Error {
 	constructor() {
 		super("Git storage is open read-only");
 		this.name = "GitStorageReadOnlyError";
@@ -98,7 +98,10 @@ export class GitStorage implements Storage {
 	}
 
 	static async open(options: GitStorageOptions): Promise<GitStorage> {
-		const repo = await GitRepo.open(options.repo, { fsync: options.fsync });
+		const repo = await GitRepo.open(
+			options.repo,
+			options.fsync === undefined ? {} : { fsync: options.fsync },
+		);
 		const storage = new GitStorage(repo, options);
 		try {
 			await storage.recover();
@@ -123,6 +126,7 @@ export class GitStorage implements Storage {
 		// First-parent chain, newest first; reading commits is inherently sequential.
 		const chain: { sha: string; tree: string }[] = [];
 		for (let sha: string | undefined = tip; sha !== undefined; ) {
+			// biome-ignore lint/performance/noAwaitInLoops: each commit names the next one to read
 			const commit = await this.repo.readCommit(sha);
 			if (commit.parents.length > 1) {
 				throw new GitStorageCorruptionError(
@@ -130,7 +134,7 @@ export class GitStorage implements Storage {
 				);
 			}
 			chain.push({ sha, tree: commit.tree });
-			sha = commit.parents[0];
+			[sha] = commit.parents;
 		}
 		chain.reverse();
 		// Trees and blobs can be fetched in parallel (cat-file pipelines them).
@@ -150,7 +154,7 @@ export class GitStorage implements Storage {
 				} catch (error) {
 					throw new GitStorageCorruptionError(
 						`Malformed ${BATCH_FILE} in ${sha}`,
-						error,
+						{ cause: error },
 					);
 				}
 				if (
@@ -171,7 +175,7 @@ export class GitStorage implements Storage {
 			} catch (error) {
 				throw new GitStorageCorruptionError(
 					`Invalid committed state at seq ${batch.seq} (${sha})`,
-					error,
+					{ cause: error },
 				);
 			}
 		}
@@ -251,6 +255,7 @@ export class GitStorage implements Storage {
 	): Promise<void> {
 		let parent = this.head;
 		for (const batch of batches) {
+			// biome-ignore lint/performance/noAwaitInLoops: each commit is the parent of the next
 			const blob = await this.repo.writeBlob(JSON.stringify(batch));
 			const tree = await this.repo.writeTree({ [BATCH_FILE]: blob });
 			parent = await this.repo.writeCommit({
@@ -341,6 +346,7 @@ export class GitStorage implements Storage {
 	}
 
 	async close(context: Context): Promise<void> {
+		// biome-ignore lint/suspicious/noUnnecessaryConditions: close() may be called twice
 		if (this.closed) {
 			return;
 		}
@@ -356,6 +362,7 @@ export class GitStorage implements Storage {
 	}
 	private async readable(): Promise<MemoryStorage> {
 		while (this.writing !== undefined) {
+			// biome-ignore lint/performance/noAwaitInLoops: a new write may start while we wait
 			await this.writing;
 		}
 		return this.store;
@@ -365,6 +372,7 @@ export class GitStorage implements Storage {
 		return this.poisonError;
 	}
 	private assertUsable(): void {
+		// biome-ignore lint/suspicious/noUnnecessaryConditions: set by close()
 		if (this.closed) {
 			throw new Error("GitStorage is closed");
 		}
@@ -372,12 +380,6 @@ export class GitStorage implements Storage {
 			throw this.poisonError;
 		}
 	}
-}
-
-export function openGitStorage(
-	options: GitStorageOptions,
-): Promise<GitStorage> {
-	return GitStorage.open(options);
 }
 
 /** `pi-durable: seq 12 (entry, task×2)` plus trailers, so `git log` reads well. */

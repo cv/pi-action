@@ -31,6 +31,38 @@ export interface ModelConfig {
 	timeout: number;
 }
 
+export type ModelInputMode = "text" | "image";
+
+export interface CustomProviderCompatConfig {
+	supportsDeveloperRole?: boolean;
+	supportsReasoningEffort?: boolean;
+}
+
+/**
+ * Single custom provider/model definition, exposed as flat action inputs.
+ */
+export interface CustomProviderConfig {
+	baseUrl: string;
+	api: string;
+	apiKey?: string;
+	authHeader: boolean;
+	modelName?: string;
+	reasoning: boolean;
+	input: ModelInputMode[];
+	contextWindow: number;
+	maxTokens: number;
+	compat?: CustomProviderCompatConfig;
+}
+
+export interface PullRequestReviewComment {
+	id: number;
+	body: string;
+	user: GitHubUser;
+	path?: string;
+	line?: number;
+	created_at: string;
+}
+
 /** Where a trigger came from: an issue/PR body, an issue comment, or a PR review comment. */
 export type TriggerSource = "body" | "comment" | "review_comment";
 
@@ -49,7 +81,7 @@ export interface TriggerInfo {
 	url?: string;
 }
 
-/** A comment as listed by the REST API. */
+/** An issue or review comment as listed by the REST API. */
 export interface GitHubComment {
 	id: number;
 	body?: string | null;
@@ -57,9 +89,17 @@ export interface GitHubComment {
 	author_association: string;
 	created_at: string;
 	html_url: string;
+	path?: string | null;
+	line?: number | null;
 }
 
-type Params<T> = { owner: string; repo: string } & T;
+type Params<T> = { owner: string; repo: string; [key: string]: unknown } & T;
+
+interface ListParams {
+	since?: string;
+	per_page?: number;
+	page?: number;
+}
 
 // Minimal Octokit interface to replace 'any' type
 export interface OctokitClient {
@@ -80,26 +120,19 @@ export interface OctokitClient {
 				params: Params<{ issue_number: number; body: string }>,
 			) => Promise<{ data: { id: number; html_url: string } }>;
 			listComments: (
-				params: Params<{
-					issue_number: number;
-					since?: string;
-					per_page?: number;
-					page?: number;
-				}>,
-			) => Promise<{ data: GitHubComment[] }>;
+				params: Params<{ issue_number: number } & ListParams>,
+			) => Promise<{ data: unknown }>;
 		};
 		pulls: {
 			get: (
-				params: Params<{ pull_number: number; mediaType: { format: string } }>,
-			) => Promise<{ data: unknown }>;
-			listReviewComments: (
 				params: Params<{
 					pull_number: number;
-					since?: string;
-					per_page?: number;
-					page?: number;
+					mediaType?: { format: string };
 				}>,
-			) => Promise<{ data: GitHubComment[] }>;
+			) => Promise<{ data: unknown }>;
+			listReviewComments: (
+				params: Params<{ pull_number: number } & ListParams>,
+			) => Promise<{ data: unknown }>;
 		};
 	};
 }

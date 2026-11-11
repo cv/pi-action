@@ -1,7 +1,7 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
-	type StorageConformanceRunner,
 	registerStorageConformance,
+	type StorageConformanceRunner,
 } from "@earendil-works/pi-durable/testing";
 import { describe, expect, it } from "vitest";
 import { tempRepo } from "../test-helpers.js";
@@ -11,21 +11,17 @@ const REF = "refs/pi/threads/test";
 
 /** The wrapped MemoryStorage's state, minus the ID counter (minted-but-unused IDs aren't stored, as in JSONL). */
 function snapshot(storage: GitStorage): string {
-	const memory = (
-		storage as unknown as { memory: { state: unknown; nextSeq: number } }
-	).memory;
+	const { memory } = storage as unknown as {
+		memory: { state: unknown; nextSeq: number };
+	};
 	return JSON.stringify(
 		{ state: memory.state, nextSeq: memory.nextSeq },
 		(_key, value) =>
-			value instanceof Map
-				? [...value]
-				: value instanceof Set
-					? [...value]
-					: value,
+			value instanceof Map || value instanceof Set ? [...value] : value,
 	);
 }
 
-let replays = 0;
+const replays: { before: string; after: string }[] = [];
 registerStorageConformance(
 	{ describe, expect, it } as unknown as StorageConformanceRunner,
 	"GitStorage",
@@ -45,10 +41,8 @@ registerStorageConformance(
 			await storage.close(BACKGROUND_CONTEXT);
 			if (before !== undefined) {
 				const reopened = await GitStorage.open({ repo: repo.dir, ref: REF });
-				// biome-ignore lint/suspicious/noMisplacedAssertion: runs inside each conformance case
-				expect(snapshot(reopened)).toBe(before);
+				replays.push({ before, after: snapshot(reopened) });
 				await reopened.close(BACKGROUND_CONTEXT);
-				replays++;
 			}
 		} finally {
 			await storage.close(BACKGROUND_CONTEXT);
@@ -59,6 +53,7 @@ registerStorageConformance(
 
 describe("replay coverage", () => {
 	it("reopened most conformance cases", () => {
-		expect(replays).toBeGreaterThan(10);
+		expect(replays.length).toBeGreaterThan(10);
+		expect(replays.filter(({ before, after }) => before !== after)).toEqual([]);
 	});
 });

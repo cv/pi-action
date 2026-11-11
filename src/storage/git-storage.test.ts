@@ -7,16 +7,19 @@ import {
 import {
 	AssistantEntry,
 	type ConversationRecord,
-	Harness,
 	createRegistry,
+	Harness,
 } from "@earendil-works/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
 import { tempRepo } from "../test-helpers.js";
-import { GitStorage } from "./git-storage.js";
 import { GitRepo, RefConflictError } from "./git.js";
+import { GitStorage } from "./git-storage.js";
 
 const context = BACKGROUND_CONTEXT;
 const REF = "refs/pi/threads/42";
+const FIRST_COMMIT = /^pi-durable: seq 1 /u;
+const NO_LOOSE_OBJECTS = /^count: 0$/mu;
+const POISONED = /poisoned/u;
 const cleanups: (() => void)[] = [];
 afterEach(() => {
 	for (const c of cleanups.splice(0)) {
@@ -81,13 +84,13 @@ describe("GitStorage with a Harness", () => {
 
 		const first = await open();
 		expect(await ask(first.root, "Capital of France?")).toBe("Paris");
-		const tip = first.storage.tip;
+		const { tip } = first.storage;
 		await first.harness.close(context);
 
 		expect(repo.git("rev-parse", REF).trim()).toBe(tip);
 		const log = repo.git("log", "--format=%s", REF).trim().split("\n");
 		expect(log.length).toBeGreaterThan(2);
-		expect(log.at(-1)).toMatch(/^pi-durable: seq 1 /);
+		expect(log.at(-1)).toMatch(FIRST_COMMIT);
 		repo.git("fsck", "--strict", "--no-dangling");
 
 		const second = await open();
@@ -118,7 +121,7 @@ describe("GitStorage with a Harness", () => {
 		await first.harness.close(context);
 
 		repo.git("gc", "-q", "--prune=now");
-		expect(repo.git("count-objects", "-v")).toMatch(/^count: 0$/m);
+		expect(repo.git("count-objects", "-v")).toMatch(NO_LOOSE_OBJECTS);
 		expect(repo.git("show-ref")).toContain(REF);
 
 		const second = await open();
@@ -171,7 +174,7 @@ describe("GitStorage with a Harness", () => {
 				() => undefined,
 				context,
 			),
-		).rejects.toThrow(/poisoned/);
+		).rejects.toThrow(POISONED);
 		await stale.close(context);
 	});
 

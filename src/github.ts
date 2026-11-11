@@ -1,8 +1,15 @@
 import type {
+	IssueCommentCreatedEvent,
+	IssuesOpenedEvent,
+	PullRequestOpenedEvent,
+	PullRequestReviewCommentCreatedEvent,
+} from "@octokit/webhooks-types";
+import type {
 	GitHubComment,
 	GitHubReaction,
 	GitHubUser,
 	OctokitClient,
+	PullRequestReviewComment,
 	RepoRef,
 	TriggerInfo,
 	TriggerSource,
@@ -12,60 +19,110 @@ export interface GitHubContext {
 	repo: RepoRef;
 }
 
-function triggerSource(
-	payload: Record<string, unknown>,
-	comment: Record<string, unknown> | undefined,
+type SupportedWebhookPayload =
+	| IssueCommentCreatedEvent
+	| IssuesOpenedEvent
+	| PullRequestOpenedEvent
+	| PullRequestReviewCommentCreatedEvent;
+
+type TriggerSubject = SupportedWebhookPayload extends infer Payload
+	? Payload extends { issue: infer Issue }
+		? Issue
+		: Payload extends { pull_request: infer PullRequest }
+			? PullRequest
+			: never
+	: never;
+
+type TriggerComment = SupportedWebhookPayload extends infer Payload
+	? Payload extends { comment: infer Comment }
+		? Comment
+		: never
+	: never;
+
+function isSupportedWebhookPayload(
+	payload: unknown,
+): payload is SupportedWebhookPayload {
+	return (
+		typeof payload === "object" &&
+		payload !== null &&
+		("issue" in payload || "pull_request" in payload)
+	);
+}
+
+function getTriggerSubject(payload: SupportedWebhookPayload): TriggerSubject {
+	return "pull_request" in payload ? payload.pull_request : payload.issue;
+}
+
+function getTriggerComment(
+	payload: SupportedWebhookPayload,
+): TriggerComment | undefined {
+	return "comment" in payload ? payload.comment : undefined;
+}
+
+function isPullRequestTrigger(
+	payload: SupportedWebhookPayload,
+	subject: TriggerSubject,
+): boolean {
+	return "pull_request" in payload || "pull_request" in subject;
+}
+
+function getTriggerSource(
+	payload: SupportedWebhookPayload,
+	comment: TriggerComment | undefined,
 ): TriggerSource {
 	if (!comment) {
 		return "body";
 	}
-	// Review comments belong to a review and arrive with pull_request, not issue.
-	return !payload.issue && "pull_request_review_id" in comment
-		? "review_comment"
-		: "comment";
+	// Review comments arrive with pull_request (and no issue) and belong to a review.
+	return "issue" in payload ? "comment" : "review_comment";
 }
 
 export function extractTriggerInfo(
 	payload: Record<string, unknown>,
 ): TriggerInfo | null {
-	const comment = payload.comment as Record<string, unknown> | undefined;
-	const issue = (payload.issue || payload.pull_request) as
-		| Record<string, unknown>
-		| undefined;
-
-	if (!issue) {
+	if (!isSupportedWebhookPayload(payload)) {
 		return null;
 	}
 
-	const isCommentEvent = !!comment;
-	const origin = comment ?? issue;
-	const triggerText = origin.body as string;
-	const author = origin.user as GitHubUser;
-	const authorAssociation = origin.author_association as string;
+	const subject = getTriggerSubject(payload);
+	const comment = getTriggerComment(payload);
+	const triggerText = comment?.body ?? subject.body ?? "";
+	const author = comment?.user ?? subject.user;
+	const authorAssociation =
+		comment?.author_association ?? subject.author_association;
 
 	if (!(triggerText && author)) {
 		return null;
 	}
 
+	const origin = comment ?? subject;
 	return {
-		isCommentEvent,
+		isCommentEvent: Boolean(comment),
 		triggerText,
 		author,
 		authorAssociation,
-		issueNumber: issue.number as number,
-		issueTitle: issue.title as string,
-		issueBody: (issue.body as string) || "",
-		commentId: comment?.id as number | undefined,
-		isPullRequest: !!(payload.pull_request || issue.pull_request),
-		source: triggerSource(payload, comment),
-		createdAt: origin.created_at as string | undefined,
-		url: origin.html_url as string | undefined,
+		issueNumber: subject.number,
+		issueTitle: subject.title,
+		issueBody: subject.body ?? "",
+		...(comment ? { commentId: comment.id } : {}),
+		isPullRequest: isPullRequestTrigger(payload, subject),
+		source: getTriggerSource(payload, comment),
+		...(origin.created_at ? { createdAt: origin.created_at } : {}),
+		...(origin.html_url ? { url: origin.html_url } : {}),
 	};
 }
 
-export interface PostedComment {
+interface PostedComment {
 	id: number;
 	url: string;
+}
+
+interface PullRequestSummary {
+	number: number;
+	title: string;
+	body: string;
+	user: GitHubUser;
+	author_association: string;
 }
 
 export interface GitHubClient {
@@ -79,13 +136,17 @@ export interface GitHubClient {
 		reaction: GitHubReaction,
 	): Promise<void>;
 	createComment(issueNumber: number, body: string): Promise<PostedComment>;
+	getPullRequest(pullNumber: number): Promise<PullRequestSummary>;
 	getPullRequestDiff(pullNumber: number): Promise<string>;
+	getPullRequestReviewComments(
+		pullNumber: number,
+	): Promise<PullRequestReviewComment[]>;
 	/** Every comment on an issue or PR conversation, oldest first; `since` filters by last update. */
 	listIssueComments(
 		issueNumber: number,
 		since?: string,
 	): Promise<GitHubComment[]>;
-	/** Every review comment on a PR, oldest first. */
+	/** Every review comment on a PR, oldest first; `since` filters by last update. */
 	listReviewComments(
 		pullNumber: number,
 		since?: string,
@@ -95,11 +156,12 @@ export interface GitHubClient {
 const PAGE_SIZE = 100;
 
 async function listAll(
-	fetchPage: (page: number) => Promise<{ data: GitHubComment[] }>,
+	fetchPage: (page: number) => Promise<{ data: unknown }>,
 ): Promise<GitHubComment[]> {
 	const all: GitHubComment[] = [];
-	for (let page = 1; ; page++) {
-		const { data } = await fetchPage(page);
+	for (let page = 1; ; page += 1) {
+		// biome-ignore lint/performance/noAwaitInLoops: pages are fetched until a short one
+		const data = (await fetchPage(page)).data as GitHubComment[];
 		all.push(...data);
 		if (data.length < PAGE_SIZE) {
 			return all;
@@ -107,11 +169,39 @@ async function listAll(
 	}
 }
 
+function toReviewComment(comment: GitHubComment): PullRequestReviewComment {
+	return {
+		id: comment.id,
+		body: comment.body ?? "",
+		user: {
+			login: comment.user?.login ?? "ghost",
+			type: (comment.user?.type ?? "User") as GitHubUser["type"],
+		},
+		...(comment.path ? { path: comment.path } : {}),
+		...(comment.line ? { line: comment.line } : {}),
+		created_at: comment.created_at,
+	};
+}
+
 export function createGitHubClient(
 	octokit: OctokitClient,
 	context: GitHubContext,
 ): GitHubClient {
 	const { owner, name: repo } = context.repo;
+	const pageParams = (since: string | undefined, page: number) => ({
+		...(since ? { since } : {}),
+		per_page: PAGE_SIZE,
+		page,
+	});
+	const listReviewComments = (pullNumber: number, since?: string) =>
+		listAll((page) =>
+			octokit.rest.pulls.listReviewComments({
+				owner,
+				repo,
+				pull_number: pullNumber,
+				...pageParams(since, page),
+			}),
+		);
 
 	return {
 		async addReactionToComment(
@@ -146,6 +236,15 @@ export function createGitHubClient(
 			return { id: data.id, url: data.html_url };
 		},
 
+		async getPullRequest(pullNumber: number) {
+			const { data: pullRequest } = await octokit.rest.pulls.get({
+				owner,
+				repo,
+				pull_number: pullNumber,
+			});
+			return pullRequest as PullRequestSummary;
+		},
+
 		async getPullRequestDiff(pullNumber: number): Promise<string> {
 			const { data: diff } = await octokit.rest.pulls.get({
 				owner,
@@ -153,7 +252,11 @@ export function createGitHubClient(
 				pull_number: pullNumber,
 				mediaType: { format: "diff" },
 			});
-			return diff as unknown as string;
+			return diff as string;
+		},
+
+		async getPullRequestReviewComments(pullNumber: number) {
+			return (await listReviewComments(pullNumber)).map(toReviewComment);
 		},
 
 		listIssueComments(issueNumber: number, since?: string) {
@@ -162,25 +265,12 @@ export function createGitHubClient(
 					owner,
 					repo,
 					issue_number: issueNumber,
-					since,
-					per_page: PAGE_SIZE,
-					page,
+					...pageParams(since, page),
 				}),
 			);
 		},
 
-		listReviewComments(pullNumber: number, since?: string) {
-			return listAll((page) =>
-				octokit.rest.pulls.listReviewComments({
-					owner,
-					repo,
-					pull_number: pullNumber,
-					since,
-					per_page: PAGE_SIZE,
-					page,
-				}),
-			);
-		},
+		listReviewComments,
 	};
 }
 

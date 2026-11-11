@@ -21,8 +21,11 @@ export interface Commit {
 	readonly message: string;
 }
 
-const SHA = /^[0-9a-f]{40}$/;
-export const ZERO = "0".repeat(40);
+const GITDIR_PATTERN = /^gitdir: (.+)$/mu;
+const REFTABLE_PATTERN = /^\s*refStorage\s*=\s*reftable/imu;
+const SHA256_PATTERN = /^\s*objectFormat\s*=\s*sha256/imu;
+const SHA = /^[0-9a-f]{40}$/u;
+const ZERO = "0".repeat(40);
 
 export class RefConflictError extends Error {
 	readonly ref: string;
@@ -97,11 +100,11 @@ export class GitRepo {
 			gitDir = dotGit;
 		} else if (stat?.isFile()) {
 			const text = await fs.readFile(dotGit, "utf8");
-			const match = /^gitdir: (.+)$/m.exec(text);
-			if (!match) {
+			const linked = GITDIR_PATTERN.exec(text)?.[1];
+			if (!linked) {
 				throw new Error(`Malformed .git file in ${path}`);
 			}
-			gitDir = resolve(gitDir, match[1].trim());
+			gitDir = resolve(gitDir, linked.trim());
 		}
 		if (!(await exists(join(gitDir, "HEAD")))) {
 			throw new Error(`Not a git repository: ${path}`);
@@ -116,10 +119,10 @@ export class GitRepo {
 		const config = await fs
 			.readFile(join(commonDir, "config"), "utf8")
 			.catch(() => "");
-		if (/^\s*refStorage\s*=\s*reftable/im.test(config)) {
+		if (REFTABLE_PATTERN.test(config)) {
 			throw new Error("reftable repositories are not supported");
 		}
-		if (/^\s*objectFormat\s*=\s*sha256/im.test(config)) {
+		if (SHA256_PATTERN.test(config)) {
 			throw new Error("sha256 repositories are not supported");
 		}
 		return new GitRepo(commonDir, options.fsync ?? false);
@@ -169,24 +172,26 @@ export class GitRepo {
 	}
 
 	/** A tree of regular files; names are sorted as git requires. */
-	async writeTree(files: Readonly<Record<string, string>>): Promise<string> {
+	writeTree(files: Readonly<Record<string, string>>): Promise<string> {
 		const names = Object.keys(files).sort((a, b) =>
 			Buffer.compare(Buffer.from(a), Buffer.from(b)),
 		);
 		const parts: Buffer[] = [];
 		for (const name of names) {
-			if (!SHA.test(files[name]) || name.includes("/") || name.includes("\0")) {
-				throw new Error(`Bad tree entry ${name}`);
+			const sha = files[name];
+			if (
+				!(sha && SHA.test(sha)) ||
+				name.includes("/") ||
+				name.includes("\0")
+			) {
+				return Promise.reject(new Error(`Bad tree entry ${name}`));
 			}
-			parts.push(
-				Buffer.from(`100644 ${name}\0`),
-				Buffer.from(files[name], "hex"),
-			);
+			parts.push(Buffer.from(`100644 ${name}\0`), Buffer.from(sha, "hex"));
 		}
 		return this.writeObject("tree", Buffer.concat(parts));
 	}
 
-	async writeCommit(input: {
+	writeCommit(input: {
 		tree: string;
 		parents: readonly string[];
 		author: Signature;
@@ -219,7 +224,7 @@ export class GitRepo {
 			const nul = raw.indexOf(0);
 			const [type, size] = raw.subarray(0, nul).toString().split(" ");
 			const content = raw.subarray(nul + 1);
-			if (content.length !== Number(size)) {
+			if (!type || content.length !== Number(size)) {
 				throw new Error(`Corrupt loose object ${sha}`);
 			}
 			return { type, content };
@@ -314,11 +319,13 @@ export class GitRepo {
 		try {
 			handle = await fs.open(
 				lock,
+				// biome-ignore lint/suspicious/noBitwiseOperators: open(2) flags
 				constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL,
 				0o644,
 			);
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+				// biome-ignore lint/style/useErrorCause: the lock file says it all
 				throw new RefConflictError(ref, expected, "(locked)");
 			}
 			throw error;
@@ -372,15 +379,17 @@ export class GitRepo {
 	}
 }
 
+interface Waiting {
+	sha: string;
+	resolve: (o: GitObject) => void;
+	reject: (e: Error) => void;
+}
+
 /** One `git cat-file --batch` process answering reads in order. */
 class CatFile {
 	private readonly child: ChildProcessWithoutNullStreams;
 	private buffer = Buffer.alloc(0);
-	private readonly waiting: {
-		sha: string;
-		resolve: (o: GitObject) => void;
-		reject: (e: Error) => void;
-	}[] = [];
+	private readonly waiting: Waiting[] = [];
 	private failure: Error | undefined;
 
 	constructor(gitDir: string) {
@@ -408,8 +417,8 @@ class CatFile {
 		if (this.failure) {
 			return Promise.reject(this.failure);
 		}
-		return new Promise((resolve, reject) => {
-			this.waiting.push({ sha, resolve, reject });
+		return new Promise((onObject, onError) => {
+			this.waiting.push({ sha, resolve: onObject, reject: onError });
 			this.child.stdin.write(`${sha}\n`);
 		});
 	}
@@ -421,23 +430,32 @@ class CatFile {
 				return;
 			}
 			const header = this.buffer.subarray(0, eol).toString();
-			const current = this.waiting[0];
+			const [current] = this.waiting;
+			if (!current) {
+				return;
+			}
 			if (header.endsWith(" missing")) {
 				this.buffer = this.buffer.subarray(eol + 1);
 				this.waiting.shift();
 				current.reject(new Error(`Object ${current.sha} is missing`));
-				continue;
-			}
-			const [, type, size] = header.split(" ");
-			const end = eol + 1 + Number(size);
-			if (this.buffer.length < end + 1) {
+			} else if (!this.take(header, eol, current)) {
 				return;
 			}
-			const content = Buffer.from(this.buffer.subarray(eol + 1, end));
-			this.buffer = this.buffer.subarray(end + 1);
-			this.waiting.shift();
-			current.resolve({ type, content });
 		}
+	}
+
+	/** Hand the object whose header was read to `current`; false while its content hasn't fully arrived. */
+	private take(header: string, eol: number, current: Waiting): boolean {
+		const [, type, size] = header.split(" ");
+		const end = eol + 1 + Number(size);
+		if (this.buffer.length < end + 1) {
+			return false;
+		}
+		const content = Buffer.from(this.buffer.subarray(eol + 1, end));
+		this.buffer = this.buffer.subarray(end + 1);
+		this.waiting.shift();
+		current.resolve({ type: type ?? "", content });
+		return true;
 	}
 
 	async close(): Promise<void> {
@@ -450,7 +468,7 @@ class CatFile {
 	}
 }
 
-async function exists(path: string): Promise<boolean> {
+function exists(path: string): Promise<boolean> {
 	return fs.access(path).then(
 		() => true,
 		() => false,
@@ -458,5 +476,5 @@ async function exists(path: string): Promise<boolean> {
 }
 
 function clean(text: string): string {
-	return text.replace(/[<>\n\0]/g, "");
+	return text.replace(/[<>\n\0]/gu, "");
 }

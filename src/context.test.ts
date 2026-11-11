@@ -63,7 +63,6 @@ describe("renderTemplate", () => {
 		number: 42,
 		triggerComment: "@pi help me",
 		task: "help me",
-		diff: undefined,
 	};
 
 	it("replaces all template variables", () => {
@@ -76,6 +75,16 @@ describe("renderTemplate", () => {
 		const template = "{{type_display}} {{number}}";
 		const result = renderTemplate(template, context);
 		expect(result).toBe("Issue 42");
+	});
+
+	it("handles direct context template variables", () => {
+		const template = "{{type_display}} {{number}} {{body}} {{trigger_comment}}";
+		const result = renderTemplate(template, {
+			type: "direct",
+			title: "Direct prompt",
+			task: "Do it",
+		});
+		expect(result).toBe("Direct Task 0  Do it");
 	});
 
 	it("handles PR type_display", () => {
@@ -93,7 +102,11 @@ describe("renderTemplate", () => {
 
 	it("handles diff with content", () => {
 		const template = "Changes:\n{{diff}}";
-		const contextWithDiff = { ...context, diff: "+ added line" };
+		const contextWithDiff = {
+			...context,
+			type: "pull_request" as const,
+			diff: "+ added line",
+		};
 		const result = renderTemplate(template, contextWithDiff);
 		expect(result).toBe("Changes:\n+ added line");
 	});
@@ -112,6 +125,15 @@ describe("renderTemplate", () => {
 });
 
 describe("buildPrompt", () => {
+	it("builds direct task prompt", () => {
+		const prompt = buildPrompt({
+			type: "direct",
+			title: "Direct prompt",
+			task: "Generate release notes",
+		});
+		expect(prompt).toContain("# Direct pi Task");
+		expect(prompt).toContain("Generate release notes");
+	});
 	it("builds default issue prompt when no template provided", () => {
 		const prompt = buildPrompt({
 			type: "issue",

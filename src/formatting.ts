@@ -2,26 +2,26 @@
  * Response formatting utilities for consistent GitHub comment formatting
  */
 
+import type { PullRequestReviewComment } from "./types.js";
+
 export interface CommentFooter {
+	/** Link to the workflow run holding the session artifact. */
+	shareUrl?: string | undefined;
 	/** The thread's ref, e.g. refs/pi/threads/42. */
-	ref?: string;
-	/** Who the response answers, e.g. ["alice", "bob"]. */
-	replyTo?: string[];
+	ref?: string | undefined;
 }
 
 function footer(info: CommentFooter | undefined): string {
 	const parts: string[] = [];
-	if (info?.replyTo && info.replyTo.length > 1) {
-		parts.push(
-			`↩️ Answers ${info.replyTo.map((login) => `@${login}`).join(", ")}`,
-		);
+	if (info?.shareUrl) {
+		parts.push(`📎 [Download session artifact](${info.shareUrl})`);
 	}
 	if (info?.ref) {
 		parts.push(
 			`🧵 Thread state: \`${info.ref}\` (\`git fetch origin ${info.ref}\`)`,
 		);
 	}
-	return parts.length > 0 ? `\n\n---\n<sub>${parts.join(" · ")}</sub>` : "";
+	return parts.length > 0 ? `\n\n---\n${parts.join("\n")}` : "";
 }
 
 export function formatSuccessComment(
@@ -36,4 +36,32 @@ export function formatErrorComment(
 	info?: CommentFooter,
 ): string {
 	return `### ❌ pi Error\n\nFailed to process request: ${error}${footer(info)}`;
+}
+
+export function formatReviewComments(
+	comments: PullRequestReviewComment[],
+): string {
+	if (comments.length === 0) {
+		return "";
+	}
+
+	const sections: string[] = [
+		"## Existing PR Review Comments",
+		"",
+		"These comments were already present on the PR. Do not re-fetch them unless you need newer comments.",
+		"",
+	];
+
+	for (const comment of comments) {
+		const author = comment.user.login;
+		const [date = ""] = new Date(comment.created_at).toISOString().split("T");
+		const location =
+			comment.path && comment.line ? ` (${comment.path}:${comment.line})` : "";
+
+		sections.push(`**${author}** on ${date}${location}:`);
+		sections.push(comment.body);
+		sections.push("");
+	}
+
+	return sections.join("\n");
 }

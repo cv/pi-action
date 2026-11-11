@@ -11,7 +11,12 @@ import {
 	triggersFromComments,
 } from "./triggers.js";
 
-const filter = { triggerPhrase: "@pi", allowedBots: ["renovate[bot]"] };
+const filter = {
+	triggerPhrase: "@pi",
+	allowedBots: ["renovate[bot]"],
+	allowedUsers: [],
+	allowedAssociations: ["OWNER", "MEMBER"],
+};
 
 describe("triggerKey", () => {
 	it("is stable per GitHub item", () => {
@@ -122,5 +127,20 @@ describe("collectTriggers", () => {
 			"comment-3",
 		]);
 		expect(found[2]).toBe(current);
+	});
+});
+
+describe("triggersFromComments with allowed_users", () => {
+	it("only accepts the listed users when allowed_users is set", () => {
+		const comments = [
+			createComment({ id: 1, user: { login: "Alice", type: "User" } }),
+			createComment({ id: 2, user: { login: "bob", type: "User" } }),
+		];
+		const only = { ...filter, allowedUsers: ["@alice"] };
+		expect(
+			triggersFromComments(comments, "comment", 1, only).map(
+				(t) => t.commentId,
+			),
+		).toEqual([1]);
 	});
 });

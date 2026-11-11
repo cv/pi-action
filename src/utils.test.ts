@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-	TimeoutError,
-	getErrorMessage,
-	nodeVersionAtLeast,
-	withTimeout,
-} from "./utils.js";
+import { getErrorMessage, TimeoutError, withTimeout } from "./utils.js";
 
 describe("getErrorMessage", () => {
 	it("extracts message from Error instance", () => {
@@ -104,15 +99,5 @@ describe("withTimeout", () => {
 			// Expected
 		}
 		// If the timeout wasn't cleared, the test would hang or leak
-	});
-});
-
-describe("nodeVersionAtLeast", () => {
-	it("compares versions numerically", () => {
-		expect(nodeVersionAtLeast("22.19.0", "22.19.0")).toBe(true);
-		expect(nodeVersionAtLeast("24.1.0", "22.19.0")).toBe(true);
-		expect(nodeVersionAtLeast("22.9.1", "22.19.0")).toBe(false);
-		expect(nodeVersionAtLeast("20.18.0", "22.19.0")).toBe(false);
-		expect(nodeVersionAtLeast("22.19", "22.19.0")).toBe(true);
 	});
 });

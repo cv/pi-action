@@ -1,82 +1,193 @@
 import { describe, expect, it } from "vitest";
 import { sanitizeInput, validatePermissions } from "./security.js";
 
+function createSecurityContext(
+	overrides: Parameters<typeof validatePermissions>[0],
+): Parameters<typeof validatePermissions>[0] {
+	return overrides;
+}
+
 describe("validatePermissions", () => {
+	const defaultAssociations = ["OWNER", "MEMBER"];
+
 	it("allows OWNER", () => {
 		expect(
-			validatePermissions({
-				authorAssociation: "OWNER",
-				authorLogin: "user",
-				isBot: false,
-				allowedBots: [],
-			}),
+			validatePermissions(
+				createSecurityContext({
+					authorAssociation: "OWNER",
+					authorLogin: "user",
+					isBot: false,
+					allowedBots: [],
+					allowedUsers: [],
+					allowedAssociations: defaultAssociations,
+				}),
+			),
 		).toBe(true);
 	});
 
 	it("allows MEMBER", () => {
 		expect(
-			validatePermissions({
-				authorAssociation: "MEMBER",
-				authorLogin: "user",
-				isBot: false,
-				allowedBots: [],
-			}),
+			validatePermissions(
+				createSecurityContext({
+					authorAssociation: "MEMBER",
+					authorLogin: "user",
+					isBot: false,
+					allowedBots: [],
+					allowedUsers: [],
+					allowedAssociations: defaultAssociations,
+				}),
+			),
 		).toBe(true);
 	});
 
-	it("allows COLLABORATOR", () => {
+	it("denies COLLABORATOR by default", () => {
 		expect(
-			validatePermissions({
-				authorAssociation: "COLLABORATOR",
-				authorLogin: "user",
-				isBot: false,
-				allowedBots: [],
-			}),
+			validatePermissions(
+				createSecurityContext({
+					authorAssociation: "COLLABORATOR",
+					authorLogin: "user",
+					isBot: false,
+					allowedBots: [],
+					allowedUsers: [],
+					allowedAssociations: defaultAssociations,
+				}),
+			),
+		).toBe(false);
+	});
+
+	it("allows COLLABORATOR when configured", () => {
+		expect(
+			validatePermissions(
+				createSecurityContext({
+					authorAssociation: "COLLABORATOR",
+					authorLogin: "user",
+					isBot: false,
+					allowedBots: [],
+					allowedUsers: [],
+					allowedAssociations: ["OWNER", "MEMBER", "COLLABORATOR"],
+				}),
+			),
 		).toBe(true);
 	});
 
 	it("denies CONTRIBUTOR", () => {
 		expect(
-			validatePermissions({
-				authorAssociation: "CONTRIBUTOR",
-				authorLogin: "user",
-				isBot: false,
-				allowedBots: [],
-			}),
+			validatePermissions(
+				createSecurityContext({
+					authorAssociation: "CONTRIBUTOR",
+					authorLogin: "user",
+					isBot: false,
+					allowedBots: [],
+					allowedUsers: [],
+					allowedAssociations: defaultAssociations,
+				}),
+			),
 		).toBe(false);
 	});
 
 	it("denies NONE", () => {
 		expect(
-			validatePermissions({
-				authorAssociation: "NONE",
-				authorLogin: "user",
-				isBot: false,
-				allowedBots: [],
-			}),
+			validatePermissions(
+				createSecurityContext({
+					authorAssociation: "NONE",
+					authorLogin: "user",
+					isBot: false,
+					allowedBots: [],
+					allowedUsers: [],
+					allowedAssociations: defaultAssociations,
+				}),
+			),
 		).toBe(false);
 	});
 
 	it("allows bots in allowlist", () => {
 		expect(
-			validatePermissions({
-				authorAssociation: "NONE",
-				authorLogin: "dependabot[bot]",
-				isBot: true,
-				allowedBots: ["dependabot[bot]", "renovate[bot]"],
-			}),
+			validatePermissions(
+				createSecurityContext({
+					authorAssociation: "NONE",
+					authorLogin: "dependabot[bot]",
+					isBot: true,
+					allowedBots: ["dependabot[bot]", "renovate[bot]"],
+					allowedUsers: [],
+					allowedAssociations: defaultAssociations,
+				}),
+			),
 		).toBe(true);
 	});
 
 	it("denies bots not in allowlist", () => {
 		expect(
-			validatePermissions({
-				authorAssociation: "NONE",
-				authorLogin: "evil-bot",
-				isBot: true,
-				allowedBots: ["dependabot[bot]"],
-			}),
+			validatePermissions(
+				createSecurityContext({
+					authorAssociation: "NONE",
+					authorLogin: "evil-bot",
+					isBot: true,
+					allowedBots: ["dependabot[bot]"],
+					allowedUsers: [],
+					allowedAssociations: defaultAssociations,
+				}),
+			),
 		).toBe(false);
+	});
+
+	it("allows explicit users regardless of association", () => {
+		expect(
+			validatePermissions(
+				createSecurityContext({
+					authorAssociation: "NONE",
+					authorLogin: "Cv",
+					isBot: false,
+					allowedBots: [],
+					allowedUsers: ["@cv"],
+					allowedAssociations: ["OWNER"],
+				}),
+			),
+		).toBe(true);
+	});
+
+	it("denies owners not present in explicit user allowlist", () => {
+		expect(
+			validatePermissions(
+				createSecurityContext({
+					authorAssociation: "OWNER",
+					authorLogin: "not-allowed",
+					isBot: false,
+					allowedBots: [],
+					allowedUsers: ["cv"],
+					allowedAssociations: defaultAssociations,
+				}),
+			),
+		).toBe(false);
+	});
+
+	it("respects tightened allowed associations", () => {
+		expect(
+			validatePermissions(
+				createSecurityContext({
+					authorAssociation: "MEMBER",
+					authorLogin: "user",
+					isBot: false,
+					allowedBots: [],
+					allowedUsers: [],
+					allowedAssociations: ["OWNER"],
+				}),
+			),
+		).toBe(false);
+	});
+
+	it("normalizes bot allowlist entries", () => {
+		expect(
+			validatePermissions(
+				createSecurityContext({
+					authorAssociation: "NONE",
+					authorLogin: "dependabot[bot]",
+					isBot: true,
+					allowedBots: ["@Dependabot[bot]"],
+					allowedUsers: [],
+					allowedAssociations: defaultAssociations,
+				}),
+			),
+		).toBe(true);
 	});
 });
 

@@ -8,7 +8,7 @@ import {
 	fauxAssistantMessage,
 	fauxProvider,
 } from "@earendil-works/pi-ai/providers/faux";
-import { Harness, createRegistry } from "@earendil-works/pi-durable";
+import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
 import { GitStorage } from "./git-storage.js";
 import { GitSync, GitSyncConflictError, isTurnBoundary } from "./sync.js";

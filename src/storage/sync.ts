@@ -1,7 +1,7 @@
 // Moving a GitStorage ref between a local repository and a remote: fetch it before opening, push it as it grows.
 import { execFile } from "node:child_process";
-import type { Batch } from "./git-storage.js";
 import { assertRefName } from "./git.js";
+import type { Batch } from "./git-storage.js";
 
 export class GitSyncConflictError extends Error {
 	readonly ref: string;
@@ -28,6 +28,7 @@ export interface GitSyncOptions {
 	readonly git?: GitRunner;
 }
 
+const REJECTED_PATTERN = /rejected|non-fast-forward|fetch first|stale info/iu;
 const MESSAGE_KINDS = new Set(["pi.assistant", "pi.tool-result"]);
 
 /** A model response or tool result was stored: the end of a turn (or of one of its tool calls). */
@@ -123,7 +124,7 @@ export class GitSync {
 
 	/** Push `tip` now (after any push in flight); throws why pushing stopped, if it did. */
 	async flush(tip: string | undefined): Promise<void> {
-		if (this.running) {
+		if (this.running !== undefined) {
 			await this.running.catch(() => undefined);
 		}
 		if (this.failure) {
@@ -138,17 +139,15 @@ export class GitSync {
 		while (this.wanted !== undefined && this.wanted !== this.remoteTip) {
 			const tip = this.wanted;
 			try {
+				// biome-ignore lint/performance/noAwaitInLoops: pushes go one at a time, newest tip next
 				await this.git(
 					["push", "--quiet", "--no-verify", this.remote, `${tip}:${this.ref}`],
 					this.repo,
 				);
 			} catch (error) {
-				const detail = String(
-					(error as { stderr?: string }).stderr || error,
-				).trim();
-				this.failure = /rejected|non-fast-forward|fetch first|stale info/i.test(
-					detail,
-				)
+				const { stderr } = error as { stderr?: string };
+				const detail = (stderr ? stderr : String(error)).trim();
+				this.failure = REJECTED_PATTERN.test(detail)
 					? new GitSyncConflictError(this.ref, detail)
 					: new Error(`Push of ${this.ref} failed: ${detail}`);
 				throw this.failure;

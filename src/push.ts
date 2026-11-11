@@ -1,24 +1,38 @@
 // The action's `if: always()` step: push the thread ref if the main step left commits unpushed (cancelled,
 // timed out, or crashed). Pushes are fast-forward only, so this never overwrites another run's history.
-import * as core from "@actions/core";
-import * as github from "@actions/github";
+import { info, warning } from "@actions/core";
+import { context } from "@actions/github";
 import { GitSync, runGit } from "./storage/sync.js";
 import { threadRef } from "./thread.js";
 import { getErrorMessage } from "./utils.js";
 
+const ISSUE_KEY = "issue";
+const PULL_REQUEST_KEY = "pull_request";
+const PR_NUMBER_ENV = "INPUT_PR_NUMBER";
+
+interface PushLogger {
+	info: (msg: string) => void;
+	warning: (msg: string) => void;
+}
+
+function threadNumber(payload: Record<string, unknown>): number | undefined {
+	const subject = (payload[ISSUE_KEY] ?? payload[PULL_REQUEST_KEY]) as
+		| { number?: unknown }
+		| undefined;
+	return typeof subject?.number === "number" ? subject.number : undefined;
+}
+
 export async function pushThread(
 	payload: Record<string, unknown>,
 	cwd: string,
-	log: { info: (m: string) => void; warning: (m: string) => void },
-	remote?: string,
+	log: PushLogger,
+	prNumber?: number,
 ): Promise<"pushed" | "nothing" | "failed"> {
-	const issue = (payload.issue ?? payload.pull_request) as
-		| { number?: number }
-		| undefined;
-	if (typeof issue?.number !== "number") {
+	const number = threadNumber(payload) ?? prNumber;
+	if (number === undefined) {
 		return "nothing";
 	}
-	const ref = threadRef(issue.number);
+	const ref = threadRef(number);
 	let tip: string;
 	try {
 		tip = (
@@ -29,7 +43,7 @@ export async function pushThread(
 		return "nothing";
 	}
 	try {
-		await new GitSync({ repo: cwd, ref, remote, log: log.info }).flush(tip);
+		await new GitSync({ repo: cwd, ref, log: log.info }).flush(tip);
 		log.info(`${ref} is saved at ${tip.slice(0, 7)}`);
 		return "pushed";
 	} catch (error) {
@@ -38,11 +52,12 @@ export async function pushThread(
 	}
 }
 
-if (
-	process.env.GITHUB_ACTIONS === "true" &&
-	process.argv[1]?.endsWith("push.js")
-) {
-	pushThread(github.context.payload, process.cwd(), core).catch((error) =>
-		core.warning(getErrorMessage(error)),
-	);
+const dispatchedPr = Number.parseInt(process.env[PR_NUMBER_ENV] ?? "", 10);
+if (process.argv[1]?.endsWith("push.ts")) {
+	pushThread(
+		context.payload,
+		process.cwd(),
+		{ info, warning },
+		Number.isNaN(dispatchedPr) ? undefined : dispatchedPr,
+	).catch((error: unknown) => warning(getErrorMessage(error)));
 }

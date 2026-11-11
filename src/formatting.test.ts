@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { formatErrorComment, formatSuccessComment } from "./formatting.js";
-
-const FOOTER_42 =
-	"\n\n---\n<sub>🧵 Thread state: `refs/pi/threads/42` (`git fetch origin refs/pi/threads/42`)</sub>";
+import {
+	formatErrorComment,
+	formatReviewComments,
+	formatSuccessComment,
+} from "./formatting.js";
 
 describe("formatSuccessComment", () => {
 	it("formats response with pi emoji header", () => {
@@ -10,19 +11,25 @@ describe("formatSuccessComment", () => {
 		expect(result).toBe("### 🤖 pi Response\n\nHere is the answer");
 	});
 
-	it("adds a footer with the thread ref", () => {
+	it("formats response with session link", () => {
 		const result = formatSuccessComment("Here is the answer", {
-			ref: "refs/pi/threads/42",
+			shareUrl: "https://github.com/cv/pi-action/actions/runs/1",
 		});
-		expect(result).toBe(`### 🤖 pi Response\n\nHere is the answer${FOOTER_42}`);
+		expect(result).toBe(
+			"### 🤖 pi Response\n\nHere is the answer\n\n---\n📎 [Download session artifact](https://github.com/cv/pi-action/actions/runs/1)",
+		);
 	});
 
-	it("lists who it answers when there are several", () => {
-		expect(formatSuccessComment("ok", { replyTo: ["alice", "bob"] })).toBe(
-			"### 🤖 pi Response\n\nok\n\n---\n<sub>↩️ Answers @alice, @bob</sub>",
+	it("adds the thread ref under the session link", () => {
+		const result = formatSuccessComment("ok", {
+			shareUrl: "https://github.com/o/r/actions/runs/1",
+			ref: "refs/pi/threads/42",
+		});
+		expect(result).toBe(
+			"### 🤖 pi Response\n\nok\n\n---\n📎 [Download session artifact](https://github.com/o/r/actions/runs/1)\n🧵 Thread state: `refs/pi/threads/42` (`git fetch origin refs/pi/threads/42`)",
 		);
-		expect(formatSuccessComment("ok", { replyTo: ["alice"] })).toBe(
-			"### 🤖 pi Response\n\nok",
+		expect(formatErrorComment("no", { ref: "refs/pi/threads/7" })).toBe(
+			"### ❌ pi Error\n\nFailed to process request: no\n\n---\n🧵 Thread state: `refs/pi/threads/7` (`git fetch origin refs/pi/threads/7`)",
 		);
 	});
 
@@ -37,6 +44,30 @@ describe("formatSuccessComment", () => {
 	});
 });
 
+describe("formatReviewComments", () => {
+	it("returns empty string when there are no comments", () => {
+		expect(formatReviewComments([])).toBe("");
+	});
+
+	it("formats PR review comments for prompt context", () => {
+		const result = formatReviewComments([
+			{
+				id: 1,
+				body: "Please simplify this",
+				user: { login: "reviewer", type: "User" },
+				path: "src/file.ts",
+				line: 12,
+				created_at: "2026-04-29T00:00:00Z",
+			},
+		]);
+
+		expect(result).toContain("## Existing PR Review Comments");
+		expect(result).toContain("Do not re-fetch them");
+		expect(result).toContain("**reviewer** on 2026-04-29 (src/file.ts:12):");
+		expect(result).toContain("Please simplify this");
+	});
+});
+
 describe("formatErrorComment", () => {
 	it("formats error with error emoji header", () => {
 		const result = formatErrorComment("Something went wrong");
@@ -45,12 +76,12 @@ describe("formatErrorComment", () => {
 		);
 	});
 
-	it("adds a footer with the thread ref", () => {
+	it("formats error with session link", () => {
 		const result = formatErrorComment("Something went wrong", {
-			ref: "refs/pi/threads/42",
+			shareUrl: "https://github.com/cv/pi-action/actions/runs/1",
 		});
 		expect(result).toBe(
-			`### ❌ pi Error\n\nFailed to process request: Something went wrong${FOOTER_42}`,
+			"### ❌ pi Error\n\nFailed to process request: Something went wrong\n\n---\n📎 [Download session artifact](https://github.com/cv/pi-action/actions/runs/1)",
 		);
 	});
 

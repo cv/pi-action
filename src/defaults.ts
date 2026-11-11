@@ -5,11 +5,17 @@
 
 export const DEFAULTS = {
 	triggerPhrase: "@pi",
+	allowedAssociations: ["OWNER", "MEMBER"],
 	timeout: 1800,
+	pollInterval: 15,
+	shareSession: true,
 	provider: "anthropic",
 	model: "claude-sonnet-5-5",
-	pollInterval: 15,
+	customProviderApi: "openai-completions",
+	customProviderAuthHeader: false,
+	customModelReasoning: false,
+	customModelInput: "text",
+	customModelContextWindow: 128_000,
+	customModelMaxTokens: 16_384,
+	outputMode: "comment",
 } as const;
-
-/** pi-durable's engines field. */
-export const MIN_NODE_VERSION = "22.19.0";

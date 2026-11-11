@@ -6,29 +6,25 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { vi } from "vitest";
-import type { PIContext } from "./context.js";
 import { DEFAULTS } from "./defaults.js";
 import type { GitHubClient } from "./github.js";
-import type {
-	GitHubComment,
-	ModelConfig,
-	RepoRef,
-	TriggerInfo,
-} from "./types.js";
+import type { ActionInputs } from "./run.js";
+import type { GitHubComment, ModelConfig, TriggerInfo } from "./types.js";
+
+const since = (list: GitHubComment[], iso?: string) =>
+	iso
+		? list.filter((c) => Date.parse(c.created_at) >= Date.parse(iso))
+		: [...list];
 
 /**
- * Creates a mock GitHub client with all required methods. `comments` backs listIssueComments, and posted
- * comments are recorded in `posted`.
+ * Creates a mock GitHub client with all required methods. `comments` and `reviewComments` back the list
+ * methods (live arrays: tests may push to them), and posted comment bodies are recorded in `posted`.
  */
 export function createMockGitHubClient(
 	comments: GitHubComment[] = [],
 	reviewComments: GitHubComment[] = [],
 ): GitHubClient & { posted: string[] } {
 	const posted: string[] = [];
-	const since = (list: GitHubComment[], iso?: string) =>
-		iso
-			? list.filter((c) => Date.parse(c.created_at) >= Date.parse(iso))
-			: [...list];
 	return {
 		posted,
 		addReactionToComment: vi.fn(),
@@ -40,12 +36,20 @@ export function createMockGitHubClient(
 				url: `https://github.com/o/r/issues/1#c${posted.length}`,
 			});
 		}),
+		getPullRequest: vi.fn().mockResolvedValue({
+			number: 1,
+			title: "Test PR",
+			body: "PR body",
+			user: { login: "user", type: "User" },
+			author_association: "OWNER",
+		}),
 		getPullRequestDiff: vi.fn().mockResolvedValue(""),
-		listIssueComments: vi.fn(async (_issue: number, iso?: string) =>
-			since(comments, iso),
+		getPullRequestReviewComments: vi.fn().mockResolvedValue([]),
+		listIssueComments: vi.fn((_issue: number, iso?: string) =>
+			Promise.resolve(since(comments, iso)),
 		),
-		listReviewComments: vi.fn(async (_pr: number, iso?: string) =>
-			since(reviewComments, iso),
+		listReviewComments: vi.fn((_pr: number, iso?: string) =>
+			Promise.resolve(since(reviewComments, iso)),
 		),
 	};
 }
@@ -78,23 +82,7 @@ export function createTriggerInfo(
 		issueNumber: 1,
 		issueTitle: "Test",
 		issueBody: "Body",
-		commentId: undefined,
 		isPullRequest: false,
-		...overrides,
-	};
-}
-
-/**
- * Creates a PIContext object with sensible defaults and optional overrides
- */
-export function createPIContext(overrides: Partial<PIContext> = {}): PIContext {
-	return {
-		type: "issue",
-		title: "Test Issue",
-		body: "Issue body",
-		number: 1,
-		triggerComment: "@pi do something",
-		task: "do something",
 		...overrides,
 	};
 }
@@ -102,9 +90,7 @@ export function createPIContext(overrides: Partial<PIContext> = {}): PIContext {
 /**
  * Creates a ModelConfig object with sensible defaults and optional overrides
  */
-export function createModelConfig(
-	overrides: Partial<ModelConfig> = {},
-): ModelConfig {
+function createModelConfig(overrides: Partial<ModelConfig> = {}): ModelConfig {
 	return {
 		provider: DEFAULTS.provider,
 		model: DEFAULTS.model,
@@ -114,12 +100,26 @@ export function createModelConfig(
 }
 
 /**
- * Creates a RepoRef object with sensible defaults and optional overrides
+ * Creates ActionInputs with sensible defaults and optional overrides.
  */
-export function createRepoRef(overrides: Partial<RepoRef> = {}): RepoRef {
+export function createActionInputs(
+	overrides: Partial<ActionInputs> = {},
+): ActionInputs {
 	return {
-		owner: "testowner",
-		name: "testrepo",
+		triggerPhrase: DEFAULTS.triggerPhrase,
+		allowedBots: [],
+		allowedUsers: [],
+		allowedAssociations: [...DEFAULTS.allowedAssociations],
+		modelConfig: createModelConfig(),
+		githubToken: "test-token",
+		apiKey: undefined,
+		customProvider: undefined,
+		promptTemplate: undefined,
+		shareSession: DEFAULTS.shareSession,
+		outputMode: DEFAULTS.outputMode,
+		prompt: undefined,
+		prNumber: undefined,
+		pollInterval: DEFAULTS.pollInterval,
 		...overrides,
 	};
 }
