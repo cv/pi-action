@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+
 import {
 	type FauxResponseStep,
 	fauxAssistantMessage,
@@ -109,6 +111,42 @@ describe("run (durable)", () => {
 		expect(w.reacted("rocket")).toStrictEqual([trigger.id]);
 		const log = git(w.remote, "log", "--format=%s", REF);
 		expect(log).toMatch(FIRST_COMMIT);
+	});
+
+	it("answers with a provider from a pi extension (the extensions input)", async () => {
+		const w = world();
+		const trigger = w.comment("@pi say something");
+		const deps = w.deps(trigger, {
+			provider: "echo",
+			model: "echo-1",
+			extensions: [resolve("test/fixtures/extensions/echo-provider")],
+		});
+
+		await run({
+			...deps,
+			createModels: undefined, // the action's own model setup, extensions included
+			env: { ...deps.env, ECHO_API_KEY: "echo-secret" },
+		});
+
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain(
+			"echo from echo/echo-1 with key echo-secret",
+		);
+		expect(deps.log.warning).toHaveBeenCalledWith(
+			expect.stringContaining("pi.registerTool() is not supported"),
+		);
+	});
+
+	it("reports an extension that fails to load on the issue", async () => {
+		const w = world();
+		const trigger = w.comment("@pi hello");
+		const deps = w.deps(trigger, { extensions: ["./does-not-exist"] });
+
+		await run({ ...deps, createModels: undefined });
+
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain("Extension ");
+		expect(w.gh.posted[0]).toContain("does-not-exist not found");
 	});
 
 	it("continues the same conversation in a later run on a fresh runner", async () => {

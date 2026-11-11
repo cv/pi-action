@@ -2,6 +2,7 @@ import type { Models } from "@earendil-works/pi-ai/models";
 
 import { buildPrompt, formatFollowUp, type PIContext } from "./context.ts";
 import { ThreadConversation, type ThreadResult } from "./conversation.ts";
+import { loadExtensions } from "./extensions.ts";
 import { formatErrorComment, formatSuccessComment } from "./formatting.ts";
 import type { GitHubClient, ReactionTarget } from "./github.ts";
 import type { ActionInputs } from "./inputs.ts";
@@ -29,10 +30,23 @@ export interface ActionDependencies {
 	log: Logger;
 	cwd: string;
 	/** Override model setup (tests use a faux provider). */
-	createModels?: (inputs: ActionInputs) => Promise<Models>;
+	createModels?: ((inputs: ActionInputs) => Promise<Models>) | undefined;
 	/** Git remote holding the thread refs. Default "origin". */
 	remote?: string;
 	env?: Env;
+}
+
+/** The action's model setup: the built-in and custom providers, and those the `extensions` input registers. */
+async function defaultModels(deps: ActionDependencies): Promise<Models> {
+	const { inputs, log, cwd } = deps;
+	const env = deps.env ?? process.env;
+	const providers = await loadExtensions({
+		specs: inputs.extensions,
+		cwd,
+		log,
+		env,
+	});
+	return createActionModels(inputs, { providers, env, log });
 }
 
 /** On cancellation (SIGINT, then SIGTERM), push what the thread has so far before the runner kills us. */
@@ -160,7 +174,9 @@ export async function run(deps: ActionDependencies): Promise<void> {
 	let thread: Thread | undefined;
 	let stopSignals: (() => void) | undefined;
 	try {
-		const models = await (deps.createModels ?? createActionModels)(inputs);
+		const models = deps.createModels
+			? await deps.createModels(inputs)
+			: await defaultModels(deps);
 		const opened = await Thread.open({
 			cwd: deps.cwd,
 			issueNumber,

@@ -38,7 +38,8 @@
 		"@actions/github": "^9.1.1",
 		"@earendil-works/chord": "1.5.2",
 		"@earendil-works/pi-ai": "1.5.2",
-		"@earendil-works/pi-durable": "1.5.2"
+		"@earendil-works/pi-durable": "1.5.2",
+		"jiti": "^2.6.1"
 	},
 	"devDependencies": {
 		"@commitlint/cli": "^21.2.2",

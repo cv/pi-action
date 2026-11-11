@@ -13,6 +13,7 @@ A GitHub Action that runs a durable [pi](https://github.com/earendil-works/pi) c
 - 📝 Works on both issues and pull requests
 - 🆕 Trigger on issue/PR creation, not just comments
 - 🔀 Automatically includes PR diffs for code review tasks
+- 🧩 Loads model providers from [pi extensions](https://github.com/earendil-works/pi) on npm or in your repository
 - 📦 Built on [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) - no separate installation needed
 - 🪝 Auto-installs git hooks to enforce commit conventions for the agent
 
@@ -106,6 +107,7 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 | `compat_supports_developer_role` | Whether OpenAI-compatible custom provider supports developer role messages | No | - |
 | `compat_supports_reasoning_effort` | Whether OpenAI-compatible custom provider supports `reasoning_effort` | No | - |
 | `compat_force_adaptive_thinking` | Use adaptive thinking for an Anthropic-compatible custom model (`provider_api: anthropic-messages`); required by Claude Opus 4.6+ and Sonnet 4.6+ | No | - |
+| `extensions` | pi extensions whose model providers `provider`/`model` can select: npm package specs or workspace paths, one per line or comma-separated (see [Providers from pi extensions](#providers-from-pi-extensions)) | No | - |
 | `prompt_template` | Custom prompt template with placeholder variables | No | (built-in default) |
 | `output_mode` | `comment` to post on the issue/PR, or `output` to set action outputs only | No | `comment` |
 | `prompt` | Direct prompt for the agent (use with `output_mode: output`, or with `pr_number`) | No | - |
@@ -204,6 +206,32 @@ Example: local Ollama/LM Studio/vLLM-style endpoint on a self-hosted runner:
 `provider_api_key` can be a literal key or the name of an environment variable. If you use the action-level `api_key` input, `provider_api_key` is not required. For local servers that ignore authentication, set `provider_api_key` to any dummy value.
 
 **Note:** `localhost` or LAN URLs are resolved from the GitHub runner. Use a self-hosted runner or a reachable internal endpoint for local models.
+
+#### Providers from pi extensions
+
+A provider that ships as a [pi extension](https://github.com/earendil-works/pi) (an extension that calls `pi.registerProvider()`) can be loaded with `extensions`, then selected with `provider` and `model`:
+
+```yaml
+- uses: cv/pi-action@v2
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    extensions: |
+      @acme/pi-provider@1.4.2
+      ./.pi/extensions/gateway.ts
+    provider: acme
+    model: acme-large
+  env:
+    ACME_API_KEY: ${{ secrets.ACME_API_KEY }}
+```
+
+- **Sources**: an npm package spec (`name`, `name@1.2.3`, `@scope/name@^1`, `npm:name`, `github:owner/repo#ref`), or a path starting with `./`, `../` or `/`, relative to the workspace. pi's `git:` sources aren't supported; use npm's `github:` form.
+- **Installation**: npm packages are installed with `npm install --ignore-scripts --legacy-peer-deps --omit=dev` into a fresh directory under `RUNNER_TEMP`, never into your repository. Lifecycle scripts don't run, so packages that need a build step or native modules won't work. pi's own packages (the `peerDependencies` of a pi package) aren't installed: imports of `@earendil-works/pi-ai` (and its subpaths) get the action's copy, as they get pi's in pi. Paths load in place, with no install.
+- **Entry points**: found as pi finds them: the package's `pi.extensions` manifest, else its `extensions/` directory, else `index.ts`/`index.js`. TypeScript runs without a build step (with [jiti](https://github.com/unjs/jiti), as in pi).
+- **What is used**: providers only. Both forms of `pi.registerProvider()` work: a complete pi-ai `Provider`, or a name and config (`baseUrl`, `api`, `apiKey`, `headers`, `authHeader`, `models`, `streamSimple`, `refreshModels`). Registering a built-in name with only `baseUrl`/`headers` points that provider at a gateway and keeps its models.
+- **Keys**: `apiKey` is read as in pi (`$ENV_VAR`, `${ENV_VAR}`, `!command`, or a literal); the `api_key` input, when set, takes precedence.
+- **Not supported**: tools, commands, event handlers, UI, flags, and everything else an extension can do in pi's coding agent are ignored, with a warning in the log; the agent keeps pi-action's read, write, edit and bash tools. OAuth logins (`oauth`) can't run on a runner, so use an API key. Image and classifier models are skipped. An extension that fails to load fails the run.
+
+**Security**: an extension is code that runs inside the action, with the job's permissions and environment: it can read the `github_token`, `api_key` and every secret in the step's `env`, and act on your repository. Load only extensions you trust, pin npm versions (`name@1.2.3`), and prefer reviewing a pinned copy committed to the repository (a path). npm itself runs without the action's `INPUT_*` variables.
 
 #### Output mode and direct prompts
 
@@ -361,6 +389,8 @@ The action only responds to authorized users (see [`src/security.ts`](src/securi
 - Bots explicitly added to `allowed_bots`
 
 Collaborators are not allowed by default. Add `COLLABORATOR` to `allowed_associations` if you want outside collaborators to trigger pi.
+
+pi extensions loaded with `extensions` run with the job's permissions; see [Providers from pi extensions](#providers-from-pi-extensions).
 
 Input is sanitized to remove:
 - HTML comments (potential injection vectors)

@@ -1,0 +1,20 @@
+{
+	"name": "pi-action-echo-provider",
+	"version": "1.0.0",
+	"description": "Test fixture: a pi extension that registers an echo provider",
+	"keywords": [
+		"pi-package"
+	],
+	"type": "module",
+	"scripts": {
+		"postinstall": "node -e \"require('node:fs').writeFileSync('postinstall-ran', '')\""
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-ai": "*"
+	},
+	"pi": {
+		"extensions": [
+			"./index.ts"
+		]
+	}
+}
