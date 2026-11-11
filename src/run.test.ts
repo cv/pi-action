@@ -1,5 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdtempSync,
+	readdirSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -173,6 +179,39 @@ describe("run (durable)", () => {
 		);
 		// Without pi-durable extensions, the action's own environment is left alone.
 		expect(deps.env).not.toHaveProperty("GH_TOKEN");
+	});
+
+	it("leaves the checkout's git hooks alone, so pi commits in the repository's own format", async () => {
+		const w = world();
+		const message = "release: v0.35.1";
+		w.faux.setResponses([
+			fauxAssistantMessage(
+				[
+					fauxToolCall("bash", {
+						command: `git commit -q --allow-empty -m "${message}" && git log -1 --format=%B`,
+					}),
+				],
+				{ stopReason: "toolUse" },
+			),
+			(context) =>
+				fauxAssistantMessage(`Committed: ${toolText(context.messages)}`),
+		]);
+		const deps = w.deps(w.comment("@pi cut the release"));
+		// A repository whose hooks live in the working tree (husky, lefthook, a committed .githooks/).
+		git(deps.cwd, "config", "core.hooksPath", ".githooks");
+		const hooksDirectory = join(deps.cwd, ".git", "hooks");
+		const hooksBefore = readdirSync(hooksDirectory).toSorted();
+
+		await run(deps);
+
+		expect(readdirSync(hooksDirectory).toSorted()).toStrictEqual(hooksBefore);
+		expect(
+			hooksBefore.filter((name) => !name.endsWith(".sample")),
+		).toStrictEqual([]);
+		expect(existsSync(join(deps.cwd, ".githooks"))).toBe(false);
+		expect(git(deps.cwd, "status", "--porcelain")).toBe("");
+		expect(git(deps.cwd, "log", "-1", "--format=%B").trim()).toBe(message);
+		expect(w.gh.posted[0]).toContain(`Committed: ${message}`);
 	});
 
 	it("answers a trigger, posts once, and pushes the thread to the remote", async () => {

@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
@@ -17,5 +18,31 @@ describe("entrypoints", () => {
 			{ encoding: "utf8" },
 		);
 		expect(output.trim()).toBe("ok");
+	});
+});
+
+// The target repository owns its commit conventions: no step may write to its .git/hooks or core.hooksPath.
+describe("action.yml", () => {
+	const action = readFileSync("action.yml", "utf8");
+	const steps = action
+		.split("\n")
+		.filter((line) => line.trimStart().startsWith("run:"));
+	const scripts = steps.flatMap((line) =>
+		[...line.matchAll(/\$\{\{ github\.action_path \}\}\/(\S+)/gu)].flatMap(
+			(match) => (match[1] ? [match[1]] : []),
+		),
+	);
+
+	it("runs only scripts that exist", () => {
+		expect(scripts).toStrictEqual(["src/index.ts", "src/push.ts"]);
+		for (const script of scripts) {
+			expect(existsSync(script)).toBe(true);
+		}
+	});
+
+	it("installs no git hooks in the target repository", () => {
+		const runs = action.slice(action.indexOf("\nruns:"));
+		expect(runs).toContain("steps:");
+		expect(runs).not.toMatch(/hook|core\.hooksPath|--git-path/iu);
 	});
 });

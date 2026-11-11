@@ -139,10 +139,6 @@ runs:
       shell: bash
       run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund --prefix ${{ github.action_path }}
     
-    - name: Install pi-agent git hooks
-      shell: bash
-      run: node ${{ github.action_path }}/scripts/install-agent-hooks.js
-    
     - name: Run pi-action
       id: run-pi-action
       shell: bash
