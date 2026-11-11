@@ -260,6 +260,10 @@ describe("pushThread (the always() step)", () => {
 			pushThread({ issue: { number: 7 } }, deps.cwd, log),
 		).resolves.toBe("nothing");
 		await expect(pushThread({}, deps.cwd, log)).resolves.toBe("nothing");
+		// pr_number names the thread, as in the main step, even when the event has an issue.
+		await expect(
+			pushThread({ issue: { number: 7 } }, deps.cwd, log, 42),
+		).resolves.toBe("up-to-date");
 
 		// Another run moved the remote on: never overwrite it.
 		git(

@@ -3,6 +3,7 @@
 import { info, warning } from "@actions/core";
 import { context } from "@actions/github";
 
+import { parsePositiveInteger } from "./inputs.ts";
 import { git } from "./storage/git.ts";
 import { GitSync } from "./storage/sync.ts";
 import { threadRef } from "./thread.ts";
@@ -28,7 +29,8 @@ export async function pushThread(
 	log: Log,
 	prNumber?: number,
 ): Promise<"pushed" | "up-to-date" | "nothing" | "failed"> {
-	const number = threadNumber(payload) ?? prNumber;
+	// The main step works on pr_number's thread when it is set, whatever the event.
+	const number = prNumber ?? threadNumber(payload);
 	if (number === undefined) {
 		return "nothing";
 	}
@@ -55,13 +57,12 @@ export async function pushThread(
 	}
 }
 
-const dispatchedPr = Number.parseInt(process.env[PR_NUMBER_ENV] ?? "", 10);
 if (process.argv[1]?.endsWith("push.ts") === true) {
 	pushThread(
 		context.payload,
 		process.cwd(),
 		{ info, warning },
-		Number.isNaN(dispatchedPr) ? undefined : dispatchedPr,
+		parsePositiveInteger(process.env[PR_NUMBER_ENV] ?? ""),
 	).catch((error: unknown) => {
 		warning(getErrorMessage(error));
 	});
