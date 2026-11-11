@@ -157,9 +157,10 @@ Permission and input validation:
 The [`action.yml`](action.yml) file defines:
 - Input parameters
 - A composite action that:
-  1. Installs npm dependencies
-  2. Installs standalone git hooks for conventional commits (see [`scripts/install-agent-hooks.js`](scripts/install-agent-hooks.js))
-  3. Runs the TypeScript entrypoint via `tsx`
+  1. Sets up Node.js 24 if the job's Node is older
+  2. Installs the runtime npm dependencies (`--omit=dev`)
+  3. Installs standalone git hooks for conventional commits (see [`scripts/install-agent-hooks.js`](scripts/install-agent-hooks.js))
+  4. Runs `src/index.ts` with Node's built-in TypeScript support, then `src/push.ts` in an `if: always()` step
 
 ### Testing
 
@@ -192,7 +193,7 @@ Thresholds and production coverage includes are configured in [`vitest.config.ts
 npm run build
 ```
 
-This verifies the TypeScript production entrypoint without emitting JavaScript. The action runs TypeScript directly with `tsx`, so generated `dist/` artifacts are not committed.
+This verifies the TypeScript production entrypoint without emitting JavaScript. Node runs the TypeScript directly (type stripping), so there is no build output and no `dist/`. That's why imports use `.ts` extensions and the code sticks to erasable syntax (no enums, namespaces, or parameter properties); `erasableSyntaxOnly` in `tsconfig.json` enforces it.
 
 ## CI/CD
 

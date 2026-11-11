@@ -51,11 +51,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-
       - name: Run pi-action
         uses: cv/pi-action@v2
         with:

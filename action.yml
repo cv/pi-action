@@ -105,9 +105,27 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # pi-action runs its TypeScript directly, which needs Node.js 24. Reuse the job's Node when it is new enough;
+    # otherwise set it up (from the runner's tool cache, so this is quick).
+    - name: Check Node.js version
+      id: node
+      shell: bash
+      run: |
+        if node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 24 ? 0 : 1)' 2>/dev/null; then
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "ok=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Set up Node.js
+      if: steps.node.outputs.ok != 'true'
+      uses: actions/setup-node@v6
+      with:
+        node-version: '24'
+
     - name: Install action dependencies
       shell: bash
-      run: npm ci --ignore-scripts --no-audit --no-fund --prefix ${{ github.action_path }}
+      run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund --prefix ${{ github.action_path }}
     
     - name: Install pi-agent git hooks
       shell: bash
@@ -116,7 +134,7 @@ runs:
     - name: Run pi-action
       id: run-pi-action
       shell: bash
-      run: npx --prefix ${{ github.action_path }} tsx ${{ github.action_path }}/src/index.ts
+      run: node --disable-warning=ExperimentalWarning ${{ github.action_path }}/src/index.ts
       env:
         INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
         INPUT_API_KEY: ${{ inputs.api_key }}
@@ -150,6 +168,6 @@ runs:
     - name: Save pi thread state
       if: always()
       shell: bash
-      run: npx --prefix ${{ github.action_path }} tsx ${{ github.action_path }}/src/push.ts
+      run: node --disable-warning=ExperimentalWarning ${{ github.action_path }}/src/push.ts
       env:
         INPUT_PR_NUMBER: ${{ inputs.pr_number }}

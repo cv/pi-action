@@ -8,5 +8,5 @@
 		"scripts/**/*.test.js"
 	],
 	"project": ["src/**/*.ts", "*.config.{js,ts}"],
-	"ignoreDependencies": ["@commitlint/cli", "tsx"]
+	"ignoreDependencies": ["@commitlint/cli"]
 }
