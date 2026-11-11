@@ -1,17 +1,27 @@
-// Vendored from github.com/cv/git-backed-pi-durable (1b9ba48).
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai/providers/faux";
-import { AssistantEntry, createRegistry, Harness } from "@earendil-works/pi-durable";
+import {
+	fauxAssistantMessage,
+	fauxProvider,
+} from "@earendil-works/pi-ai/providers/faux";
+import {
+	AssistantEntry,
+	type ConversationRecord,
+	Harness,
+	createRegistry,
+} from "@earendil-works/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
-import { GitRepo, GitStorage, RefConflictError } from "./index.js";
-import { tempRepo } from "./test-repo.js";
+import { tempRepo } from "../test-helpers.js";
+import { GitStorage } from "./git-storage.js";
+import { GitRepo, RefConflictError } from "./git.js";
 
 const context = BACKGROUND_CONTEXT;
 const REF = "refs/pi/threads/42";
-let cleanups: (() => void)[] = [];
+const cleanups: (() => void)[] = [];
 afterEach(() => {
-	for (const c of cleanups.splice(0)) c();
+	for (const c of cleanups.splice(0)) {
+		c();
+	}
 });
 
 function setup() {
@@ -24,23 +34,50 @@ function setup() {
 	const agent = { model: { provider: model.provider, modelId: model.id } };
 	const open = async (storage?: GitStorage) => {
 		const s = storage ?? (await GitStorage.open({ repo: repo.dir, ref: REF }));
-		const harness = await Harness.open(s, { models, registry: createRegistry() }, context);
-		return { storage: s, harness, root: await harness.root(context, { agent }) };
+		const harness = await Harness.open(
+			s,
+			{ models, registry: createRegistry() },
+			context,
+		);
+		return {
+			storage: s,
+			harness,
+			root: await harness.root(context, { agent }),
+		};
 	};
 	return { repo, faux, open };
 }
 
-async function ask(root: Awaited<ReturnType<ReturnType<typeof setup>["open"]>>["root"], content: string) {
-	const settled = await (await root.submit({ type: "input", content }, context)).wait(context);
-	if (settled.status !== "done" || settled.type !== "input") throw new Error(`unanswered: ${JSON.stringify(settled)}`);
-	const entry = await root.commit((tx) => tx.entry(AssistantEntry, settled.answer), context);
-	return (entry?.model?.[0] as any).content.map((c: any) => c.text).join("");
+async function ask(
+	root: Awaited<ReturnType<ReturnType<typeof setup>["open"]>>["root"],
+	content: string,
+) {
+	const settled = await (
+		await root.submit({ type: "input", content }, context)
+	).wait(context);
+	if (settled.status !== "done" || settled.type !== "input") {
+		throw new Error(`unanswered: ${JSON.stringify(settled)}`);
+	}
+	const entry = await root.commit(
+		(tx) => tx.entry(AssistantEntry, settled.answer),
+		context,
+	);
+	const message = entry?.model?.[0];
+	if (message?.role !== "assistant") {
+		throw new Error("no answer");
+	}
+	return message.content
+		.flatMap((block) => (block.type === "text" ? [block.text] : []))
+		.join("");
 }
 
 describe("GitStorage with a Harness", () => {
 	it("persists a conversation as a commit chain and resumes it after reopening", async () => {
 		const { repo, faux, open } = setup();
-		faux.setResponses([fauxAssistantMessage("Paris"), fauxAssistantMessage("Lyon")]);
+		faux.setResponses([
+			fauxAssistantMessage("Paris"),
+			fauxAssistantMessage("Lyon"),
+		]);
 
 		const first = await open();
 		expect(await ask(first.root, "Capital of France?")).toBe("Paris");
@@ -55,17 +92,27 @@ describe("GitStorage with a Harness", () => {
 
 		const second = await open();
 		expect(await ask(second.root, "Second city?")).toBe("Lyon");
-		const { items } = await second.root.entries({ order: "ascending" } as any, 100, undefined, context);
-		const users = items.filter((e: any) => e.kind === "pi.user").map((e: any) => e.model[0].content);
+		const { items } = await second.root.entries(
+			{ order: "ascending" },
+			100,
+			undefined,
+			context,
+		);
+		const users = items
+			.filter((e) => e.kind === "pi.user")
+			.map((e) => e.model?.[0]?.content);
 		expect(users).toEqual(["Capital of France?", "Second city?"]);
 		await second.harness.close(context);
 		// The second session extended the same chain.
-		expect(repo.git("merge-base", "--is-ancestor", tip!, REF)).toBe("");
+		expect(repo.git("merge-base", "--is-ancestor", tip ?? "", REF)).toBe("");
 	});
 
 	it("reopens after git gc packs objects and refs", async () => {
 		const { repo, faux, open } = setup();
-		faux.setResponses([fauxAssistantMessage("one"), fauxAssistantMessage("two")]);
+		faux.setResponses([
+			fauxAssistantMessage("one"),
+			fauxAssistantMessage("two"),
+		]);
 		const first = await open();
 		await ask(first.root, "1");
 		await first.harness.close(context);
@@ -90,12 +137,40 @@ describe("GitStorage with a Harness", () => {
 		const stale = await GitStorage.open({ repo: repo.dir, ref: REF });
 		const other = await GitStorage.open({ repo: repo.dir, ref: REF });
 		const id = await other.mintId();
-		await other.commit([[{ type: "conversation", value: { id, ownership: { kind: "ownerless" } } as any }]], () => {}, context);
+		await other.commit(
+			[
+				[
+					{
+						type: "conversation",
+						value: {
+							id,
+							ownership: { kind: "ownerless" },
+						} as unknown as ConversationRecord,
+					},
+				],
+			],
+			() => undefined,
+			context,
+		);
 		await other.close(context);
 
 		const staleId = await stale.mintId();
 		await expect(
-			stale.commit([[{ type: "conversation", value: { id: staleId, ownership: { kind: "ownerless" } } as any }]], () => {}, context),
+			stale.commit(
+				[
+					[
+						{
+							type: "conversation",
+							value: {
+								id: staleId,
+								ownership: { kind: "ownerless" },
+							} as unknown as ConversationRecord,
+						},
+					],
+				],
+				() => undefined,
+				context,
+			),
 		).rejects.toThrow(/poisoned/);
 		await stale.close(context);
 	});
@@ -106,10 +181,22 @@ describe("GitStorage with a Harness", () => {
 		const blob = await git.writeBlob("x");
 		const tree = await git.writeTree({ "x.txt": blob });
 		const author = { name: "t", email: "t@t" };
-		const a = await git.writeCommit({ tree, parents: [], author, message: "a\n" });
-		const b = await git.writeCommit({ tree, parents: [a], author, message: "b\n" });
+		const a = await git.writeCommit({
+			tree,
+			parents: [],
+			author,
+			message: "a\n",
+		});
+		const b = await git.writeCommit({
+			tree,
+			parents: [a],
+			author,
+			message: "b\n",
+		});
 		await git.updateRef("refs/pi/x", a, undefined);
-		await expect(git.updateRef("refs/pi/x", b, undefined)).rejects.toBeInstanceOf(RefConflictError);
+		await expect(
+			git.updateRef("refs/pi/x", b, undefined),
+		).rejects.toBeInstanceOf(RefConflictError);
 		await git.updateRef("refs/pi/x", b, a);
 		expect(repo.git("rev-parse", "refs/pi/x").trim()).toBe(b);
 		expect(repo.git("cat-file", "-p", "refs/pi/x:x.txt")).toBe("x");

@@ -1,6 +1,10 @@
 /**
  * Test helper functions to reduce duplication in test files
  */
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { vi } from "vitest";
 import type { PIContext } from "./context.js";
 import { DEFAULTS } from "./defaults.js";
@@ -117,5 +121,22 @@ export function createRepoRef(overrides: Partial<RepoRef> = {}): RepoRef {
 		owner: "testowner",
 		name: "testrepo",
 		...overrides,
+	};
+}
+
+/** A fresh, empty git repository in a temp directory. */
+export function tempRepo(): {
+	dir: string;
+	git: (...args: string[]) => string;
+	cleanup: () => void;
+} {
+	const dir = mkdtempSync(join(tmpdir(), "git-pi-durable-"));
+	const git = (...args: string[]) =>
+		execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+	git("init", "-q", "-b", "main");
+	return {
+		dir,
+		git,
+		cleanup: () => rmSync(dir, { recursive: true, force: true }),
 	};
 }

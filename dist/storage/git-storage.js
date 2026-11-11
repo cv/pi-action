@@ -1,8 +1,11 @@
-import { MemoryStorage } from "@earendil-works/pi-durable";
+import { MemoryStorage, } from "@earendil-works/pi-durable";
 import { GitRepo } from "./git.js";
 export const FORMAT_VERSION = 1;
 const BATCH_FILE = "batch.json";
-const DEFAULT_AUTHOR = { name: "pi-durable", email: "pi-durable@localhost" };
+const DEFAULT_AUTHOR = {
+    name: "pi-durable",
+    email: "pi-durable@localhost",
+};
 export class GitStorageCorruptionError extends Error {
     constructor(message, cause) {
         super(message, cause === undefined ? undefined : { cause });
@@ -63,14 +66,16 @@ export class GitStorage {
     async recover() {
         const tip = await this.repo.readRef(this.ref);
         this.head = tip;
-        if (tip === undefined)
+        if (tip === undefined) {
             return;
+        }
         // First-parent chain, newest first; reading commits is inherently sequential.
         const chain = [];
         for (let sha = tip; sha !== undefined;) {
             const commit = await this.repo.readCommit(sha);
-            if (commit.parents.length > 1)
+            if (commit.parents.length > 1) {
                 throw new GitStorageCorruptionError(`Merge commit ${sha} in ${this.ref}`);
+            }
             chain.push({ sha, tree: commit.tree });
             sha = commit.parents[0];
         }
@@ -79,8 +84,9 @@ export class GitStorage {
         const batches = await Promise.all(chain.map(async ({ sha, tree }) => {
             const entries = await this.repo.readTree(tree);
             const blob = entries[BATCH_FILE];
-            if (blob === undefined)
+            if (blob === undefined) {
                 throw new GitStorageCorruptionError(`Commit ${sha} has no ${BATCH_FILE}`);
+            }
             const object = await this.repo.readObject(blob);
             let batch;
             try {
@@ -89,7 +95,9 @@ export class GitStorage {
             catch (error) {
                 throw new GitStorageCorruptionError(`Malformed ${BATCH_FILE} in ${sha}`, error);
             }
-            if (batch?.format !== FORMAT_VERSION || !Number.isSafeInteger(batch.seq) || !Array.isArray(batch.writes)) {
+            if (batch?.format !== FORMAT_VERSION ||
+                !Number.isSafeInteger(batch.seq) ||
+                !Array.isArray(batch.writes)) {
                 throw new GitStorageCorruptionError(`Unsupported or invalid batch in ${sha}`);
             }
             return { sha, batch };
@@ -105,11 +113,12 @@ export class GitStorage {
     }
     async commit(batches, receive, context) {
         this.assertUsable();
-        if (this.readOnly)
+        if (this.readOnly) {
             throw new GitStorageReadOnlyError();
+        }
         const previous = this.queue;
-        let release;
-        this.queue = new Promise((resolve) => (release = resolve));
+        const turn = Promise.withResolvers();
+        this.queue = turn.promise;
         await previous;
         const writing = Promise.withResolvers();
         this.writing = writing.promise;
@@ -127,26 +136,35 @@ export class GitStorage {
                     refused = { error };
                     break;
                 }
-                encoded.push({ format: FORMAT_VERSION, seq: prepared.seq, writes: prepared.writes });
+                encoded.push({
+                    format: FORMAT_VERSION,
+                    seq: prepared.seq,
+                    writes: prepared.writes,
+                });
                 seqs.push(prepared.apply());
             }
-            if (encoded.length > 0)
+            if (encoded.length > 0) {
                 await this.persist(encoded, context);
+            }
         }
         catch (error) {
             // Memory ran ahead of the ref: once a batch applied, any failure poisons the storage.
-            if (seqs.length === 0)
+            if (seqs.length === 0) {
                 throw error;
+            }
             throw this.poison(error);
         }
         finally {
             this.writing = undefined;
             writing.resolve();
-            release();
+            turn.resolve();
         }
-        for (const [index, seq] of seqs.entries())
+        for (const [index, seq] of seqs.entries()) {
             receive(index, seq);
-        if (encoded.length > 0 && this.head !== undefined && this.onCommit !== undefined) {
+        }
+        if (encoded.length > 0 &&
+            this.head !== undefined &&
+            this.onCommit !== undefined) {
             try {
                 this.onCommit({ tip: this.head, batches: encoded });
             }
@@ -154,7 +172,9 @@ export class GitStorage {
                 // observers never fail a commit
             }
         }
-        return refused === undefined ? { stored: seqs.length } : { stored: seqs.length, refused: refused.error };
+        return refused === undefined
+            ? { stored: seqs.length }
+            : { stored: seqs.length, refused: refused.error };
     }
     async persist(batches, _context) {
         let parent = this.head;
@@ -168,11 +188,19 @@ export class GitStorage {
                 message: commitMessage(batch),
             });
         }
-        await this.repo.updateRef(this.ref, parent, this.head, this.reflog ? `pi-durable: seq ${batches.at(-1).seq}` : undefined);
+        if (parent === undefined) {
+            return;
+        }
+        await this.repo.updateRef(this.ref, parent, this.head, this.reflog ? `pi-durable: seq ${batches.at(-1)?.seq}` : undefined);
         this.head = parent;
     }
-    async mintId() {
-        return this.store.mintId();
+    mintId() {
+        try {
+            return this.store.mintId();
+        }
+        catch (error) {
+            return Promise.reject(error);
+        }
     }
     async conversation(...args) {
         return (await this.readable()).conversation(...args);
@@ -180,7 +208,12 @@ export class GitStorage {
     async scanConversations(...args) {
         return (await this.readable()).scanConversations(...args);
     }
-    entry = (async (...args) => (await this.readable()).entry(...args));
+    async entry(idOrConversation, idOrContext, context) {
+        const memory = await this.readable();
+        return context === undefined
+            ? memory.entry(idOrConversation, idOrContext)
+            : memory.entry(idOrConversation, idOrContext, context);
+    }
     async findLatestHeadMarker(...args) {
         return (await this.readable()).findLatestHeadMarker(...args);
     }
@@ -212,8 +245,9 @@ export class GitStorage {
         return (await this.readable()).scanDocuments(...args);
     }
     async close(context) {
-        if (this.closed)
+        if (this.closed) {
             return;
+        }
         this.closed = true;
         await this.queue;
         await this.memory.close(context);
@@ -224,8 +258,9 @@ export class GitStorage {
         return this.memory;
     }
     async readable() {
-        while (this.writing !== undefined)
+        while (this.writing !== undefined) {
             await this.writing;
+        }
         return this.store;
     }
     poison(cause) {
@@ -233,10 +268,12 @@ export class GitStorage {
         return this.poisonError;
     }
     assertUsable() {
-        if (this.closed)
+        if (this.closed) {
             throw new Error("GitStorage is closed");
-        if (this.poisonError !== undefined)
+        }
+        if (this.poisonError !== undefined) {
             throw this.poisonError;
+        }
     }
 }
 export function openGitStorage(options) {
@@ -245,8 +282,11 @@ export function openGitStorage(options) {
 /** `pi-durable: seq 12 (entry, task×2)` plus trailers, so `git log` reads well. */
 function commitMessage(batch) {
     const counts = new Map();
-    for (const write of batch.writes)
+    for (const write of batch.writes) {
         counts.set(write.type, (counts.get(write.type) ?? 0) + 1);
-    const summary = [...counts].map(([type, n]) => (n === 1 ? type : `${type}×${n}`)).join(", ");
+    }
+    const summary = [...counts]
+        .map(([type, n]) => (n === 1 ? type : `${type}×${n}`))
+        .join(", ");
     return `pi-durable: seq ${batch.seq} (${summary})\n\nPi-Durable-Format: ${batch.format}\nPi-Durable-Seq: ${batch.seq}\n`;
 }

@@ -1,4 +1,3 @@
-// Vendored from github.com/cv/git-backed-pi-durable (1b9ba48). Edit there, then copy.
 // Moving a GitStorage ref between a local repository and a remote: fetch it before opening, push it as it grows.
 import { execFile } from "node:child_process";
 import { assertRefName } from "./git.js";
@@ -36,7 +35,7 @@ export class GitSync {
         this.repo = options.repo;
         this.ref = options.ref;
         this.remote = options.remote ?? "origin";
-        this.log = options.log ?? (() => { });
+        this.log = options.log ?? (() => undefined);
         this.git = options.git ?? runGit;
     }
     /** The remote tip as of the last fetch or push. */
@@ -56,11 +55,18 @@ export class GitSync {
         const line = stdout.split("\n").find((l) => l.endsWith(`\t${this.ref}`));
         const tip = line?.split("\t")[0];
         if (tip === undefined) {
-            await this.git(["update-ref", "-d", this.ref], this.repo).catch(() => { });
+            await this.git(["update-ref", "-d", this.ref], this.repo).catch(() => undefined);
             this.log(`${this.ref}: new on ${this.remote}`);
         }
         else {
-            await this.git(["fetch", "--quiet", "--no-tags", "--no-write-fetch-head", this.remote, `+${this.ref}:${this.ref}`], this.repo);
+            await this.git([
+                "fetch",
+                "--quiet",
+                "--no-tags",
+                "--no-write-fetch-head",
+                this.remote,
+                `+${this.ref}:${this.ref}`,
+            ], this.repo);
             this.log(`${this.ref}: fetched ${tip.slice(0, 7)}`);
         }
         this.remoteTip = tip;
@@ -68,8 +74,9 @@ export class GitSync {
     }
     /** Push `tip` soon; resolves when it (or a newer scheduled tip) is pushed. */
     schedule(tip) {
-        if (this.failure)
+        if (this.failure) {
             return Promise.reject(this.failure);
+        }
         this.wanted = tip;
         this.running ??= this.drain().finally(() => {
             this.running = undefined;
@@ -78,12 +85,15 @@ export class GitSync {
     }
     /** Push `tip` now (after any push in flight); throws why pushing stopped, if it did. */
     async flush(tip) {
-        if (this.running)
-            await this.running.catch(() => { });
-        if (this.failure)
+        if (this.running) {
+            await this.running.catch(() => undefined);
+        }
+        if (this.failure) {
             throw this.failure;
-        if (tip !== undefined && tip !== this.remoteTip)
+        }
+        if (tip !== undefined && tip !== this.remoteTip) {
             await this.schedule(tip);
+        }
     }
     async drain() {
         while (this.wanted !== undefined && this.wanted !== this.remoteTip) {
@@ -105,9 +115,11 @@ export class GitSync {
 }
 export const runGit = (args, cwd) => new Promise((resolve, reject) => {
     execFile("git", [...args], { cwd, maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) => {
-        if (error)
+        if (error) {
             reject(Object.assign(error, { stdout, stderr }));
-        else
+        }
+        else {
             resolve({ stdout, stderr });
+        }
     });
 });

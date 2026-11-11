@@ -69,7 +69,7 @@ pi requires authentication with your LLM provider. Either:
 
 - **`pi_auth_json`**: run `pi` locally, log in, and store the contents of `~/.pi/agent/auth.json` as a repository secret (`PI_AUTH_JSON`). OAuth tokens refreshed during a run are not written back to the secret.
 - **Environment variables**: set provider variables such as `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` on the step.
-- **`models_json`** for custom providers: the contents of `~/.pi/agent/models.json`. Providers using the `anthropic-messages`, `openai-completions`, or `openai-responses` APIs are supported; `apiKey` may be a literal key, an environment variable name, or a `!command`.
+- **`models_json`** for custom providers: the contents of `~/.pi/agent/models.json`. Providers using the `anthropic-messages`, `openai-completions`, or `openai-responses` APIs are supported; `apiKey` may be a literal key, an environment variable name, or a `!command` (run on the runner, so a local helper such as `op` won't be there: resolve keys before storing the secret).
 
 ```yaml
 - uses: cv/pi-action@v2
@@ -215,7 +215,7 @@ jobs:
 8. Each answer is posted as a comment with a 🚀 reaction on the comments it answers (❌ and 😕 on failure)
 9. The thread is closed and pushed; the `if: always()` step pushes again if the run was cut short
 
-The main orchestration logic is in [`src/run.ts`](src/run.ts). The git storage backend is vendored from [cv/git-backed-pi-durable](https://github.com/cv/git-backed-pi-durable) in [`src/vendor`](src/vendor).
+The main orchestration logic is in [`src/run.ts`](src/run.ts). The git storage backend for pi-durable is in [`src/storage`](src/storage).
 
 ### Git Hooks for the Agent
 

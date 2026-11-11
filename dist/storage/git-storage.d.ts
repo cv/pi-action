@@ -1,5 +1,5 @@
 import type { Context } from "@earendil-works/chord/context";
-import { type Id, type Seq, type Storage, type StorageWrite } from "@earendil-works/pi-durable";
+import { type ConversationId, type EntryId, type Id, MemoryStorage, type Seq, type Storage, type StorageWrite } from "@earendil-works/pi-durable";
 import { GitRepo, type Signature } from "./git.js";
 export declare const FORMAT_VERSION = 1;
 export interface GitStorageOptions {
@@ -64,16 +64,17 @@ export declare class GitStorage implements Storage {
     mintId<I extends Id<string>>(): Promise<I>;
     conversation(...args: Parameters<Storage["conversation"]>): Promise<import("@earendil-works/pi-durable").ConversationRecord | undefined>;
     scanConversations(...args: Parameters<Storage["scanConversations"]>): Promise<import("@earendil-works/pi-durable").Page<import("@earendil-works/pi-durable").ConversationRecord, Readonly<Record<string, import("@earendil-works/chord/json").JsonValue>>>>;
-    entry: Storage["entry"];
+    entry(id: EntryId, context: Context): ReturnType<MemoryStorage["entry"]>;
+    entry(conversationId: ConversationId, id: EntryId, context: Context): ReturnType<MemoryStorage["entry"]>;
     findLatestHeadMarker(...args: Parameters<Storage["findLatestHeadMarker"]>): Promise<(import("@earendil-works/pi-durable").EntryRecord & {
-        readonly head: import("@earendil-works/pi-durable").EntryId;
+        readonly head: EntryId;
     }) | undefined>;
     scanEntries(...args: Parameters<Storage["scanEntries"]>): Promise<import("@earendil-works/pi-durable").Page<import("@earendil-works/pi-durable").EntryRecord, Readonly<Record<string, import("@earendil-works/chord/json").JsonValue>>>>;
     task(...args: Parameters<Storage["task"]>): Promise<({
         readonly trace?: import("@earendil-works/pi-telemetry").TelemetryCarrier;
         readonly links?: readonly import("@earendil-works/pi-telemetry").TelemetryCarrier[];
         readonly id: import("@earendil-works/pi-durable").TaskId<import("@earendil-works/chord/json").JsonValue>;
-        readonly conversationId: import("@earendil-works/pi-durable").ConversationId;
+        readonly conversationId: ConversationId;
         readonly kind: string;
         readonly version: number;
         readonly input: import("@earendil-works/chord/json").JsonValue;
@@ -123,7 +124,7 @@ export declare class GitStorage implements Storage {
         readonly trace?: import("@earendil-works/pi-telemetry").TelemetryCarrier;
         readonly links?: readonly import("@earendil-works/pi-telemetry").TelemetryCarrier[];
         readonly id: import("@earendil-works/pi-durable").TaskId<import("@earendil-works/chord/json").JsonValue>;
-        readonly conversationId: import("@earendil-works/pi-durable").ConversationId;
+        readonly conversationId: ConversationId;
         readonly kind: string;
         readonly version: number;
         readonly input: import("@earendil-works/chord/json").JsonValue;

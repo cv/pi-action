@@ -1,4 +1,3 @@
-// Vendored from github.com/cv/git-backed-pi-durable (1b9ba48). Edit there, then copy.
 // Moving a GitStorage ref between a local repository and a remote: fetch it before opening, push it as it grows.
 import { execFile } from "node:child_process";
 import type { Batch } from "./git-storage.js";
@@ -13,7 +12,10 @@ export class GitSyncConflictError extends Error {
 	}
 }
 
-export type GitRunner = (args: readonly string[], cwd: string) => Promise<{ stdout: string; stderr: string }>;
+export type GitRunner = (
+	args: readonly string[],
+	cwd: string,
+) => Promise<{ stdout: string; stderr: string }>;
 
 export interface GitSyncOptions {
 	/** The work tree (or git dir) to run git in. */
@@ -31,7 +33,9 @@ const MESSAGE_KINDS = new Set(["pi.assistant", "pi.tool-result"]);
 /** A model response or tool result was stored: the end of a turn (or of one of its tool calls). */
 export function isTurnBoundary(batches: readonly Batch[]): boolean {
 	return batches.some((batch) =>
-		batch.writes.some((write) => write.type === "entry" && MESSAGE_KINDS.has(write.value.kind)),
+		batch.writes.some(
+			(write) => write.type === "entry" && MESSAGE_KINDS.has(write.value.kind),
+		),
 	);
 }
 
@@ -57,7 +61,7 @@ export class GitSync {
 		this.repo = options.repo;
 		this.ref = options.ref;
 		this.remote = options.remote ?? "origin";
-		this.log = options.log ?? (() => {});
+		this.log = options.log ?? (() => undefined);
 		this.git = options.git ?? runGit;
 	}
 
@@ -76,15 +80,27 @@ export class GitSync {
 	 * when the remote has no such ref yet.
 	 */
 	async fetch(): Promise<string | undefined> {
-		const { stdout } = await this.git(["ls-remote", "--refs", this.remote, this.ref], this.repo);
+		const { stdout } = await this.git(
+			["ls-remote", "--refs", this.remote, this.ref],
+			this.repo,
+		);
 		const line = stdout.split("\n").find((l) => l.endsWith(`\t${this.ref}`));
 		const tip = line?.split("\t")[0];
 		if (tip === undefined) {
-			await this.git(["update-ref", "-d", this.ref], this.repo).catch(() => {});
+			await this.git(["update-ref", "-d", this.ref], this.repo).catch(
+				() => undefined,
+			);
 			this.log(`${this.ref}: new on ${this.remote}`);
 		} else {
 			await this.git(
-				["fetch", "--quiet", "--no-tags", "--no-write-fetch-head", this.remote, `+${this.ref}:${this.ref}`],
+				[
+					"fetch",
+					"--quiet",
+					"--no-tags",
+					"--no-write-fetch-head",
+					this.remote,
+					`+${this.ref}:${this.ref}`,
+				],
 				this.repo,
 			);
 			this.log(`${this.ref}: fetched ${tip.slice(0, 7)}`);
@@ -95,7 +111,9 @@ export class GitSync {
 
 	/** Push `tip` soon; resolves when it (or a newer scheduled tip) is pushed. */
 	schedule(tip: string): Promise<void> {
-		if (this.failure) return Promise.reject(this.failure);
+		if (this.failure) {
+			return Promise.reject(this.failure);
+		}
 		this.wanted = tip;
 		this.running ??= this.drain().finally(() => {
 			this.running = undefined;
@@ -105,19 +123,32 @@ export class GitSync {
 
 	/** Push `tip` now (after any push in flight); throws why pushing stopped, if it did. */
 	async flush(tip: string | undefined): Promise<void> {
-		if (this.running) await this.running.catch(() => {});
-		if (this.failure) throw this.failure;
-		if (tip !== undefined && tip !== this.remoteTip) await this.schedule(tip);
+		if (this.running) {
+			await this.running.catch(() => undefined);
+		}
+		if (this.failure) {
+			throw this.failure;
+		}
+		if (tip !== undefined && tip !== this.remoteTip) {
+			await this.schedule(tip);
+		}
 	}
 
 	private async drain(): Promise<void> {
 		while (this.wanted !== undefined && this.wanted !== this.remoteTip) {
 			const tip = this.wanted;
 			try {
-				await this.git(["push", "--quiet", "--no-verify", this.remote, `${tip}:${this.ref}`], this.repo);
+				await this.git(
+					["push", "--quiet", "--no-verify", this.remote, `${tip}:${this.ref}`],
+					this.repo,
+				);
 			} catch (error) {
-				const detail = String((error as { stderr?: string }).stderr || error).trim();
-				this.failure = /rejected|non-fast-forward|fetch first|stale info/i.test(detail)
+				const detail = String(
+					(error as { stderr?: string }).stderr || error,
+				).trim();
+				this.failure = /rejected|non-fast-forward|fetch first|stale info/i.test(
+					detail,
+				)
 					? new GitSyncConflictError(this.ref, detail)
 					: new Error(`Push of ${this.ref} failed: ${detail}`);
 				throw this.failure;
@@ -130,8 +161,16 @@ export class GitSync {
 
 export const runGit: GitRunner = (args, cwd) =>
 	new Promise((resolve, reject) => {
-		execFile("git", [...args], { cwd, maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) => {
-			if (error) reject(Object.assign(error, { stdout, stderr }));
-			else resolve({ stdout, stderr });
-		});
+		execFile(
+			"git",
+			[...args],
+			{ cwd, maxBuffer: 64 * 1024 * 1024 },
+			(error, stdout, stderr) => {
+				if (error) {
+					reject(Object.assign(error, { stdout, stderr }));
+				} else {
+					resolve({ stdout, stderr });
+				}
+			},
+		);
 	});

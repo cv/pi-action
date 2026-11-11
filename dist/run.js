@@ -6,10 +6,10 @@ import { formatErrorComment, formatSuccessComment } from "./formatting.js";
 import { addReaction, extractTriggerInfo, } from "./github.js";
 import { createActionModels, findModel } from "./models.js";
 import { validatePermissions } from "./security.js";
+import { GitSyncConflictError } from "./storage/sync.js";
 import { Thread } from "./thread.js";
 import { collectTriggers, triggerFromInfo, } from "./triggers.js";
 import { getErrorMessage } from "./utils.js";
-import { GitSyncConflictError } from "./vendor/git-backed-pi-durable/index.js";
 /**
  * Validates that the trigger is authorized to run the agent.
  * Returns the trigger info if valid, null otherwise.

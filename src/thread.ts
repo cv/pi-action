@@ -15,12 +15,8 @@ import {
 } from "@earendil-works/pi-durable";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
-import {
-	GitStorage,
-	GitSync,
-	isTurnBoundary,
-	runGit,
-} from "./vendor/git-backed-pi-durable/index.js";
+import { GitStorage } from "./storage/git-storage.js";
+import { GitSync, isTurnBoundary, runGit } from "./storage/sync.js";
 
 const context: Context = BACKGROUND_CONTEXT;
 

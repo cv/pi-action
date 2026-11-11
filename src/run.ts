@@ -14,6 +14,7 @@ import {
 import { createActionModels, findModel } from "./models.js";
 import { validatePermissions } from "./security.js";
 import type { SecurityContext } from "./security.js";
+import { GitSyncConflictError } from "./storage/sync.js";
 import { Thread } from "./thread.js";
 import {
 	type Trigger,
@@ -23,7 +24,6 @@ import {
 } from "./triggers.js";
 import type { ModelConfig, RepoRef, TriggerInfo } from "./types.js";
 import { getErrorMessage } from "./utils.js";
-import { GitSyncConflictError } from "./vendor/git-backed-pi-durable/index.js";
 
 export interface ActionInputs {
 	triggerPhrase: string;

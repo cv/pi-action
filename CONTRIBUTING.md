@@ -73,7 +73,7 @@ Use branch names like `feat/123-description` or `fix/456-bug-name` to automatica
 
 ## Architecture
 
-The action is built with TypeScript on [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) and [pi-ai](https://www.npmjs.com/package/@earendil-works/pi-ai). Each issue/PR is a durable conversation whose storage is a chain of git commits on `refs/pi/threads/<number>` (the backend is vendored from [cv/git-backed-pi-durable](https://github.com/cv/git-backed-pi-durable) in `src/vendor/`; edit it there and copy it over).
+The action is built with TypeScript on [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) and [pi-ai](https://www.npmjs.com/package/@earendil-works/pi-ai). Each issue/PR is a durable conversation whose storage is a chain of git commits on `refs/pi/threads/<number>` (the storage backend is in `src/storage/`).
 
 ### Source Files
 
@@ -85,7 +85,9 @@ The action is built with TypeScript on [pi-durable](https://www.npmjs.com/packag
 | [`src/triggers.ts`](src/triggers.ts) | Finding the `@pi` comments a thread still has to answer |
 | [`src/models.ts`](src/models.ts) | Providers, credentials (`pi_auth_json`) and custom providers (`models_json`) |
 | [`src/push.ts`](src/push.ts) | The `if: always()` step that pushes unsaved thread state |
-| [`src/vendor/git-backed-pi-durable`](src/vendor/git-backed-pi-durable) | Git storage backend for pi-durable (vendored) |
+| [`src/storage/git.ts`](src/storage/git.ts) | In-process git objects and compare-and-swap ref updates |
+| [`src/storage/git-storage.ts`](src/storage/git-storage.ts) | `GitStorage`: a pi-durable `Storage` whose log is a chain of commits on one ref |
+| [`src/storage/sync.ts`](src/storage/sync.ts) | `GitSync`: fetching a thread ref and pushing it (fast-forward only) at turn boundaries |
 | [`src/github.ts`](src/github.ts) | GitHub API client helpers |
 | [`src/context.ts`](src/context.ts) | Prompt building and trigger extraction |
 | [`src/security.ts`](src/security.ts) | Permission validation and input sanitization |

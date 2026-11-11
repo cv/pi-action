@@ -2,9 +2,9 @@
 // timed out, or crashed). Pushes are fast-forward only, so this never overwrites another run's history.
 import * as core from "@actions/core";
 import * as github from "@actions/github";
+import { GitSync, runGit } from "./storage/sync.js";
 import { threadRef } from "./thread.js";
 import { getErrorMessage } from "./utils.js";
-import { GitSync, runGit } from "./vendor/git-backed-pi-durable/index.js";
 
 export async function pushThread(
 	payload: Record<string, unknown>,
