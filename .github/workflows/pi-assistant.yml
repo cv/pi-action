@@ -6,7 +6,7 @@ on:
   pull_request:
     types: [opened]
   issue_comment:
-    types: [created]
+    types: [created, edited] # edited: a box ticked on one of pi's questions
   pull_request_review_comment:
     types: [created]
 
@@ -16,32 +16,33 @@ concurrency:
 
 jobs:
   pi-response:
-    if: contains(github.event.comment.body || github.event.issue.body || github.event.pull_request.body || '', '@pi')
+    # @pi requests, /answer replies, and edits of pi's questions (not other edited comments).
+    if: >-
+      (github.event.action == 'edited' && contains(github.event.comment.body, '<!-- pi-action:question'))
+      || (github.event.action != 'edited' && (contains(github.event.comment.body || github.event.issue.body || github.event.pull_request.body || '', '@pi')
+      || contains(github.event.comment.body || '', '/answer')))
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write       # push code and refs/pi/threads/*
       issues: write
       pull-requests: write
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '25'
-
       - name: Run pi-action
-        uses: ./  # Dogfooding: use the action from this repo
+        uses: ./  # Dogfooding: the action from this checkout (main for comments)
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           provider: nvidia
-          model: openai/openai/gpt-5.5
+          model: aws/anthropic/bedrock-claude-opus-5-5
           api_key: ${{ secrets.NVIDIA_API_KEY }}
           provider_base_url: https://inference-api.nvidia.com
-          provider_api: openai-responses
-          model_name: GPT-5.5 (OpenAI)
+          provider_api: anthropic-messages
+          model_name: Opus 5.5
           model_reasoning: true
           model_input: text,image
           model_context_window: 1050000
           model_max_tokens: 16384
+          compat_force_adaptive_thinking: true
+          extensions: github:cv/pit#v0.35.0
