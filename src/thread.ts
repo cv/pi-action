@@ -14,6 +14,7 @@ import {
 	MemoryStorage,
 	type Storage,
 	type Submission,
+	ToolResultEntry,
 } from "@earendil-works/pi-durable";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
@@ -46,6 +47,16 @@ export interface ThreadOptions {
 	extensions?: readonly Extension[];
 	/** Variables the tools' shell gets on top of the process environment (see `toolEnv()`). */
 	toolEnv?: Readonly<Record<string, string>> | undefined;
+}
+
+/** What `Thread.answerText()` reports about a run's answer. */
+export interface RunAnswer {
+	text: string;
+	toolCalls: boolean;
+	/** The assistant message's stop reason; `length` when it hit the output token limit (max_tokens). */
+	stopReason: string | undefined;
+	/** Whether the run executed tools before this answer. */
+	usedTools: boolean;
 }
 
 export interface ThreadInput {
@@ -190,17 +201,20 @@ export class Thread {
 		);
 	}
 
-	/** The text of a run's answer, and whether it called tools (a run that ended on a `terminate` round). */
-	async answerText(
-		answer: EntryId,
-	): Promise<{ text: string; toolCalls: boolean }> {
+	/**
+	 * A run's answer: its text, whether it called tools (a run that ended on a `terminate` round), and why the
+	 * model stopped (`length`: it ran out of output tokens); and whether the run executed any tool between its
+	 * `input` entry and the answer.
+	 */
+	async answerText(answer: EntryId, input: EntryId): Promise<RunAnswer> {
 		const entry = await this.root.commit(
 			async (tx) => tx.entry(AssistantEntry, answer),
 			context,
 		);
 		const message = entry?.model?.[0];
+		const usedTools = await this.ranTools(input, answer);
 		if (message?.role !== "assistant") {
-			return { text: "", toolCalls: false };
+			return { text: "", toolCalls: false, stopReason: undefined, usedTools };
 		}
 		return {
 			text: message.content
@@ -208,7 +222,28 @@ export class Thread {
 				.join("")
 				.trim(),
 			toolCalls: message.content.some((block) => block.type === "toolCall"),
+			stopReason: message.stopReason,
+			usedTools,
 		};
+	}
+
+	/** Whether a tool result was written between two entries. */
+	private async ranTools(from: EntryId, to: EntryId): Promise<boolean> {
+		let cursor: Parameters<Conversation["entries"]>[2];
+		do {
+			// oxlint-disable-next-line eslint/no-await-in-loop -- pages follow each other
+			const page = await this.root.entries(
+				{ minEntryId: from, maxEntryId: to, order: "descending" },
+				500,
+				cursor,
+				context,
+			);
+			if (page.items.some((item) => item.kind === ToolResultEntry.kind)) {
+				return true;
+			}
+			cursor = page.next;
+		} while (cursor !== undefined);
+		return false;
 	}
 
 	/** Results already posted (`answer-<entryId>`, `error-<submissionId>`), with their comment URLs. */
