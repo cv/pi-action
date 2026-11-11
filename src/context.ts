@@ -52,6 +52,8 @@ interface DirectPIContext extends BasePIContext {
 
 export type PIContext = IssuePIContext | PullRequestPIContext | DirectPIContext;
 
+const PLACEHOLDER_PATTERN = /\{\{(\w+)\}\}/gu;
+
 const TYPE_DISPLAY: Record<PIContext["type"], string> = {
 	issue: "Issue",
 	pull_request: "Pull Request",
@@ -60,26 +62,26 @@ const TYPE_DISPLAY: Record<PIContext["type"], string> = {
 
 export function renderTemplate(template: string, context: PIContext): string {
 	const isDirect = context.type === "direct";
-	const variables = {
-		type: context.type,
-		type_display: TYPE_DISPLAY[context.type],
-		number: isDirect ? "0" : context.number.toString(),
-		title: context.title,
-		body: isDirect ? "" : context.body,
-		task: context.task,
-		diff: context.type === "pull_request" ? (context.diff ?? "") : "",
-		reviewComments:
-			context.type === "pull_request" ? (context.reviewComments ?? "") : "",
-		trigger_comment: isDirect ? context.task : context.triggerComment,
-	};
-
-	let rendered = template;
-	for (const [key, value] of Object.entries(variables)) {
-		const placeholder = new RegExp(`\\{\\{${key}\\}\\}`, "gu");
-		rendered = rendered.replaceAll(placeholder, value);
-	}
-
-	return rendered;
+	const variables = new Map(
+		Object.entries({
+			type: context.type,
+			type_display: TYPE_DISPLAY[context.type],
+			number: isDirect ? "0" : context.number.toString(),
+			title: context.title,
+			body: isDirect ? "" : context.body,
+			task: context.task,
+			diff: context.type === "pull_request" ? (context.diff ?? "") : "",
+			reviewComments:
+				context.type === "pull_request" ? (context.reviewComments ?? "") : "",
+			trigger_comment: isDirect ? context.task : context.triggerComment,
+		}),
+	);
+	// One pass with a replacer: values go in literally ("$&" stays "$&"), and a placeholder inside a value (an
+	// issue body that says {{diff}}) stays text instead of being expanded.
+	return template.replaceAll(
+		PLACEHOLDER_PATTERN,
+		(placeholder, key: string) => variables.get(key) ?? placeholder,
+	);
 }
 
 export function buildPrompt(
