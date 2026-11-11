@@ -1,1 +1,1 @@
-{"format":1,"seq":155,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":156,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"npm warn install-scripts   protobufjs@7.6.6 (postinstall: node scripts/postinstall)\nnpm warn install-scripts\nnpm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.\n"]]}}]}
