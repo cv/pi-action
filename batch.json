@@ -1,1 +1,1 @@
-{"format":1,"seq":382,"writes":[{"type":"task","value":{"id":150,"conversationId":1,"kind":"pi.generation","version":2,"input":{},"background":false,"abortRequested":false,"state":{"status":"running","checkpoint":{"phase":"request","attempt":1,"model":{"provider":"nvidia","modelId":"aws/anthropic/bedrock-claude-opus-5-5"},"thinkingLevel":"off","streamOptions":{},"cutoff":149}},"startedAt":1794433875970}}]}
+{"format":1,"seq":383,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["generation"],{"attempt":1}]]}}]}
