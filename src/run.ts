@@ -13,6 +13,7 @@ import { createActionModels, findModel } from "./models.ts";
 import { getRunContext } from "./run-context.ts";
 import { GitSyncConflictError } from "./storage/sync.ts";
 import { Thread } from "./thread.ts";
+import { toolEnv } from "./tool-env.ts";
 import { collectTriggers, type Trigger, triggerFromInfo } from "./triggers.ts";
 import type { Log, TriggerInfo } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
@@ -43,14 +44,19 @@ export interface ActionDependencies {
 
 /**
  * The `extensions` input and the model setup: the built-in and custom providers and those extensions register
- * (unless `createModels` overrides it), and the pi-durable extensions for the thread, which get the GitHub UI when
- * the run posts to an issue or PR.
+ * (unless `createModels` overrides it), the pi-durable extensions for the thread, which get the GitHub UI when
+ * the run posts to an issue or PR, and the variables the agent's tools get (see `toolEnv()`). pi-durable extensions
+ * run in this process, so when there are any, those variables are set in its environment too (after npm ran).
  */
 async function setUp(
 	deps: ActionDependencies,
 	gh: GitHubClient,
 	issueNumber: number | undefined,
-): Promise<{ models: Models; extensions: Extension[] }> {
+): Promise<{
+	models: Models;
+	extensions: Extension[];
+	tools: Record<string, string>;
+}> {
 	const { inputs, log, cwd } = deps;
 	const env = deps.env ?? process.env;
 	const loaded = await loadExtensions({
@@ -66,6 +72,13 @@ async function setUp(
 				env,
 				log,
 			});
+	const tools = await toolEnv({ token: inputs.githubToken, cwd, env });
+	if (Object.keys(tools).length > 0) {
+		log.info(`The agent's tools get ${Object.keys(tools).join(", ")}`);
+	}
+	if (loaded.durable.length > 0) {
+		Object.assign(env, tools);
+	}
 	const ui =
 		inputs.outputMode === "comment" && issueNumber !== undefined
 			? createGitHubUi({
@@ -86,7 +99,7 @@ async function setUp(
 		log,
 		env,
 	});
-	return { models, extensions };
+	return { models, extensions, tools };
 }
 
 /** On cancellation (SIGINT, then SIGTERM), push what the thread has so far before the runner kills us. */
@@ -214,7 +227,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 	let thread: Thread | undefined;
 	let stopSignals: (() => void) | undefined;
 	try {
-		const { models, extensions } = await setUp(deps, gh, issueNumber);
+		const { models, extensions, tools } = await setUp(deps, gh, issueNumber);
 		const opened = await Thread.open({
 			cwd: deps.cwd,
 			issueNumber,
@@ -223,6 +236,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			log,
 			remote: deps.remote,
 			extensions,
+			toolEnv: tools,
 		});
 		thread = opened;
 		stopSignals = pushOnSignals(opened, log);

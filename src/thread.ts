@@ -44,6 +44,8 @@ export interface ThreadOptions {
 	remote?: string | undefined;
 	/** pi-durable extensions from the `extensions` input, installed after the coding tools. */
 	extensions?: readonly Extension[];
+	/** Variables the tools' shell gets on top of the process environment (see `toolEnv()`). */
+	toolEnv?: Readonly<Record<string, string>> | undefined;
 }
 
 export interface ThreadInput {
@@ -135,7 +137,11 @@ export class Thread {
 			{
 				models: options.models,
 				registry,
-				env: ({ cwd: dir }) => new NodeExecutionEnv({ cwd: dir ?? cwd }),
+				env: ({ cwd: dir }) =>
+					new NodeExecutionEnv({
+						cwd: dir ?? cwd,
+						shellEnv: { ...options.toolEnv },
+					}),
 				settings: { retry: { maxRetries: 2 } },
 			},
 			context,

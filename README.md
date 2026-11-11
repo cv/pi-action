@@ -80,6 +80,15 @@ with:
   api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
+#### The agent's GitHub token and git identity
+
+The agent's tools (`bash`, and the tools of pi-durable extensions) get two things a runner lacks, each only if the workflow hasn't set it:
+
+- **`GH_TOKEN`**, set to `github_token`, so `gh` works. It is left alone when `GH_TOKEN` or `GITHUB_TOKEN` is already in the environment.
+- **A git identity** for `git commit`: `GIT_AUTHOR_NAME`/`GIT_COMMITTER_NAME` `github-actions[bot]` and `GIT_AUTHOR_EMAIL`/`GIT_COMMITTER_EMAIL` `41898282+github-actions[bot]@users.noreply.github.com`. Each is left alone when it is set, or when git has `user.name` (for the names) or `user.email` (for the emails) configured. To commit as someone else, set those variables in the step's `env` or run `git config user.name/user.email` in an earlier step.
+
+`bash` gets them in its environment only. pi-durable extensions run inside the action, so when there are any, the action sets the variables in its own process environment too (after installing the extensions). The token isn't new to the agent: `actions/checkout` already stores it in the checkout's git credentials, where any tool can read it; this just lets `gh` find it. Give `github_token` only the permissions the agent should have.
+
 ### Inputs
 
 All inputs are defined in [`action.yml`](action.yml). Default values are centralized in [`src/defaults.ts`](src/defaults.ts).
@@ -423,7 +432,7 @@ The action only responds to authorized users (see [`src/security.ts`](src/securi
 
 Collaborators are not allowed by default. Add `COLLABORATOR` to `allowed_associations` if you want outside collaborators to trigger pi.
 
-pi extensions loaded with `extensions` run with the job's permissions; see [Providers from pi extensions](#providers-from-pi-extensions). For pi-durable extensions, keep `trust_project` off unless you trust everyone who can change the repository, and see [Questions on GitHub](#questions-on-github) for who can answer their questions.
+The agent's tools get `github_token` as `GH_TOKEN` and a `github-actions[bot]` git identity when the workflow sets neither (see [the agent's GitHub token and git identity](#the-agents-github-token-and-git-identity)), so the token's permissions are the agent's. pi extensions loaded with `extensions` run with the job's permissions; see [Providers from pi extensions](#providers-from-pi-extensions). For pi-durable extensions, keep `trust_project` off unless you trust everyone who can change the repository, and see [Questions on GitHub](#questions-on-github) for who can answer their questions.
 
 Input is sanitized to remove:
 - HTML comments (potential injection vectors)

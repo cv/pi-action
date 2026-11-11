@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -101,7 +101,53 @@ const userTexts = (messages: { role: string; content: unknown }[]) =>
 						.join(""),
 		);
 
+/** The text of the last tool result the model saw. */
+const toolText = (messages: { role: string; content: unknown }[]): string => {
+	const result = messages.findLast((m) => m.role === "toolResult");
+	return Array.isArray(result?.content)
+		? (result.content as { text?: string }[]).map((b) => b.text ?? "").join("")
+		: "";
+};
+
+/** Git as on a runner: no global or system config, so no identity. */
+function runnerGitEnv(): Record<string, string> {
+	const home = tempDir();
+	const global = join(home, "gitconfig");
+	writeFileSync(global, "");
+	return { HOME: home, GIT_CONFIG_GLOBAL: global, GIT_CONFIG_NOSYSTEM: "1" };
+}
+
 describe("run (durable)", () => {
+	it("gives the agent's tools GH_TOKEN and a git identity when the runner has none", async () => {
+		const w = world();
+		w.faux.setResponses([
+			fauxAssistantMessage(
+				[
+					fauxToolCall("bash", {
+						command:
+							'printf "%s|%s|%s" "$GH_TOKEN" "$GIT_AUTHOR_NAME" "$GIT_COMMITTER_EMAIL"',
+					}),
+				],
+				{ stopReason: "toolUse" },
+			),
+			(context) =>
+				fauxAssistantMessage(`Tool said: ${toolText(context.messages)}`),
+		]);
+		const deps = w.deps(w.comment("@pi who am I?"));
+		deps.env = { ...deps.env, ...runnerGitEnv() };
+
+		await run(deps);
+
+		expect(w.gh.posted[0]).toContain(
+			"Tool said: test-token|github-actions[bot]|41898282+github-actions[bot]@users.noreply.github.com",
+		);
+		expect(deps.log.info).toHaveBeenCalledWith(
+			"The agent's tools get GH_TOKEN, GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME, GIT_COMMITTER_EMAIL",
+		);
+		// Without pi-durable extensions, the action's own environment is left alone.
+		expect(deps.env).not.toHaveProperty("GH_TOKEN");
+	});
+
 	it("answers a trigger, posts once, and pushes the thread to the remote", async () => {
 		const w = world();
 		w.faux.setResponses([fauxAssistantMessage("Fixed it.")]);
@@ -454,16 +500,6 @@ describe("run with a pi-durable extension (installed from npm)", () => {
 		rmSync(packs, { recursive: true, force: true });
 	});
 
-	/** The text of the last tool result the model saw. */
-	const toolText = (messages: { role: string; content: unknown }[]): string => {
-		const result = messages.findLast((m) => m.role === "toolResult");
-		return Array.isArray(result?.content)
-			? (result.content as { text?: string }[])
-					.map((b) => b.text ?? "")
-					.join("")
-			: "";
-	};
-
 	/** A run whose model calls the extension's ask_user tool, then answers with what it reported. */
 	function durableWorld(inputs: Partial<ActionInputs> = {}) {
 		const w = world();
@@ -548,6 +584,21 @@ describe("run with a pi-durable extension (installed from npm)", () => {
 		expect(d.gh.bodies.get(1001)).toContain("pi stopped waiting");
 		expect(d.gh.posted).toHaveLength(2); // the question, then the timeout
 		expect(d.gh.posted[1]).toContain("Timeout after 1.5 seconds");
+	}, 120_000);
+
+	it("sets the tools' variables in the environment the extension shares, unless set", async () => {
+		const d = durableWorld({ outputMode: "output" });
+		const env = { ...d.deps.env, ...runnerGitEnv() };
+		Reflect.deleteProperty(env, "GH_TOKEN");
+		Reflect.deleteProperty(env, "GITHUB_TOKEN");
+		d.deps.env = env;
+
+		await run(d.deps);
+
+		expect(env).toMatchObject({
+			GH_TOKEN: "test-token",
+			GIT_AUTHOR_NAME: "pi-action tests", // set by the workflow (here, the test setup)
+		});
 	}, 120_000);
 
 	it("gives the extension no UI in output mode, and passes trust_project", async () => {

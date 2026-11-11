@@ -104,6 +104,7 @@ The action is built with TypeScript on [pi-durable](https://www.npmjs.com/packag
 | [`src/storage/git.ts`](src/storage/git.ts) | In-process git objects and compare-and-swap ref updates |
 | [`src/storage/git-storage.ts`](src/storage/git-storage.ts) | `GitStorage`: a pi-durable `Storage` whose log is a chain of commits on one ref |
 | [`src/storage/sync.ts`](src/storage/sync.ts) | `GitSync`: fetching a thread ref and pushing it (fast-forward only) at turn boundaries |
+| [`src/tool-env.ts`](src/tool-env.ts) | The variables the agent's tools get when the runner lacks them: `GH_TOKEN` and a `github-actions[bot]` git identity |
 | [`src/github.ts`](src/github.ts) | GitHub API client helpers |
 | [`src/inputs.ts`](src/inputs.ts) | Reading the action inputs (with their defaults) into `ActionInputs` |
 | [`src/context.ts`](src/context.ts) | Prompt building and trigger extraction |
