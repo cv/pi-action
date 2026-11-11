@@ -1,6 +1,4 @@
-/**
- * Test helper functions to reduce duplication in test files
- */
+// Shared fixtures: inputs, a fake GitHub, faux models, and scratch git repositories.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,13 +11,9 @@ import { onTestFinished, vi } from "vitest";
 
 import { DEFAULTS } from "./defaults.ts";
 import type { GitHubClient } from "./github.ts";
-import type { ActionInputs, Logger } from "./run.ts";
-import type { GitHubComment, ModelConfig, TriggerInfo } from "./types.ts";
-
-const since = (list: GitHubComment[], iso?: string) =>
-	iso
-		? list.filter((c) => Date.parse(c.created_at) >= Date.parse(iso))
-		: [...list];
+import type { ActionInputs } from "./inputs.ts";
+import type { Logger } from "./run.ts";
+import type { GitHubComment, TriggerInfo } from "./types.ts";
 
 /** A Logger whose methods are typed mocks. */
 export function createLogger(): Logger {
@@ -32,9 +26,14 @@ export function createLogger(): Logger {
 	};
 }
 
+const since = (list: GitHubComment[], iso?: string) =>
+	iso
+		? list.filter((c) => Date.parse(c.created_at) >= Date.parse(iso))
+		: [...list];
+
 /**
- * Creates a mock GitHub client with all required methods. `comments` and `reviewComments` back the list
- * methods (live arrays: tests may push to them), and posted comment bodies are recorded in `posted`.
+ * A mock GitHub client. `comments` and `reviewComments` back the list methods (live arrays: tests may push to
+ * them), and posted comment bodies are recorded in `posted`.
  */
 export function createMockGitHubClient(
 	comments: GitHubComment[] = [],
@@ -43,8 +42,7 @@ export function createMockGitHubClient(
 	const posted: string[] = [];
 	return {
 		posted,
-		addReactionToComment: vi.fn(),
-		addReactionToIssue: vi.fn(),
+		addReaction: vi.fn(),
 		createComment: vi.fn(async (_issue: number, body: string) => {
 			posted.push(body);
 			return {
@@ -52,15 +50,10 @@ export function createMockGitHubClient(
 				url: `https://github.com/o/r/issues/1#c${posted.length}`,
 			};
 		}),
-		getPullRequest: vi.fn().mockResolvedValue({
-			number: 1,
-			title: "Test PR",
-			body: "PR body",
-			user: { login: "user", type: "User" },
-			author_association: "OWNER",
-		}),
+		getPullRequest: vi
+			.fn()
+			.mockResolvedValue({ number: 1, title: "Test PR", body: "PR body" }),
 		getPullRequestDiff: vi.fn().mockResolvedValue(""),
-		getPullRequestReviewComments: vi.fn().mockResolvedValue([]),
 		listIssueComments: vi.fn(async (_issue: number, iso?: string) =>
 			since(comments, iso),
 		),
@@ -84,14 +77,10 @@ export function createComment(
 	};
 }
 
-/**
- * Creates a TriggerInfo object with sensible defaults and optional overrides
- */
 export function createTriggerInfo(
 	overrides: Partial<TriggerInfo> = {},
 ): TriggerInfo {
 	return {
-		isCommentEvent: false,
 		triggerText: "@pi test",
 		author: { login: "user", type: "User" },
 		authorAssociation: "OWNER",
@@ -99,25 +88,11 @@ export function createTriggerInfo(
 		issueTitle: "Test",
 		issueBody: "Body",
 		isPullRequest: false,
+		source: "body",
 		...overrides,
 	};
 }
 
-/**
- * Creates a ModelConfig object with sensible defaults and optional overrides
- */
-function createModelConfig(overrides: Partial<ModelConfig> = {}): ModelConfig {
-	return {
-		provider: DEFAULTS.provider,
-		model: DEFAULTS.model,
-		timeout: DEFAULTS.timeout,
-		...overrides,
-	};
-}
-
-/**
- * Creates ActionInputs with sensible defaults and optional overrides.
- */
 export function createActionInputs(
 	overrides: Partial<ActionInputs> = {},
 ): ActionInputs {
@@ -126,7 +101,9 @@ export function createActionInputs(
 		allowedBots: [],
 		allowedUsers: [],
 		allowedAssociations: [...DEFAULTS.allowedAssociations],
-		modelConfig: createModelConfig(),
+		provider: DEFAULTS.provider,
+		model: DEFAULTS.model,
+		timeout: DEFAULTS.timeout,
 		githubToken: "test-token",
 		apiKey: undefined,
 		customProvider: undefined,

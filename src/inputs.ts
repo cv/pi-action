@@ -1,6 +1,32 @@
-import type { ModelInputMode } from "./types.ts";
+// Reading the action's inputs (see action.yml) into ActionInputs. Empty or invalid values fall back to DEFAULTS.
+import type {
+	CustomProviderConfig,
+	ModelInputMode,
+} from "./custom-provider.ts";
+import { DEFAULTS } from "./defaults.ts";
 
 export type InputReader = (name: string) => string;
+
+export interface ActionInputs {
+	triggerPhrase: string;
+	allowedBots: string[];
+	allowedUsers: string[];
+	allowedAssociations: string[];
+	provider: string;
+	model: string;
+	/** Seconds before the run is aborted. */
+	timeout: number;
+	githubToken: string | undefined;
+	/** The provider's key, kept in memory for this run only. */
+	apiKey: string | undefined;
+	customProvider: CustomProviderConfig | undefined;
+	promptTemplate: string | undefined;
+	outputMode: "comment" | "output";
+	prompt: string | undefined;
+	prNumber: number | undefined;
+	/** Seconds between checks for new comments while pi works. */
+	pollInterval: number;
+}
 
 const TRUE_VALUES = new Set(["true", "1", "yes", "y", "on"]);
 const FALSE_VALUES = new Set(["false", "0", "no", "n", "off"]);
@@ -9,59 +35,110 @@ const MODEL_INPUT_MODES: ReadonlySet<string> = new Set<ModelInputMode>([
 	"image",
 ]);
 const INTEGER_PATTERN = /^\d+$/u;
+const COMPAT_INPUTS = {
+	supportsDeveloperRole: "compat_supports_developer_role",
+	supportsReasoningEffort: "compat_supports_reasoning_effort",
+	forceAdaptiveThinking: "compat_force_adaptive_thinking",
+} as const;
 
-export function getInputOrDefault(
-	readInput: InputReader,
-	name: string,
-	defaultValue: string,
-): string {
-	const value = readInput(name);
-	return value || defaultValue;
-}
-
-export function parseCsvInput(value: string): string[] {
+export function parseCsv(value: string): string[] {
 	return value
 		.split(",")
 		.map((entry) => entry.trim())
 		.filter(Boolean);
 }
 
-export function parseBooleanInput(
-	value: string,
-	defaultValue: boolean,
-): boolean {
-	return parseOptionalBooleanInput(value) ?? defaultValue;
-}
-
-export function parseOptionalBooleanInput(value: string): boolean | undefined {
+/** true/1/yes/y/on or false/0/no/n/off, in any case; undefined for anything else. */
+export function parseBoolean(value: string): boolean | undefined {
 	const normalized = value.trim().toLowerCase();
 	if (TRUE_VALUES.has(normalized)) {
 		return true;
 	}
-	if (FALSE_VALUES.has(normalized)) {
-		return false;
-	}
-	return undefined;
+	return FALSE_VALUES.has(normalized) ? false : undefined;
 }
 
-export function parsePositiveIntegerInput(
-	value: string,
-	defaultValue: number,
-): number {
+export function parsePositiveInteger(value: string): number | undefined {
 	const normalized = value.trim();
-	if (!INTEGER_PATTERN.test(normalized)) {
-		return defaultValue;
-	}
-	const parsed = Number.parseInt(normalized, 10);
-	return parsed > 0 ? parsed : defaultValue;
+	const parsed = INTEGER_PATTERN.test(normalized)
+		? Number.parseInt(normalized, 10)
+		: 0;
+	return parsed > 0 ? parsed : undefined;
 }
 
-export function parseModelInputModes(
-	value: string,
-	defaultValue: ModelInputMode[],
-): ModelInputMode[] {
-	const modes = parseCsvInput(value).filter((mode): mode is ModelInputMode =>
+function parseModelInputModes(value: string): ModelInputMode[] {
+	const modes = parseCsv(value).filter((mode): mode is ModelInputMode =>
 		MODEL_INPUT_MODES.has(mode),
 	);
-	return modes.length > 0 ? modes : defaultValue;
+	return modes.length > 0 ? modes : [DEFAULTS.customModelInput];
+}
+
+function readCompat(readInput: InputReader): CustomProviderConfig["compat"] {
+	const compat = Object.fromEntries(
+		Object.entries(COMPAT_INPUTS).flatMap(([key, name]) => {
+			const value = parseBoolean(readInput(name));
+			return value === undefined ? [] : [[key, value]];
+		}),
+	);
+	return Object.keys(compat).length > 0 ? compat : undefined;
+}
+
+/** The single custom provider/model from the flat provider_* and model_* inputs; undefined without a base URL. */
+export function readCustomProviderConfig(
+	readInput: InputReader,
+): CustomProviderConfig | undefined {
+	const baseUrl = readInput("provider_base_url").trim();
+	if (!baseUrl) {
+		return undefined;
+	}
+	const apiKey = readInput("provider_api_key").trim();
+	const modelName = readInput("model_name").trim();
+	const compat = readCompat(readInput);
+	return {
+		baseUrl,
+		api: readInput("provider_api") || DEFAULTS.customProviderApi,
+		...(apiKey ? { apiKey } : {}),
+		authHeader:
+			parseBoolean(readInput("provider_auth_header")) ??
+			DEFAULTS.customProviderAuthHeader,
+		...(modelName ? { modelName } : {}),
+		reasoning:
+			parseBoolean(readInput("model_reasoning")) ??
+			DEFAULTS.customModelReasoning,
+		input: parseModelInputModes(readInput("model_input")),
+		contextWindow:
+			parsePositiveInteger(readInput("model_context_window")) ??
+			DEFAULTS.customModelContextWindow,
+		maxTokens:
+			parsePositiveInteger(readInput("model_max_tokens")) ??
+			DEFAULTS.customModelMaxTokens,
+		...(compat ? { compat } : {}),
+	};
+}
+
+export function readActionInputs(
+	readInput: InputReader,
+	env: Record<string, string | undefined> = process.env,
+): ActionInputs {
+	return {
+		triggerPhrase: readInput("trigger_phrase") || DEFAULTS.triggerPhrase,
+		allowedBots: parseCsv(readInput("allowed_bots")),
+		allowedUsers: parseCsv(readInput("allowed_users")),
+		allowedAssociations: parseCsv(
+			readInput("allowed_associations") ||
+				DEFAULTS.allowedAssociations.join(","),
+		),
+		provider: readInput("provider") || DEFAULTS.provider,
+		model: readInput("model") || DEFAULTS.model,
+		timeout: parsePositiveInteger(readInput("timeout")) ?? DEFAULTS.timeout,
+		githubToken: readInput("github_token") || env["GITHUB_TOKEN"],
+		apiKey: readInput("api_key") || undefined,
+		customProvider: readCustomProviderConfig(readInput),
+		promptTemplate: readInput("prompt_template") || undefined,
+		outputMode:
+			readInput("output_mode") === "output" ? "output" : DEFAULTS.outputMode,
+		prompt: readInput("prompt") || undefined,
+		prNumber: parsePositiveInteger(readInput("pr_number")),
+		pollInterval:
+			parsePositiveInteger(readInput("poll_interval")) ?? DEFAULTS.pollInterval,
+	};
 }

@@ -101,7 +101,7 @@ The action is built with TypeScript on [pi-durable](https://www.npmjs.com/packag
 | [`src/storage/git-storage.ts`](src/storage/git-storage.ts) | `GitStorage`: a pi-durable `Storage` whose log is a chain of commits on one ref |
 | [`src/storage/sync.ts`](src/storage/sync.ts) | `GitSync`: fetching a thread ref and pushing it (fast-forward only) at turn boundaries |
 | [`src/github.ts`](src/github.ts) | GitHub API client helpers |
-| [`src/inputs.ts`](src/inputs.ts) | GitHub Actions input parsing helpers |
+| [`src/inputs.ts`](src/inputs.ts) | Reading the action inputs (with their defaults) into `ActionInputs` |
 | [`src/context.ts`](src/context.ts) | Prompt building and trigger extraction |
 | [`src/security.ts`](src/security.ts) | Permission validation and input sanitization |
 | [`src/formatting.ts`](src/formatting.ts) | Response formatting utilities |
@@ -116,7 +116,7 @@ The action is built with TypeScript on [pi-durable](https://www.npmjs.com/packag
 Entry point that reads GitHub Actions inputs, creates dependencies, and invokes `run()`. This is the only file with side effects (reading environment, calling APIs).
 
 #### [`inputs.ts`](src/inputs.ts)
-Pure helpers for parsing GitHub Actions inputs (CSV allowlists, booleans, and positive integer timeouts). Kept separate from `index.ts` so input behavior can be unit tested without loading the GitHub Actions runtime.
+Reads every action input into `ActionInputs`, including the custom provider's `provider_*`/`model_*` inputs, falling back to [`defaults.ts`](src/defaults.ts) for empty or invalid values (CSV allowlists, booleans, positive integers). It takes the input reader as a parameter, so it is unit tested without loading the GitHub Actions runtime.
 
 #### [`run.ts`](src/run.ts)
 Main orchestration that:
@@ -137,8 +137,7 @@ Wraps a pi-durable `Harness` on `GitStorage`:
 #### [`github.ts`](src/github.ts)
 Provides a clean interface to GitHub APIs:
 - `extractTriggerInfo()`: Parses GitHub webhook payloads
-- `GitHubClient`: Interface for reactions, comments, and PR diffs
-- `addReaction()`: Helper to add reactions to comments or issues
+- `GitHubClient`: Interface for reactions (on the issue, an issue comment, or a review comment), comments, PRs and their diffs
 
 #### [`context.ts`](src/context.ts)
 Handles prompt construction:

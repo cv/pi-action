@@ -1,3 +1,5 @@
+import type { Trigger } from "./triggers.ts";
+
 export function hasTrigger(text: string, trigger: string): boolean {
 	return text.toLowerCase().includes(trigger.toLowerCase());
 }
@@ -50,22 +52,17 @@ interface DirectPIContext extends BasePIContext {
 
 export type PIContext = IssuePIContext | PullRequestPIContext | DirectPIContext;
 
-function getTypeDisplay(type: PIContext["type"]): string {
-	if (type === "pull_request") {
-		return "Pull Request";
-	}
-	if (type === "direct") {
-		return "Direct Task";
-	}
-	return "Issue";
-}
+const TYPE_DISPLAY: Record<PIContext["type"], string> = {
+	issue: "Issue",
+	pull_request: "Pull Request",
+	direct: "Direct Task",
+};
 
 export function renderTemplate(template: string, context: PIContext): string {
-	// Template variables that can be used in the custom template
 	const isDirect = context.type === "direct";
 	const variables = {
 		type: context.type,
-		type_display: getTypeDisplay(context.type),
+		type_display: TYPE_DISPLAY[context.type],
 		number: isDirect ? "0" : context.number.toString(),
 		title: context.title,
 		body: isDirect ? "" : context.body,
@@ -76,7 +73,6 @@ export function renderTemplate(template: string, context: PIContext): string {
 		trigger_comment: isDirect ? context.task : context.triggerComment,
 	};
 
-	// Replace all template variables
 	let rendered = template;
 	for (const [key, value] of Object.entries(variables)) {
 		const placeholder = new RegExp(`\\{\\{${key}\\}\\}`, "gu");
@@ -90,7 +86,6 @@ export function buildPrompt(
 	context: PIContext,
 	customTemplate?: string,
 ): string {
-	// If custom template is provided and not empty, use it
 	if (customTemplate?.trim()) {
 		return renderTemplate(customTemplate, context);
 	}
@@ -104,8 +99,7 @@ ${context.task}
 ${RUNNER_REQUIREMENTS}`;
 	}
 
-	// Default template (preserving backward compatibility)
-	let prompt = `# GitHub ${getTypeDisplay(context.type)} #${context.number}
+	let prompt = `# GitHub ${TYPE_DISPLAY[context.type]} #${context.number}
 
 ## Title
 ${context.title}
@@ -127,14 +121,11 @@ ${RUNNER_REQUIREMENTS}`;
 }
 
 /** A later comment on an existing thread: the conversation already has the issue's context. */
-export function formatFollowUp(input: {
-	author: string;
-	task: string;
-	url?: string;
-	reviewComment?: boolean;
-}): string {
+export function formatFollowUp(
+	trigger: Pick<Trigger, "author" | "source" | "task" | "url">,
+): string {
 	const verb =
-		input.reviewComment === true ? "commented on the diff" : "commented";
-	const where = input.url ? ` (${input.url})` : "";
-	return `**@${input.author}** ${verb}${where}:\n\n${input.task}`;
+		trigger.source === "review_comment" ? "commented on the diff" : "commented";
+	const where = trigger.url ? ` (${trigger.url})` : "";
+	return `**@${trigger.author.login}** ${verb}${where}:\n\n${trigger.task}`;
 }

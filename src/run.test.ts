@@ -1,71 +1,32 @@
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
-import { createModels } from "@earendil-works/pi-ai/models";
 import {
 	type FauxResponseStep,
 	fauxAssistantMessage,
-	fauxProvider,
 	fauxToolCall,
 } from "@earendil-works/pi-ai/providers/faux";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import type { ActionInputs } from "./inputs.ts";
 import { pushThread } from "./push.ts";
-import { type ActionDependencies, type ActionInputs, run } from "./run.ts";
+import { type ActionDependencies, run } from "./run.ts";
 import {
 	createActionInputs,
-	createLogger,
 	createComment,
+	createLogger,
 	createMockGitHubClient,
+	fauxModels,
+	git,
+	tempRemote,
 } from "./test-helpers.ts";
-import type { GitHubComment } from "./types.ts";
+import type { GitHubComment, GitHubReaction } from "./types.ts";
 
 const REF = "refs/pi/threads/42";
 const FIRST_COMMIT = /pi-durable: seq 1 /u;
 const COMMIT_ID = /^[0-9a-f]{40}$/u;
-const dirs: string[] = [];
-afterEach(() => {
-	for (const dir of dirs.splice(0)) {
-		rmSync(dir, { recursive: true, force: true });
-	}
-});
-const git = (cwd: string, ...args: string[]) =>
-	execFileSync("git", args, { cwd, encoding: "utf8" });
 
 /** A bare "GitHub" remote, a fresh runner checkout per run, a faux model, and a fake GitHub API. */
 function world() {
-	const root = mkdtempSync(join(tmpdir(), "pi-action-run-"));
-	dirs.push(root);
-	const remote = join(root, "remote.git");
-	git(root, "init", "-q", "--bare", "-b", "main", remote);
-	const seed = join(root, "seed");
-	git(root, "init", "-q", "-b", "main", seed);
-	git(
-		seed,
-		"-c",
-		"user.name=t",
-		"-c",
-		"user.email=t@t",
-		"commit",
-		"-q",
-		"--allow-empty",
-		"-m",
-		"init",
-	);
-	git(seed, "push", "-q", remote, "main");
-	let runners = 0;
-	const checkout = () => {
-		runners += 1;
-		const dir = join(root, `runner-${runners}`);
-		git(root, "clone", "-q", "--depth", "1", `file://${remote}`, dir);
-		return dir;
-	};
-	const faux = fauxProvider();
-	const models = createModels();
-	models.setProvider(faux.provider);
-	const model = faux.getModel();
+	const { remote, clone } = tempRemote();
+	const { faux, models, model } = fauxModels();
 	const comments: GitHubComment[] = [];
 	const gh = createMockGitHubClient(comments);
 	let nextId = 100;
@@ -81,31 +42,36 @@ function world() {
 		comments.push(c);
 		return c;
 	};
+	/** The comment IDs that got `reaction`. */
+	const reacted = (reaction: GitHubReaction) =>
+		vi
+			.mocked(gh.addReaction)
+			.mock.calls.filter(([, r]) => r === reaction)
+			.map(([target]) => target.commentId);
 	const deps = (
 		trigger: GitHubComment | undefined,
 		inputs: Partial<ActionInputs> = {},
 		payload?: Record<string, unknown>,
 	): ActionDependencies => ({
 		inputs: createActionInputs({
-			modelConfig: { provider: model.provider, model: model.id, timeout: 30 },
+			provider: model.provider,
+			model: model.id,
+			timeout: 30,
 			pollInterval: 0.05,
 			...inputs,
 		}),
-		context: {
-			payload: payload ?? {
-				comment: trigger,
-				issue: {
-					number: 42,
-					title: "Fix the thing",
-					body: "It is broken",
-					user: { login: "o", type: "User" },
-				},
+		payload: payload ?? {
+			comment: trigger,
+			issue: {
+				number: 42,
+				title: "Fix the thing",
+				body: "It is broken",
+				user: { login: "o", type: "User" },
 			},
-			repo: { owner: "o", name: "r" },
 		},
 		createClient: () => gh,
 		log: createLogger(),
-		cwd: checkout(),
+		cwd: clone("--depth", "1"),
 		createModels: async () => models,
 		env: {
 			GITHUB_REPOSITORY: "o/r",
@@ -114,7 +80,7 @@ function world() {
 			GITHUB_ACTOR: "dispatcher",
 		},
 	});
-	return { remote, faux, gh, comment, deps, comments };
+	return { remote, faux, gh, comment, deps, reacted };
 }
 
 const userTexts = (messages: { role: string; content: unknown }[]) =>
@@ -139,16 +105,8 @@ describe("run (durable)", () => {
 		expect(w.gh.posted).toHaveLength(1);
 		expect(w.gh.posted[0]).toContain("### 🤖 pi Response\n\nFixed it.");
 		expect(w.gh.posted[0]).toContain(REF);
-		expect(w.gh.addReactionToComment).toHaveBeenCalledWith(
-			trigger.id,
-			"eyes",
-			"comment",
-		);
-		expect(w.gh.addReactionToComment).toHaveBeenCalledWith(
-			trigger.id,
-			"rocket",
-			"comment",
-		);
+		expect(w.reacted("eyes")).toStrictEqual([trigger.id]);
+		expect(w.reacted("rocket")).toStrictEqual([trigger.id]);
 		const log = git(w.remote, "log", "--format=%s", REF);
 		expect(log).toMatch(FIRST_COMMIT);
 	});
@@ -186,11 +144,7 @@ describe("run (durable)", () => {
 
 		await run(w.deps(current));
 
-		const rockets = vi
-			.mocked(w.gh.addReactionToComment)
-			.mock.calls.filter(([, reaction]) => reaction === "rocket")
-			.map(([id]) => id);
-		expect(rockets).toStrictEqual(
+		expect(w.reacted("rocket")).toStrictEqual(
 			expect.arrayContaining([missed.id, current.id]),
 		);
 		expect(w.gh.posted.length).toBeGreaterThanOrEqual(2);
@@ -225,11 +179,7 @@ describe("run (durable)", () => {
 		expect(contextAtEnd.some((t) => t.includes("**@bob** commented"))).toBe(
 			true,
 		);
-		expect(w.gh.addReactionToComment).toHaveBeenCalledWith(
-			late?.id,
-			"rocket",
-			"comment",
-		);
+		expect(w.reacted("rocket")).toContain(late?.id);
 	});
 
 	it("aborts at the timeout, reports it, and still saves the thread", async () => {
@@ -240,18 +190,13 @@ describe("run (durable)", () => {
 			}),
 		]);
 		const trigger = w.comment("@pi run forever");
-		const deps = w.deps(trigger);
-		deps.inputs.modelConfig.timeout = 0.3;
+		const deps = w.deps(trigger, { timeout: 0.3 });
 
 		await run(deps);
 
 		expect(w.gh.posted).toHaveLength(1);
 		expect(w.gh.posted[0]).toContain("Timeout after 0.3 seconds");
-		expect(w.gh.addReactionToComment).toHaveBeenCalledWith(
-			trigger.id,
-			"confused",
-			"comment",
-		);
+		expect(w.reacted("confused")).toStrictEqual([trigger.id]);
 		expect(git(w.remote, "rev-parse", REF).trim()).toMatch(COMMIT_ID);
 	}, 20_000);
 
@@ -278,18 +223,16 @@ describe("run (durable)", () => {
 
 	it("ignores triggers from users without write access", async () => {
 		const w = world();
-		const deps = w.deps(w.comment("@pi hack", { author_association: "NONE" }));
-		await run(deps);
+		await run(w.deps(w.comment("@pi hack", { author_association: "NONE" })));
 		expect(w.gh.posted).toHaveLength(0);
-		expect(w.gh.addReactionToComment).not.toHaveBeenCalled();
+		expect(w.gh.addReaction).not.toHaveBeenCalled();
 	});
 
 	it("reports an unknown model", async () => {
 		const w = world();
-		const deps = w.deps(w.comment("@pi hi"), {
-			modelConfig: { provider: "nope", model: "missing", timeout: 30 },
-		});
-		await run(deps);
+		await run(
+			w.deps(w.comment("@pi hi"), { provider: "nope", model: "missing" }),
+		);
 		expect(w.gh.posted[0]).toContain("Model not found: nope/missing");
 	});
 });
@@ -301,7 +244,7 @@ describe("pushThread (the always() step)", () => {
 		const deps = w.deps(w.comment("@pi go"));
 		await run(deps);
 		const log = { info: vi.fn(), warning: vi.fn() };
-		const { payload } = deps.context;
+		const { payload } = deps;
 
 		// Simulate a step killed before its final push: rewind the remote ref.
 		const tip = git(deps.cwd, "rev-parse", REF).trim();
@@ -348,7 +291,7 @@ describe("run (durable) with main's modes", () => {
 			response: "All good.",
 		});
 		expect(w.gh.posted).toHaveLength(0);
-		expect(w.gh.addReactionToComment).not.toHaveBeenCalled();
+		expect(w.gh.addReaction).not.toHaveBeenCalled();
 		expect(git(w.remote, "rev-parse", REF).trim()).toMatch(COMMIT_ID);
 	});
 
@@ -376,8 +319,6 @@ describe("run (durable) with main's modes", () => {
 			number: 42,
 			title: "Add feature",
 			body: "Adds it",
-			user: { login: "o", type: "User" },
-			author_association: "OWNER",
 		});
 		let first: string[] = [];
 		w.faux.setResponses([
@@ -431,7 +372,8 @@ describe("run (durable) with main's modes", () => {
 		const w = world();
 		const deps = w.deps(w.comment("@pi hi"), {
 			outputMode: "output",
-			modelConfig: { provider: "nope", model: "missing", timeout: 30 },
+			provider: "nope",
+			model: "missing",
 		});
 		await run(deps);
 		expect(outputs(deps)).toMatchObject({ success: "false" });

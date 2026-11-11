@@ -2,220 +2,62 @@ import { describe, expect, it } from "vitest";
 
 import { sanitizeInput, validatePermissions } from "./security.ts";
 
-function createSecurityContext(
-	overrides: Parameters<typeof validatePermissions>[0],
-): Parameters<typeof validatePermissions>[0] {
-	return overrides;
-}
+const DEFAULT = {
+	allowedBots: [],
+	allowedUsers: [],
+	allowedAssociations: ["OWNER", "MEMBER"],
+};
+const person = (login = "user") => ({ login, type: "User" as const });
+const bot = (login: string) => ({ login, type: "Bot" as const });
 
 describe("validatePermissions", () => {
-	const defaultAssociations = ["OWNER", "MEMBER"];
-
-	it("allows OWNER", () => {
-		expect(
-			validatePermissions(
-				createSecurityContext({
-					authorAssociation: "OWNER",
-					authorLogin: "user",
-					isBot: false,
-					allowedBots: [],
-					allowedUsers: [],
-					allowedAssociations: defaultAssociations,
-				}),
-			),
-		).toBe(true);
+	it.each([
+		["OWNER", true],
+		["MEMBER", true],
+		["COLLABORATOR", false],
+		["CONTRIBUTOR", false],
+		["NONE", false],
+		[" member ", true],
+	])("by default, %s is allowed: %s", (association, allowed) => {
+		expect(validatePermissions(person(), association, DEFAULT)).toBe(allowed);
 	});
 
-	it("allows MEMBER", () => {
-		expect(
-			validatePermissions(
-				createSecurityContext({
-					authorAssociation: "MEMBER",
-					authorLogin: "user",
-					isBot: false,
-					allowedBots: [],
-					allowedUsers: [],
-					allowedAssociations: defaultAssociations,
-				}),
-			),
-		).toBe(true);
+	it("allows the configured associations only", () => {
+		const collaborators = {
+			...DEFAULT,
+			allowedAssociations: ["OWNER", "MEMBER", "COLLABORATOR"],
+		};
+		expect(validatePermissions(person(), "COLLABORATOR", collaborators)).toBe(
+			true,
+		);
+		const ownersOnly = { ...DEFAULT, allowedAssociations: ["owner"] };
+		expect(validatePermissions(person(), "OWNER", ownersOnly)).toBe(true);
+		expect(validatePermissions(person(), "MEMBER", ownersOnly)).toBe(false);
 	});
 
-	it("denies COLLABORATOR by default", () => {
-		expect(
-			validatePermissions(
-				createSecurityContext({
-					authorAssociation: "COLLABORATOR",
-					authorLogin: "user",
-					isBot: false,
-					allowedBots: [],
-					allowedUsers: [],
-					allowedAssociations: defaultAssociations,
-				}),
-			),
-		).toBe(false);
+	it("allows bots in allowed_bots only, whatever their association", () => {
+		const allow = { ...DEFAULT, allowedBots: [" @Dependabot[bot] "] };
+		expect(validatePermissions(bot("dependabot[bot]"), "NONE", allow)).toBe(
+			true,
+		);
+		expect(validatePermissions(bot("evil[bot]"), "OWNER", allow)).toBe(false);
 	});
 
-	it("allows COLLABORATOR when configured", () => {
-		expect(
-			validatePermissions(
-				createSecurityContext({
-					authorAssociation: "COLLABORATOR",
-					authorLogin: "user",
-					isBot: false,
-					allowedBots: [],
-					allowedUsers: [],
-					allowedAssociations: ["OWNER", "MEMBER", "COLLABORATOR"],
-				}),
-			),
-		).toBe(true);
-	});
-
-	it("denies CONTRIBUTOR", () => {
-		expect(
-			validatePermissions(
-				createSecurityContext({
-					authorAssociation: "CONTRIBUTOR",
-					authorLogin: "user",
-					isBot: false,
-					allowedBots: [],
-					allowedUsers: [],
-					allowedAssociations: defaultAssociations,
-				}),
-			),
-		).toBe(false);
-	});
-
-	it("denies NONE", () => {
-		expect(
-			validatePermissions(
-				createSecurityContext({
-					authorAssociation: "NONE",
-					authorLogin: "user",
-					isBot: false,
-					allowedBots: [],
-					allowedUsers: [],
-					allowedAssociations: defaultAssociations,
-				}),
-			),
-		).toBe(false);
-	});
-
-	it("allows bots in allowlist", () => {
-		expect(
-			validatePermissions(
-				createSecurityContext({
-					authorAssociation: "NONE",
-					authorLogin: "dependabot[bot]",
-					isBot: true,
-					allowedBots: ["dependabot[bot]", "renovate[bot]"],
-					allowedUsers: [],
-					allowedAssociations: defaultAssociations,
-				}),
-			),
-		).toBe(true);
-	});
-
-	it("denies bots not in allowlist", () => {
-		expect(
-			validatePermissions(
-				createSecurityContext({
-					authorAssociation: "NONE",
-					authorLogin: "evil-bot",
-					isBot: true,
-					allowedBots: ["dependabot[bot]"],
-					allowedUsers: [],
-					allowedAssociations: defaultAssociations,
-				}),
-			),
-		).toBe(false);
-	});
-
-	it("allows explicit users regardless of association", () => {
-		expect(
-			validatePermissions(
-				createSecurityContext({
-					authorAssociation: "NONE",
-					authorLogin: "Cv",
-					isBot: false,
-					allowedBots: [],
-					allowedUsers: ["@cv"],
-					allowedAssociations: ["OWNER"],
-				}),
-			),
-		).toBe(true);
-	});
-
-	it("denies owners not present in explicit user allowlist", () => {
-		expect(
-			validatePermissions(
-				createSecurityContext({
-					authorAssociation: "OWNER",
-					authorLogin: "not-allowed",
-					isBot: false,
-					allowedBots: [],
-					allowedUsers: ["cv"],
-					allowedAssociations: defaultAssociations,
-				}),
-			),
-		).toBe(false);
-	});
-
-	it("respects tightened allowed associations", () => {
-		expect(
-			validatePermissions(
-				createSecurityContext({
-					authorAssociation: "MEMBER",
-					authorLogin: "user",
-					isBot: false,
-					allowedBots: [],
-					allowedUsers: [],
-					allowedAssociations: ["OWNER"],
-				}),
-			),
-		).toBe(false);
-	});
-
-	it("normalizes bot allowlist entries", () => {
-		expect(
-			validatePermissions(
-				createSecurityContext({
-					authorAssociation: "NONE",
-					authorLogin: "dependabot[bot]",
-					isBot: true,
-					allowedBots: ["@Dependabot[bot]"],
-					allowedUsers: [],
-					allowedAssociations: defaultAssociations,
-				}),
-			),
-		).toBe(true);
+	it("allows exactly the allowed_users when set, regardless of association", () => {
+		const allow = { ...DEFAULT, allowedUsers: ["@Alice"] };
+		expect(validatePermissions(person("alice"), "NONE", allow)).toBe(true);
+		expect(validatePermissions(person("bob"), "OWNER", allow)).toBe(false);
 	});
 });
 
 describe("sanitizeInput", () => {
-	it("removes HTML comments", () => {
-		expect(sanitizeInput("before<!-- hidden -->after")).toBe("beforeafter");
-	});
-
-	it("removes multiline HTML comments", () => {
-		expect(sanitizeInput("before<!-- \nhidden\n -->after")).toBe("beforeafter");
-	});
-
-	it("removes invisible characters", () => {
-		expect(sanitizeInput("hello\u200Bworld")).toBe("helloworld");
-		expect(sanitizeInput("hello\u200Cworld")).toBe("helloworld");
-		expect(sanitizeInput("hello\u200Dworld")).toBe("helloworld");
-		expect(sanitizeInput("hello\uFEFFworld")).toBe("helloworld");
-		expect(sanitizeInput("hello\u00ADworld")).toBe("helloworld");
-	});
-
-	it("trims whitespace", () => {
-		expect(sanitizeInput("  hello  ")).toBe("hello");
-	});
-
-	it("preserves normal content", () => {
-		expect(sanitizeInput("@pi please review this code")).toBe(
-			"@pi please review this code",
-		);
+	it.each([
+		["Hello <!-- hidden --> world", "Hello  world"],
+		["a<!--\nmulti\nline\n-->b", "ab"],
+		["in\u200Bvis\u200C\u200D\uFEFFi\u00ADble", "invisible"],
+		["  padded  ", "padded"],
+		["@pi fix **this** in `code`", "@pi fix **this** in `code`"],
+	])("sanitizes %o", (input, output) => {
+		expect(sanitizeInput(input)).toBe(output);
 	});
 });
