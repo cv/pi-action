@@ -30,10 +30,6 @@ export interface GitStorageOptions {
 	readonly ref: string;
 	/** Commit author and committer. */
 	readonly author?: Signature;
-	/** Append to `logs/<ref>`, as git does for branches. Default false (git doesn't log custom refs either). */
-	readonly reflog?: boolean;
-	/** Open without writing; `commit()` rejects. */
-	readonly readOnly?: boolean;
 	/**
 	 * Called after each stored commit() with the new tip and the batches it added, e.g. to push at turn boundaries
 	 * (see `isTurnBoundary`). Must not throw; errors are swallowed.
@@ -58,12 +54,6 @@ class GitStorageCorruptionError extends Error {
 		this.name = "GitStorageCorruptionError";
 	}
 }
-class GitStorageReadOnlyError extends Error {
-	constructor() {
-		super("Git storage is open read-only");
-		this.name = "GitStorageReadOnlyError";
-	}
-}
 export class GitStoragePoisonedError extends Error {
 	constructor(cause: unknown) {
 		super("Git storage is poisoned and must be reopened", { cause });
@@ -75,8 +65,6 @@ export class GitStorage implements Storage {
 	readonly repo: GitRepo;
 	readonly ref: string;
 	private readonly author: Signature;
-	private readonly reflog: boolean;
-	private readonly readOnly: boolean;
 	private readonly onCommit: GitStorageOptions["onCommit"];
 	private readonly memory = new MemoryStorage();
 	private head: string | undefined;
@@ -91,8 +79,6 @@ export class GitStorage implements Storage {
 		this.repo = repo;
 		this.ref = options.ref;
 		this.author = options.author ?? DEFAULT_AUTHOR;
-		this.reflog = options.reflog ?? false;
-		this.readOnly = options.readOnly ?? false;
 		this.onCommit = options.onCommit;
 	}
 
@@ -173,9 +159,6 @@ export class GitStorage implements Storage {
 		context: Context,
 	): ReturnType<Storage["commit"]> {
 		this.assertUsable();
-		if (this.readOnly) {
-			throw new GitStorageReadOnlyError();
-		}
 		const previous = this.queue;
 		const turn = Promise.withResolvers<undefined>();
 		this.queue = turn.promise;
@@ -256,12 +239,7 @@ export class GitStorage implements Storage {
 		if (parent === undefined) {
 			return;
 		}
-		await this.repo.updateRef(
-			this.ref,
-			parent,
-			this.head,
-			this.reflog ? `pi-durable: seq ${batches.at(-1)?.seq}` : undefined,
-		);
+		await this.repo.updateRef(this.ref, parent, this.head);
 		this.head = parent;
 	}
 

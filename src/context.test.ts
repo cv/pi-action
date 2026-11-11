@@ -118,6 +118,15 @@ describe("renderTemplate", () => {
 		expect(result).toBe("{{unknown}} Test Issue");
 	});
 
+	it("inserts values literally, in one pass", () => {
+		const result = renderTemplate("{{title}} | {{body}}", {
+			...context,
+			title: "Cost: $& $1 $$",
+			body: "see {{title}} and {{diff}}",
+		});
+		expect(result).toBe("Cost: $& $1 $$ | see {{title}} and {{diff}}");
+	});
+
 	it("handles multiple occurrences of same variable", () => {
 		const template = "{{title}} - {{title}}";
 		const result = renderTemplate(template, context);

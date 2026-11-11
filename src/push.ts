@@ -3,18 +3,16 @@
 import { info, warning } from "@actions/core";
 import { context } from "@actions/github";
 
-import { GitSync, runGit } from "./storage/sync.ts";
+import { parsePositiveInteger } from "./inputs.ts";
+import { git } from "./storage/git.ts";
+import { GitSync } from "./storage/sync.ts";
 import { threadRef } from "./thread.ts";
+import type { Log } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
 
 const ISSUE_KEY = "issue";
 const PULL_REQUEST_KEY = "pull_request";
 const PR_NUMBER_ENV = "INPUT_PR_NUMBER";
-
-interface PushLogger {
-	info: (msg: string) => void;
-	warning: (msg: string) => void;
-}
 
 function threadNumber(payload: Record<string, unknown>): number | undefined {
 	const subject: unknown = payload[ISSUE_KEY] ?? payload[PULL_REQUEST_KEY];
@@ -28,19 +26,18 @@ function threadNumber(payload: Record<string, unknown>): number | undefined {
 export async function pushThread(
 	payload: Record<string, unknown>,
 	cwd: string,
-	log: PushLogger,
+	log: Log,
 	prNumber?: number,
 ): Promise<"pushed" | "up-to-date" | "nothing" | "failed"> {
-	const number = threadNumber(payload) ?? prNumber;
+	// The main step works on pr_number's thread when it is set, whatever the event.
+	const number = prNumber ?? threadNumber(payload);
 	if (number === undefined) {
 		return "nothing";
 	}
 	const ref = threadRef(number);
 	let tip: string;
 	try {
-		tip = (
-			await runGit(["rev-parse", "--verify", "-q", ref], cwd)
-		).stdout.trim();
+		tip = (await git(cwd, ["rev-parse", "--verify", "-q", ref])).trim();
 	} catch {
 		log.info(`${ref}: nothing to push`);
 		return "nothing";
@@ -60,13 +57,12 @@ export async function pushThread(
 	}
 }
 
-const dispatchedPr = Number.parseInt(process.env[PR_NUMBER_ENV] ?? "", 10);
 if (process.argv[1]?.endsWith("push.ts") === true) {
 	pushThread(
 		context.payload,
 		process.cwd(),
 		{ info, warning },
-		Number.isNaN(dispatchedPr) ? undefined : dispatchedPr,
+		parsePositiveInteger(process.env[PR_NUMBER_ENV] ?? ""),
 	).catch((error: unknown) => {
 		warning(getErrorMessage(error));
 	});

@@ -3,24 +3,14 @@ import { join } from "node:path";
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { ConversationId } from "@earendil-works/pi-durable";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 
 import { tempRepo } from "../test-helpers.ts";
 import { GitStorage } from "./git-storage.ts";
 import { assertRefName, GitRepo, RefConflictError } from "./git.ts";
 
 const author = { name: "t", email: "t@t" };
-const cleanups: (() => void)[] = [];
-afterEach(() => {
-	for (const cleanup of cleanups.splice(0)) {
-		cleanup();
-	}
-});
-function repo() {
-	const r = tempRepo();
-	cleanups.push(r.cleanup);
-	return r;
-}
+const repo = tempRepo;
 async function commitChain(git: GitRepo, files: Record<string, string>[]) {
 	let parent: string | undefined;
 	// Building a chain: each commit is the parent of the next.
@@ -50,7 +40,6 @@ const NO_BATCH = /has no batch\.json/u;
 const MALFORMED = /Malformed batch\.json/u;
 const UNSUPPORTED = /Unsupported or invalid batch/u;
 const MERGE = /Merge commit/u;
-const READ_ONLY = /read-only/u;
 
 describe("assertRefName", () => {
 	it.each(["refs/pi/threads/1", "refs/heads/feature/x"])(
@@ -95,7 +84,7 @@ describe("GitRepo", () => {
 		);
 		const linked = join(r.dir, "..", `${r.dir.split("/").at(-1)}-wt`);
 		r.git("worktree", "add", "-q", linked);
-		cleanups.push(() => {
+		onTestFinished(() => {
 			rmSync(linked, { recursive: true, force: true });
 		});
 		r.git("init", "-q", "--bare", "b.git");
@@ -153,10 +142,7 @@ describe("GitRepo", () => {
 			await commitChain(git, [{ f: "1" }]),
 			await commitChain(git, [{ f: "2" }]),
 		];
-		await git.updateRef("refs/pi/w", one, undefined, "first");
-		expect(r.git("reflog", "show", "--format=%gs", "refs/pi/w").trim()).toBe(
-			"first",
-		);
+		await git.updateRef("refs/pi/w", one, undefined);
 		await expect(git.updateRef("refs/pi/w", two, undefined)).rejects.toThrow(
 			RefConflictError,
 		);
@@ -262,42 +248,13 @@ describe("GitStorage corruption and modes", () => {
 		).rejects.toThrow(MERGE);
 	});
 
-	it("can open read-only and with a reflog", async () => {
-		const r = repo();
-		const writer = await GitStorage.open({
-			repo: r.dir,
+	it("closes once and refuses use after closing", async () => {
+		const storage = await GitStorage.open({
+			repo: repo().dir,
 			ref: "refs/pi/m",
-			reflog: true,
 		});
-		const id = await writer.mintId<ConversationId>();
-		await writer.commit(
-			[
-				[
-					{
-						type: "conversation",
-						value: { id, ownership: { kind: "ownerless" } } as never,
-					},
-				],
-			],
-			() => undefined,
-			ctx,
-		);
-		await writer.close(ctx);
-		await writer.close(ctx);
-		expect(r.git("reflog", "show", "--format=%gs", "refs/pi/m").trim()).toBe(
-			"pi-durable: seq 1",
-		);
-
-		const reader = await GitStorage.open({
-			repo: r.dir,
-			ref: "refs/pi/m",
-			readOnly: true,
-		});
-		await expect(reader.conversation(id, ctx)).resolves.toBeDefined();
-		await expect(reader.commit([[]], () => undefined, ctx)).rejects.toThrow(
-			READ_ONLY,
-		);
-		await reader.close(ctx);
-		await expect(reader.mintId()).rejects.toThrow("closed");
+		await storage.close(ctx);
+		await storage.close(ctx);
+		await expect(storage.mintId()).rejects.toThrow("closed");
 	});
 });

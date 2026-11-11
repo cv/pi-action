@@ -1,58 +1,43 @@
-/**
- * Response formatting utilities for consistent GitHub comment formatting
- */
+// The comments pi-action posts, and existing PR review comments as prompt context.
+import type { GitHubComment } from "./types.ts";
 
-import type { PullRequestReviewComment } from "./types.ts";
-
-export interface CommentFooter {
-	/** The thread's ref, e.g. refs/pi/threads/42. */
-	ref?: string | undefined;
-}
-
-function footer(info: CommentFooter | undefined): string {
-	return info?.ref
-		? `\n\n---\n🧵 Thread state: \`${info.ref}\` (\`git fetch origin ${info.ref}\`)`
+/** `ref`, the thread's ref (e.g. refs/pi/threads/42), adds a footer saying where the thread is stored. */
+function footer(ref: string | undefined): string {
+	return ref
+		? `\n\n---\n🧵 Thread state: \`${ref}\` (\`git fetch origin ${ref}\`)`
 		: "";
 }
 
-export function formatSuccessComment(
-	response: string,
-	info?: CommentFooter,
-): string {
-	return `### 🤖 pi Response\n\n${response}${footer(info)}`;
+export function formatSuccessComment(response: string, ref?: string): string {
+	return `### 🤖 pi Response\n\n${response}${footer(ref)}`;
 }
 
-export function formatErrorComment(
-	error: string,
-	info?: CommentFooter,
-): string {
-	return `### ❌ pi Error\n\nFailed to process request: ${error}${footer(info)}`;
+export function formatErrorComment(error: string, ref?: string): string {
+	return `### ❌ pi Error\n\nFailed to process request: ${error}${footer(ref)}`;
 }
 
-export function formatReviewComments(
-	comments: PullRequestReviewComment[],
-): string {
+export function formatReviewComments(comments: GitHubComment[]): string {
 	if (comments.length === 0) {
 		return "";
 	}
-
 	const sections: string[] = [
 		"## Existing PR Review Comments",
 		"",
 		"These comments were already present on the PR. Do not re-fetch them unless you need newer comments.",
 		"",
 	];
-
 	for (const comment of comments) {
-		const author = comment.user.login;
+		const author = comment.user?.login ?? "ghost";
 		const [date = ""] = new Date(comment.created_at).toISOString().split("T");
 		const location =
-			comment.path && comment.line !== undefined
+			comment.path && typeof comment.line === "number"
 				? ` (${comment.path}:${comment.line})`
 				: "";
-
-		sections.push(`**${author}** on ${date}${location}:`, comment.body, "");
+		sections.push(
+			`**${author}** on ${date}${location}:`,
+			comment.body ?? "",
+			"",
+		);
 	}
-
 	return sections.join("\n");
 }

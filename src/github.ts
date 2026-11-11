@@ -10,35 +10,16 @@ import type {
 	GitHubReaction,
 	GitHubUser,
 	OctokitClient,
-	PullRequestReviewComment,
 	RepoRef,
 	TriggerInfo,
 	TriggerSource,
 } from "./types.ts";
-
-export interface GitHubContext {
-	repo: RepoRef;
-}
 
 type SupportedWebhookPayload =
 	| IssueCommentCreatedEvent
 	| IssuesOpenedEvent
 	| PullRequestOpenedEvent
 	| PullRequestReviewCommentCreatedEvent;
-
-type TriggerSubject = SupportedWebhookPayload extends infer Payload
-	? Payload extends { issue: infer Issue }
-		? Issue
-		: Payload extends { pull_request: infer PullRequest }
-			? PullRequest
-			: never
-	: never;
-
-type TriggerComment = SupportedWebhookPayload extends infer Payload
-	? Payload extends { comment: infer Comment }
-		? Comment
-		: never
-	: never;
 
 /** The payload comes from outside: check the parts we read instead of trusting the webhook types. */
 function isSupportedWebhookPayload(
@@ -65,98 +46,60 @@ function hasAuthor(value: unknown): boolean {
 	);
 }
 
-function getTriggerSubject(payload: SupportedWebhookPayload): TriggerSubject {
-	return "pull_request" in payload ? payload.pull_request : payload.issue;
-}
-
-function getTriggerComment(
-	payload: SupportedWebhookPayload,
-): TriggerComment | undefined {
-	return "comment" in payload ? payload.comment : undefined;
-}
-
-function isPullRequestTrigger(
-	payload: SupportedWebhookPayload,
-	subject: TriggerSubject,
-): boolean {
-	return "pull_request" in payload || "pull_request" in subject;
-}
-
-function getTriggerSource(
-	payload: SupportedWebhookPayload,
-	comment: TriggerComment | undefined,
-): TriggerSource {
-	if (!comment) {
-		return "body";
-	}
-	// Review comments arrive with pull_request (and no issue) and belong to a review.
-	return "issue" in payload ? "comment" : "review_comment";
-}
-
 export function extractTriggerInfo(
-	payload: Record<string, unknown>,
+	event: Record<string, unknown>,
 ): TriggerInfo | null {
-	if (!isSupportedWebhookPayload(payload)) {
+	if (!isSupportedWebhookPayload(event)) {
 		return null;
 	}
-
-	const subject = getTriggerSubject(payload);
-	const comment = getTriggerComment(payload);
-	const triggerText = comment?.body ?? subject.body ?? "";
-	const author = comment?.user ?? subject.user;
-	const authorAssociation =
-		comment?.author_association ?? subject.author_association;
-
+	const payload: SupportedWebhookPayload = event;
+	const subject =
+		"pull_request" in payload ? payload.pull_request : payload.issue;
+	const comment = "comment" in payload ? payload.comment : undefined;
+	const origin = comment ?? subject;
+	// Review comments arrive with pull_request (and no issue) and belong to a review.
+	let source: TriggerSource = "body";
+	if (comment) {
+		source = "issue" in payload ? "comment" : "review_comment";
+	}
+	const triggerText = origin.body ?? "";
 	if (triggerText === "") {
 		return null;
 	}
-
-	const origin = comment ?? subject;
 	return {
-		isCommentEvent: Boolean(comment),
 		triggerText,
-		author,
-		authorAssociation,
+		author: origin.user,
+		authorAssociation: origin.author_association,
 		issueNumber: subject.number,
 		issueTitle: subject.title,
 		issueBody: subject.body ?? "",
 		...(comment ? { commentId: comment.id } : {}),
-		isPullRequest: isPullRequestTrigger(payload, subject),
-		source: getTriggerSource(payload, comment),
+		isPullRequest: "pull_request" in payload || "pull_request" in subject,
+		source,
 		...(origin.created_at ? { createdAt: origin.created_at } : {}),
 		...(origin.html_url ? { url: origin.html_url } : {}),
 	};
 }
 
-interface PostedComment {
-	id: number;
-	url: string;
-}
-
-interface PullRequestSummary {
-	number: number;
-	title: string;
-	body: string;
-	user: GitHubUser;
-	author_association: string;
-}
+/** What a reaction goes on: the comment, or the issue/PR itself for a body trigger. */
+export type ReactionTarget = Pick<
+	TriggerInfo,
+	"source" | "issueNumber" | "commentId"
+>;
 
 export interface GitHubClient {
-	addReactionToComment: (
-		commentId: number,
+	addReaction: (
+		target: ReactionTarget,
 		reaction: GitHubReaction,
-		source?: TriggerSource,
 	) => Promise<void>;
-	addReactionToIssue: (
+	createComment: (
 		issueNumber: number,
-		reaction: GitHubReaction,
-	) => Promise<void>;
-	createComment: (issueNumber: number, body: string) => Promise<PostedComment>;
-	getPullRequest: (pullNumber: number) => Promise<PullRequestSummary>;
-	getPullRequestDiff: (pullNumber: number) => Promise<string>;
-	getPullRequestReviewComments: (
+		body: string,
+	) => Promise<{ id: number; url: string }>;
+	getPullRequest: (
 		pullNumber: number,
-	) => Promise<PullRequestReviewComment[]>;
+	) => Promise<{ number: number; title: string; body: string }>;
+	getPullRequestDiff: (pullNumber: number) => Promise<string>;
 	/** Every comment on an issue or PR conversation, oldest first; `since` filters by last update. */
 	listIssueComments: (
 		issueNumber: number,
@@ -176,17 +119,22 @@ export function toUserType(type: string | undefined): GitHubUser["type"] {
 
 const PAGE_SIZE = 100;
 
-function pageParams(since: string | undefined, page: number) {
-	return { ...(since ? { since } : {}), per_page: PAGE_SIZE, page };
-}
-
 async function listAll(
-	fetchPage: (page: number) => Promise<{ data: GitHubComment[] }>,
+	since: string | undefined,
+	fetchPage: (params: {
+		since?: string;
+		per_page: number;
+		page: number;
+	}) => Promise<{ data: GitHubComment[] }>,
 ): Promise<GitHubComment[]> {
 	const all: GitHubComment[] = [];
 	for (let page = 1; ; page += 1) {
 		// oxlint-disable-next-line eslint/no-await-in-loop -- pages are fetched until a short one
-		const { data } = await fetchPage(page);
+		const { data } = await fetchPage({
+			...(since ? { since } : {}),
+			per_page: PAGE_SIZE,
+			page,
+		});
 		all.push(...data);
 		if (data.length < PAGE_SIZE) {
 			return all;
@@ -194,58 +142,30 @@ async function listAll(
 	}
 }
 
-function toReviewComment(comment: GitHubComment): PullRequestReviewComment {
-	return {
-		id: comment.id,
-		body: comment.body ?? "",
-		user: {
-			login: comment.user?.login ?? "ghost",
-			type: toUserType(comment.user?.type),
-		},
-		...(comment.path ? { path: comment.path } : {}),
-		...(typeof comment.line === "number" ? { line: comment.line } : {}),
-		created_at: comment.created_at,
-	};
-}
-
 export function createGitHubClient(
 	octokit: OctokitClient,
-	context: GitHubContext,
+	{ owner, name: repo }: RepoRef,
 ): GitHubClient {
-	const { owner, name: repo } = context.repo;
-	const listReviewComments = async (pullNumber: number, since?: string) =>
-		listAll(async (page) =>
-			octokit.rest.pulls.listReviewComments({
-				owner,
-				repo,
-				pull_number: pullNumber,
-				...pageParams(since, page),
-			}),
-		);
-
+	const { reactions, issues, pulls } = octokit.rest;
 	return {
-		async addReactionToComment(
-			commentId: number,
-			reaction: GitHubReaction,
-			source: TriggerSource = "comment",
-		) {
-			const params = { owner, repo, comment_id: commentId, content: reaction };
+		async addReaction({ source, issueNumber, commentId }, content) {
+			if (source === "body" || commentId === undefined) {
+				await reactions.createForIssue({
+					owner,
+					repo,
+					issue_number: issueNumber,
+					content,
+				});
+				return;
+			}
+			const params = { owner, repo, comment_id: commentId, content };
 			await (source === "review_comment"
-				? octokit.rest.reactions.createForPullRequestReviewComment(params)
-				: octokit.rest.reactions.createForIssueComment(params));
+				? reactions.createForPullRequestReviewComment(params)
+				: reactions.createForIssueComment(params));
 		},
 
-		async addReactionToIssue(issueNumber: number, reaction: GitHubReaction) {
-			await octokit.rest.reactions.createForIssue({
-				owner,
-				repo,
-				issue_number: issueNumber,
-				content: reaction,
-			});
-		},
-
-		async createComment(issueNumber: number, body: string) {
-			const { data } = await octokit.rest.issues.createComment({
+		async createComment(issueNumber, body) {
+			const { data } = await issues.createComment({
 				owner,
 				repo,
 				issue_number: issueNumber,
@@ -254,26 +174,17 @@ export function createGitHubClient(
 			return { id: data.id, url: data.html_url };
 		},
 
-		async getPullRequest(pullNumber: number) {
-			const { data: pullRequest } = await octokit.rest.pulls.get({
+		async getPullRequest(pullNumber) {
+			const { data } = await pulls.get({
 				owner,
 				repo,
 				pull_number: pullNumber,
 			});
-			return {
-				number: pullRequest.number,
-				title: pullRequest.title,
-				body: pullRequest.body ?? "",
-				user: {
-					login: pullRequest.user.login,
-					type: toUserType(pullRequest.user.type),
-				},
-				author_association: pullRequest.author_association,
-			};
+			return { number: data.number, title: data.title, body: data.body ?? "" };
 		},
 
-		async getPullRequestDiff(pullNumber: number): Promise<string> {
-			const { data: diff } = await octokit.rest.pulls.get({
+		async getPullRequestDiff(pullNumber) {
+			const { data: diff } = await pulls.get({
 				owner,
 				repo,
 				pull_number: pullNumber,
@@ -283,36 +194,26 @@ export function createGitHubClient(
 			return diff as unknown as string;
 		},
 
-		async getPullRequestReviewComments(pullNumber: number) {
-			return (await listReviewComments(pullNumber)).map((comment) =>
-				toReviewComment(comment),
-			);
-		},
-
-		async listIssueComments(issueNumber: number, since?: string) {
-			return listAll(async (page) =>
-				octokit.rest.issues.listComments({
+		async listIssueComments(issueNumber, since) {
+			return listAll(since, async (params) =>
+				issues.listComments({
 					owner,
 					repo,
 					issue_number: issueNumber,
-					...pageParams(since, page),
+					...params,
 				}),
 			);
 		},
 
-		listReviewComments,
+		async listReviewComments(pullNumber, since) {
+			return listAll(since, async (params) =>
+				pulls.listReviewComments({
+					owner,
+					repo,
+					pull_number: pullNumber,
+					...params,
+				}),
+			);
+		},
 	};
-}
-
-export async function addReaction(
-	client: GitHubClient,
-	trigger: Pick<
-		TriggerInfo,
-		"isCommentEvent" | "commentId" | "issueNumber" | "source"
-	>,
-	reaction: GitHubReaction,
-): Promise<void> {
-	await (trigger.isCommentEvent && trigger.commentId !== undefined
-		? client.addReactionToComment(trigger.commentId, reaction, trigger.source)
-		: client.addReactionToIssue(trigger.issueNumber, reaction));
 }

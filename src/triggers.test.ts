@@ -32,7 +32,6 @@ describe("triggerFromInfo", () => {
 	it("sanitizes the text and extracts the task", () => {
 		const trigger = triggerFromInfo(
 			createTriggerInfo({
-				isCommentEvent: true,
 				commentId: 5,
 				source: "comment",
 				triggerText: "<!-- hidden --> @pi fix the build",
@@ -108,7 +107,6 @@ describe("collectTriggers", () => {
 		);
 		const current = triggerFromInfo(
 			createTriggerInfo({
-				isCommentEvent: true,
 				commentId: 3,
 				source: "comment",
 				createdAt: "2026-01-03T00:00:00Z",

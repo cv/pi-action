@@ -44,7 +44,6 @@ registerStorageConformance(
 			}
 		} finally {
 			await storage.close(BACKGROUND_CONTEXT);
-			repo.cleanup();
 		}
 	},
 );

@@ -1,4 +1,9 @@
-// GitHub-specific types
+/** The logging that every part of a run needs. */
+export interface Log {
+	info: (msg: string) => void;
+	warning: (msg: string) => void;
+}
+
 export type GitHubReaction =
 	| "+1"
 	| "-1"
@@ -22,53 +27,11 @@ export interface RepoRef {
 	name: string;
 }
 
-/**
- * Model configuration - commonly passed together
- */
-export interface ModelConfig {
-	provider: string;
-	model: string;
-	timeout: number;
-}
-
-export type ModelInputMode = "text" | "image";
-
-export interface CustomProviderCompatConfig {
-	supportsDeveloperRole?: boolean;
-	supportsReasoningEffort?: boolean;
-	forceAdaptiveThinking?: boolean;
-}
-
-/**
- * Single custom provider/model definition, exposed as flat action inputs.
- */
-export interface CustomProviderConfig {
-	baseUrl: string;
-	api: string;
-	apiKey?: string;
-	authHeader: boolean;
-	modelName?: string;
-	reasoning: boolean;
-	input: ModelInputMode[];
-	contextWindow: number;
-	maxTokens: number;
-	compat?: CustomProviderCompatConfig;
-}
-
-export interface PullRequestReviewComment {
-	id: number;
-	body: string;
-	user: GitHubUser;
-	path?: string;
-	line?: number;
-	created_at: string;
-}
-
 /** Where a trigger came from: an issue/PR body, an issue comment, or a PR review comment. */
 export type TriggerSource = "body" | "comment" | "review_comment";
 
+/** The issue, PR, or comment of the webhook event that started the run. */
 export interface TriggerInfo {
-	isCommentEvent: boolean;
 	triggerText: string;
 	author: GitHubUser;
 	authorAssociation: string;
@@ -77,7 +40,7 @@ export interface TriggerInfo {
 	issueBody: string;
 	commentId?: number;
 	isPullRequest: boolean;
-	source?: TriggerSource;
+	source: TriggerSource;
 	createdAt?: string;
 	url?: string;
 }
@@ -107,11 +70,9 @@ interface OctokitPullRequest {
 	number: number;
 	title: string;
 	body: string | null;
-	user: { login: string; type: string };
-	author_association: string;
 }
 
-// Minimal Octokit interface to replace 'any' type
+/** The part of Octokit that pi-action uses. */
 export interface OctokitClient {
 	rest: {
 		reactions: {

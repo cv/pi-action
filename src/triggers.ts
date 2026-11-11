@@ -1,6 +1,10 @@
 import { extractTask, hasTrigger } from "./context.ts";
 import { type GitHubClient, toUserType } from "./github.ts";
-import { sanitizeInput, validatePermissions } from "./security.ts";
+import {
+	type Allowlists,
+	sanitizeInput,
+	validatePermissions,
+} from "./security.ts";
 import type {
 	GitHubComment,
 	GitHubUser,
@@ -16,18 +20,16 @@ export interface Trigger {
 	issueNumber: number;
 	commentId?: number;
 	author: GitHubUser;
+	/** The sanitized text, and the task: what follows the trigger phrase. */
 	text: string;
 	task: string;
 	createdAt: string;
 	url?: string;
 }
 
-/** Who may run pi, as configured by the trigger_phrase and allowed_* inputs. */
-export interface TriggerFilter {
+/** Who may run pi, and how they ask: the trigger_phrase and allowed_* inputs. */
+export interface TriggerFilter extends Allowlists {
 	triggerPhrase: string;
-	allowedBots: string[];
-	allowedUsers: string[];
-	allowedAssociations: string[];
 }
 
 export function triggerKey(
@@ -43,43 +45,36 @@ export function triggerKey(
 		: `comment-${commentId}`;
 }
 
+function toTrigger(
+	item: Omit<Trigger, "key" | "text" | "task">,
+	rawText: string,
+	triggerPhrase: string,
+): Trigger {
+	const text = sanitizeInput(rawText);
+	return {
+		key: triggerKey(item.source, item.issueNumber, item.commentId),
+		...item,
+		text,
+		task: extractTask(text, triggerPhrase),
+	};
+}
+
 export function triggerFromInfo(
 	info: TriggerInfo,
 	triggerPhrase: string,
 ): Trigger {
-	const source = info.source ?? (info.isCommentEvent ? "comment" : "body");
-	const text = sanitizeInput(info.triggerText);
-	return {
-		key: triggerKey(source, info.issueNumber, info.commentId),
-		source,
-		issueNumber: info.issueNumber,
-		...(info.commentId === undefined ? {} : { commentId: info.commentId }),
-		author: info.author,
-		text,
-		task: extractTask(text, triggerPhrase),
-		createdAt: info.createdAt ?? new Date().toISOString(),
-		...(info.url ? { url: info.url } : {}),
-	};
-}
-
-function commentAuthor(
-	comment: GitHubComment,
-	filter: TriggerFilter,
-): GitHubUser | undefined {
-	const { user } = comment;
-	if (!(user && hasTrigger(comment.body ?? "", filter.triggerPhrase))) {
-		return undefined;
-	}
-	const author: GitHubUser = { login: user.login, type: toUserType(user.type) };
-	const permitted = validatePermissions({
-		authorAssociation: comment.author_association,
-		authorLogin: author.login,
-		isBot: author.type === "Bot",
-		allowedBots: filter.allowedBots,
-		allowedUsers: filter.allowedUsers,
-		allowedAssociations: filter.allowedAssociations,
-	});
-	return permitted ? author : undefined;
+	return toTrigger(
+		{
+			source: info.source,
+			issueNumber: info.issueNumber,
+			...(info.commentId === undefined ? {} : { commentId: info.commentId }),
+			author: info.author,
+			createdAt: info.createdAt ?? new Date().toISOString(),
+			...(info.url ? { url: info.url } : {}),
+		},
+		info.triggerText,
+		triggerPhrase,
+	);
 }
 
 /** The comments that mention the trigger phrase and whose authors may run pi. */
@@ -89,26 +84,29 @@ export function triggersFromComments(
 	issueNumber: number,
 	filter: TriggerFilter,
 ): Trigger[] {
-	return comments.flatMap((comment) => {
-		const author = commentAuthor(comment, filter);
-		if (!author) {
-			return [];
-		}
-		const text = sanitizeInput(comment.body ?? "");
-		return [
-			{
-				key: triggerKey(source, issueNumber, comment.id),
+	return comments.flatMap(
+		({ id, body, user, author_association, created_at, html_url }) => {
+			if (!(user && hasTrigger(body ?? "", filter.triggerPhrase))) {
+				return [];
+			}
+			const author: GitHubUser = {
+				login: user.login,
+				type: toUserType(user.type),
+			};
+			if (!validatePermissions(author, author_association, filter)) {
+				return [];
+			}
+			const item = {
 				source,
 				issueNumber,
-				commentId: comment.id,
+				commentId: id,
 				author,
-				text,
-				task: extractTask(text, filter.triggerPhrase),
-				createdAt: comment.created_at,
-				url: comment.html_url,
-			},
-		];
-	});
+				createdAt: created_at,
+				url: html_url,
+			};
+			return [toTrigger(item, body ?? "", filter.triggerPhrase)];
+		},
+	);
 }
 
 async function triggersSince(

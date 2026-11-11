@@ -1,13 +1,10 @@
+// What a run works on: the pull request of pr_number, a direct prompt, or the issue/PR/comment that triggered it.
 import { extractTask, hasTrigger, type PIContext } from "./context.ts";
 import { formatReviewComments } from "./formatting.ts";
 import { extractTriggerInfo, type GitHubClient } from "./github.ts";
-import type { ActionDependencies, Logger } from "./run.ts";
-import {
-	type SecurityContext,
-	sanitizeInput,
-	validatePermissions,
-} from "./security.ts";
-import type { TriggerInfo } from "./types.ts";
+import type { ActionDependencies } from "./run.ts";
+import { sanitizeInput, validatePermissions } from "./security.ts";
+import type { Log, TriggerInfo } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
 
 export interface ResolvedRunContext {
@@ -16,133 +13,54 @@ export interface ResolvedRunContext {
 	triggerInfo?: TriggerInfo;
 }
 
-function createGitHubClientFromInputs(
-	deps: ActionDependencies,
-): GitHubClient | null {
-	const { inputs, createClient, log } = deps;
+function createClient(deps: ActionDependencies): GitHubClient | null {
+	const { inputs, createClient: create, log } = deps;
 	if (!inputs.githubToken) {
 		log.setFailed("github_token is required");
 		return null;
 	}
-	return createClient(inputs.githubToken);
+	return create(inputs.githubToken);
 }
 
-function validateTrigger(
-	deps: ActionDependencies,
-): { triggerInfo: TriggerInfo; ghClient: GitHubClient } | null {
-	const { inputs, context, log } = deps;
-	const triggerInfo = extractTriggerInfo(context.payload);
-	if (!triggerInfo) {
-		log.info("No issue or pull_request in payload, skipping");
-		return null;
-	}
-
-	if (!hasTrigger(triggerInfo.triggerText, inputs.triggerPhrase)) {
-		log.info(`No trigger phrase "${inputs.triggerPhrase}" found, skipping`);
-		return null;
-	}
-
-	const securityContext: SecurityContext = {
-		authorAssociation: triggerInfo.authorAssociation,
-		authorLogin: triggerInfo.author.login,
-		isBot: triggerInfo.author.type === "Bot",
-		allowedBots: inputs.allowedBots,
-		allowedUsers: inputs.allowedUsers,
-		allowedAssociations: inputs.allowedAssociations,
-	};
-
-	if (!validatePermissions(securityContext)) {
-		log.warning(
-			`User ${triggerInfo.author.login} (${triggerInfo.authorAssociation}) does not have permission`,
-		);
-		return null;
-	}
-
-	const ghClient = createGitHubClientFromInputs(deps);
-	return ghClient ? { triggerInfo, ghClient } : null;
-}
-
-function createDirectPIContext(prompt: string): PIContext {
-	return {
-		type: "direct",
-		title: "Direct prompt",
-		task: prompt,
-	};
-}
-
-interface PullRequestContextDetails {
-	diff: string;
-	reviewComments?: string;
-}
-
-async function getPullRequestContext(
-	ghClient: GitHubClient,
+/** A pull request's diff and existing review comments (left out, with a warning, if they can't be listed). */
+async function pullRequestDetails(
+	gh: GitHubClient,
 	pullNumber: number,
-	log: Logger,
-): Promise<PullRequestContextDetails> {
-	const diff = await ghClient.getPullRequestDiff(pullNumber);
-
+	log: Log,
+): Promise<{ diff: string; reviewComments?: string }> {
+	const diff = await gh.getPullRequestDiff(pullNumber);
 	try {
-		const comments = await ghClient.getPullRequestReviewComments(pullNumber);
-		return {
-			diff,
-			...(comments.length > 0
-				? { reviewComments: formatReviewComments(comments) }
-				: {}),
-		};
+		const reviewComments = formatReviewComments(
+			await gh.listReviewComments(pullNumber),
+		);
+		return reviewComments ? { diff, reviewComments } : { diff };
 	} catch (error) {
 		log.warning(
 			`Failed to fetch PR review comments: ${getErrorMessage(error)}`,
 		);
+		return { diff };
 	}
-	return { diff };
 }
 
-async function buildPIContextForPullRequestNumber(
-	ghClient: GitHubClient,
-	pullNumber: number,
-	prompt: string | undefined,
-	log: Logger,
-): Promise<PIContext> {
-	const pullRequest = await ghClient.getPullRequest(pullNumber);
-	const task = prompt?.trim() || "Please review this pull request";
-	return {
-		type: "pull_request",
-		title: pullRequest.title,
-		body: pullRequest.body,
-		number: pullRequest.number,
-		triggerComment: task,
-		task,
-		...(await getPullRequestContext(ghClient, pullRequest.number, log)),
-	};
-}
-
-async function buildPIContext(
-	triggerInfo: TriggerInfo,
-	ghClient: GitHubClient,
-	triggerPhrase: string,
-	log: Logger,
-): Promise<PIContext> {
-	const sanitizedBody = sanitizeInput(triggerInfo.triggerText);
-	const task = extractTask(sanitizedBody, triggerPhrase);
-
-	const piContext: PIContext = {
-		type: triggerInfo.isPullRequest ? "pull_request" : "issue",
-		title: triggerInfo.issueTitle,
-		body: triggerInfo.issueBody,
-		number: triggerInfo.issueNumber,
-		triggerComment: sanitizedBody,
-		task,
-	};
-
-	if (!triggerInfo.isPullRequest) {
-		return piContext;
+/** The trigger of the event, if it mentions the trigger phrase and its author may run pi. */
+function permittedTrigger(deps: ActionDependencies): TriggerInfo | null {
+	const { inputs, payload, log } = deps;
+	const info = extractTriggerInfo(payload);
+	if (!info) {
+		log.info("No issue or pull_request in payload, skipping");
+		return null;
 	}
-
-	return {
-		...piContext,
-		...(await getPullRequestContext(ghClient, triggerInfo.issueNumber, log)),
-	};
+	if (!hasTrigger(info.triggerText, inputs.triggerPhrase)) {
+		log.info(`No trigger phrase "${inputs.triggerPhrase}" found, skipping`);
+		return null;
+	}
+	if (!validatePermissions(info.author, info.authorAssociation, inputs)) {
+		log.warning(
+			`User ${info.author.login} (${info.authorAssociation}) does not have permission`,
+		);
+		return null;
+	}
+	return info;
 }
 
 export async function getRunContext(
@@ -150,46 +68,64 @@ export async function getRunContext(
 ): Promise<ResolvedRunContext | null> {
 	const { inputs, log } = deps;
 	if (inputs.prNumber !== undefined) {
-		const ghClient = createGitHubClientFromInputs(deps);
-		return ghClient
-			? {
-					ghClient,
-					piContext: await buildPIContextForPullRequestNumber(
-						ghClient,
-						inputs.prNumber,
-						inputs.prompt,
-						log,
-					),
-				}
-			: null;
+		const ghClient = createClient(deps);
+		if (!ghClient) {
+			return null;
+		}
+		const pr = await ghClient.getPullRequest(inputs.prNumber);
+		const task = inputs.prompt?.trim() || "Please review this pull request";
+		return {
+			ghClient,
+			piContext: {
+				type: "pull_request",
+				title: pr.title,
+				body: pr.body,
+				number: pr.number,
+				triggerComment: task,
+				task,
+				...(await pullRequestDetails(ghClient, pr.number, log)),
+			},
+		};
 	}
 
-	if (inputs.prompt && inputs.outputMode === "output") {
-		const ghClient = createGitHubClientFromInputs(deps);
-		return ghClient
-			? { ghClient, piContext: createDirectPIContext(inputs.prompt) }
-			: null;
+	if (inputs.prompt) {
+		if (inputs.outputMode !== "output") {
+			log.setFailed(
+				"prompt requires output_mode: output when no PR number is set",
+			);
+			return null;
+		}
+		const ghClient = createClient(deps);
+		const piContext: PIContext = {
+			type: "direct",
+			title: "Direct prompt",
+			task: inputs.prompt,
+		};
+		return ghClient ? { ghClient, piContext } : null;
 	}
 
-	if (inputs.prompt && inputs.outputMode !== "output") {
-		log.setFailed(
-			"prompt requires output_mode: output when no PR number is set",
-		);
+	const triggerInfo = permittedTrigger(deps);
+	const ghClient = triggerInfo ? createClient(deps) : null;
+	if (!(triggerInfo && ghClient)) {
 		return null;
 	}
-
-	const validated = validateTrigger(deps);
-	if (!validated) {
-		return null;
-	}
-
+	const triggerComment = sanitizeInput(triggerInfo.triggerText);
+	const subject = {
+		title: triggerInfo.issueTitle,
+		body: triggerInfo.issueBody,
+		number: triggerInfo.issueNumber,
+		triggerComment,
+		task: extractTask(triggerComment, inputs.triggerPhrase),
+	};
 	return {
-		...validated,
-		piContext: await buildPIContext(
-			validated.triggerInfo,
-			validated.ghClient,
-			inputs.triggerPhrase,
-			log,
-		),
+		ghClient,
+		triggerInfo,
+		piContext: triggerInfo.isPullRequest
+			? {
+					type: "pull_request",
+					...subject,
+					...(await pullRequestDetails(ghClient, subject.number, log)),
+				}
+			: { type: "issue", ...subject },
 	};
 }

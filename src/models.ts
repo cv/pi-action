@@ -7,42 +7,30 @@ import type { MutableModels } from "@earendil-works/pi-ai/models";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 
 import { createCustomProvider } from "./custom-provider.ts";
-import type { CustomProviderConfig } from "./types.ts";
-
-export interface ModelSetupOptions {
-	provider: string;
-	model: string;
-	/** The api_key input: the provider's key, kept in memory for this run only. */
-	apiKey?: string | undefined;
-	customProvider?: CustomProviderConfig | undefined;
-	env?: Record<string, string | undefined>;
-}
+import type { ActionInputs } from "./inputs.ts";
 
 /**
  * Every built-in provider (keys from api_key or the usual environment variables) plus the custom provider, if
  * provider_base_url is set. Nothing is read from or written to ~/.pi.
  */
 export async function createActionModels(
-	options: ModelSetupOptions,
+	inputs: Pick<
+		ActionInputs,
+		"provider" | "model" | "apiKey" | "customProvider"
+	>,
 ): Promise<MutableModels> {
+	const { provider, model, apiKey, customProvider } = inputs;
 	const credentials = new InMemoryCredentialStore();
-	const { apiKey } = options;
 	if (apiKey) {
-		await credentials.modify(options.provider, async () => ({
+		await credentials.modify(provider, async () => ({
 			type: "api_key",
 			key: apiKey,
 		}));
 	}
 	const models = builtinModels({ credentials });
-	if (options.customProvider) {
+	if (customProvider) {
 		models.setProvider(
-			createCustomProvider(
-				options.provider,
-				options.model,
-				Boolean(apiKey),
-				options.customProvider,
-				options.env,
-			),
+			createCustomProvider(provider, model, Boolean(apiKey), customProvider),
 		);
 	}
 	return models;

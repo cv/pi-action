@@ -12,7 +12,7 @@ describe("entrypoints", () => {
 				"--disable-warning=ExperimentalWarning",
 				"--input-type=module",
 				"-e",
-				'await import("./src/action-inputs.ts"); await import("./src/run.ts"); await import("./src/push.ts"); console.log("ok");',
+				'await import("./src/inputs.ts"); await import("./src/run.ts"); await import("./src/push.ts"); console.log("ok");',
 			],
 			{ encoding: "utf8" },
 		);

@@ -1,22 +1,19 @@
-/**
- * Test helper functions to reduce duplication in test files
- */
+// Shared fixtures: inputs, a fake GitHub, faux models, and scratch git repositories.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { vi } from "vitest";
+import type { Api, Model } from "@earendil-works/pi-ai";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { fauxProvider } from "@earendil-works/pi-ai/providers/faux";
+import { onTestFinished, vi } from "vitest";
 
 import { DEFAULTS } from "./defaults.ts";
 import type { GitHubClient } from "./github.ts";
-import type { ActionInputs, Logger } from "./run.ts";
-import type { GitHubComment, ModelConfig, TriggerInfo } from "./types.ts";
-
-const since = (list: GitHubComment[], iso?: string) =>
-	iso
-		? list.filter((c) => Date.parse(c.created_at) >= Date.parse(iso))
-		: [...list];
+import type { ActionInputs } from "./inputs.ts";
+import type { Logger } from "./run.ts";
+import type { GitHubComment, TriggerInfo } from "./types.ts";
 
 /** A Logger whose methods are typed mocks. */
 export function createLogger(): Logger {
@@ -29,9 +26,14 @@ export function createLogger(): Logger {
 	};
 }
 
+const since = (list: GitHubComment[], iso?: string) =>
+	iso
+		? list.filter((c) => Date.parse(c.created_at) >= Date.parse(iso))
+		: [...list];
+
 /**
- * Creates a mock GitHub client with all required methods. `comments` and `reviewComments` back the list
- * methods (live arrays: tests may push to them), and posted comment bodies are recorded in `posted`.
+ * A mock GitHub client. `comments` and `reviewComments` back the list methods (live arrays: tests may push to
+ * them), and posted comment bodies are recorded in `posted`.
  */
 export function createMockGitHubClient(
 	comments: GitHubComment[] = [],
@@ -40,8 +42,7 @@ export function createMockGitHubClient(
 	const posted: string[] = [];
 	return {
 		posted,
-		addReactionToComment: vi.fn(),
-		addReactionToIssue: vi.fn(),
+		addReaction: vi.fn(),
 		createComment: vi.fn(async (_issue: number, body: string) => {
 			posted.push(body);
 			return {
@@ -49,15 +50,10 @@ export function createMockGitHubClient(
 				url: `https://github.com/o/r/issues/1#c${posted.length}`,
 			};
 		}),
-		getPullRequest: vi.fn().mockResolvedValue({
-			number: 1,
-			title: "Test PR",
-			body: "PR body",
-			user: { login: "user", type: "User" },
-			author_association: "OWNER",
-		}),
+		getPullRequest: vi
+			.fn()
+			.mockResolvedValue({ number: 1, title: "Test PR", body: "PR body" }),
 		getPullRequestDiff: vi.fn().mockResolvedValue(""),
-		getPullRequestReviewComments: vi.fn().mockResolvedValue([]),
 		listIssueComments: vi.fn(async (_issue: number, iso?: string) =>
 			since(comments, iso),
 		),
@@ -81,14 +77,10 @@ export function createComment(
 	};
 }
 
-/**
- * Creates a TriggerInfo object with sensible defaults and optional overrides
- */
 export function createTriggerInfo(
 	overrides: Partial<TriggerInfo> = {},
 ): TriggerInfo {
 	return {
-		isCommentEvent: false,
 		triggerText: "@pi test",
 		author: { login: "user", type: "User" },
 		authorAssociation: "OWNER",
@@ -96,25 +88,11 @@ export function createTriggerInfo(
 		issueTitle: "Test",
 		issueBody: "Body",
 		isPullRequest: false,
+		source: "body",
 		...overrides,
 	};
 }
 
-/**
- * Creates a ModelConfig object with sensible defaults and optional overrides
- */
-function createModelConfig(overrides: Partial<ModelConfig> = {}): ModelConfig {
-	return {
-		provider: DEFAULTS.provider,
-		model: DEFAULTS.model,
-		timeout: DEFAULTS.timeout,
-		...overrides,
-	};
-}
-
-/**
- * Creates ActionInputs with sensible defaults and optional overrides.
- */
 export function createActionInputs(
 	overrides: Partial<ActionInputs> = {},
 ): ActionInputs {
@@ -123,7 +101,9 @@ export function createActionInputs(
 		allowedBots: [],
 		allowedUsers: [],
 		allowedAssociations: [...DEFAULTS.allowedAssociations],
-		modelConfig: createModelConfig(),
+		provider: DEFAULTS.provider,
+		model: DEFAULTS.model,
+		timeout: DEFAULTS.timeout,
 		githubToken: "test-token",
 		apiKey: undefined,
 		customProvider: undefined,
@@ -136,21 +116,69 @@ export function createActionInputs(
 	};
 }
 
-/** A fresh, empty git repository in a temp directory. */
+/** A faux provider in a fresh model registry, and the pi-durable agent config that uses its model. */
+export function fauxModels(): {
+	faux: ReturnType<typeof fauxProvider>;
+	models: ReturnType<typeof createModels>;
+	model: Model<Api>;
+	agent: { model: { provider: string; modelId: string } };
+} {
+	const faux = fauxProvider();
+	const models = createModels();
+	models.setProvider(faux.provider);
+	const model = faux.getModel();
+	return {
+		faux,
+		models,
+		model,
+		agent: { model: { provider: model.provider, modelId: model.id } },
+	};
+}
+
+/** Run git in `cwd` and return its output. */
+export function git(cwd: string, ...args: string[]): string {
+	return execFileSync("git", args, { cwd, encoding: "utf8" });
+}
+
+/** A temp directory, removed when the current test finishes. */
+function tempDir(prefix: string): string {
+	const dir = mkdtempSync(join(tmpdir(), prefix));
+	onTestFinished(() => {
+		rmSync(dir, { recursive: true, force: true });
+	});
+	return dir;
+}
+
+/** A fresh, empty git repository. */
 export function tempRepo(): {
 	dir: string;
 	git: (...args: string[]) => string;
-	cleanup: () => void;
 } {
-	const dir = mkdtempSync(join(tmpdir(), "git-pi-durable-"));
-	const git = (...args: string[]) =>
-		execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
-	git("init", "-q", "-b", "main");
+	const dir = tempDir("git-pi-durable-");
+	git(dir, "init", "-q", "-b", "main");
+	return { dir, git: (...args) => git(dir, ...args) };
+}
+
+/** A bare "GitHub" remote with one commit on main, and a way to make fresh clones of it (runner checkouts). */
+export function tempRemote(): {
+	remote: string;
+	clone: (...flags: string[]) => string;
+} {
+	const root = tempDir("pi-action-remote-");
+	const remote = join(root, "remote.git");
+	const seed = join(root, "seed");
+	git(root, "init", "-q", "--bare", "-b", "main", remote);
+	git(root, "init", "-q", "-b", "main", seed);
+	git(seed, "commit", "-q", "--allow-empty", "-m", "init");
+	git(seed, "push", "-q", remote, "main");
+	let clones = 0;
 	return {
-		dir,
-		git,
-		cleanup: () => {
-			rmSync(dir, { recursive: true, force: true });
+		remote,
+		clone: (...flags) => {
+			clones += 1;
+			const dir = join(root, `clone-${clones}`);
+			git(root, "clone", "-q", ...flags, `file://${remote}`, dir);
+			return dir;
 		},
 	};
 }

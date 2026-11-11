@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { ActionInputs } from "./inputs.ts";
 import { getRunContext } from "./run-context.ts";
-import type { ActionDependencies, ActionInputs } from "./run.ts";
+import type { ActionDependencies } from "./run.ts";
 import {
 	createActionInputs,
+	createComment,
 	createLogger,
 	createMockGitHubClient,
 } from "./test-helpers.ts";
@@ -15,7 +17,7 @@ function deps(
 ): ActionDependencies {
 	return {
 		inputs: createActionInputs(inputs),
-		context: { payload, repo: { owner: "o", name: "r" } },
+		payload,
 		createClient: () => gh,
 		log: createLogger(),
 		cwd: "/tmp",
@@ -45,16 +47,8 @@ describe("getRunContext", () => {
 	});
 
 	it("adds the diff and existing review comments for pull requests", async () => {
-		const gh = createMockGitHubClient();
+		const gh = createMockGitHubClient([], [createComment({ body: "nit" })]);
 		vi.mocked(gh.getPullRequestDiff).mockResolvedValue("+x");
-		vi.mocked(gh.getPullRequestReviewComments).mockResolvedValue([
-			{
-				id: 1,
-				body: "nit",
-				user: { login: "rev", type: "User" },
-				created_at: "2026-01-01T00:00:00Z",
-			},
-		]);
 		const payload = {
 			pull_request: {
 				number: 5,
@@ -77,9 +71,7 @@ describe("getRunContext", () => {
 
 	it("keeps going without review comments when they cannot be fetched", async () => {
 		const gh = createMockGitHubClient();
-		vi.mocked(gh.getPullRequestReviewComments).mockRejectedValue(
-			new Error("403"),
-		);
+		vi.mocked(gh.listReviewComments).mockRejectedValue(new Error("403"));
 		const d = deps({ prNumber: 9 }, {}, gh);
 		const context = await getRunContext(d);
 		expect(context?.piContext).toMatchObject({
