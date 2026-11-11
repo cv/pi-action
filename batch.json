@@ -1,1 +1,1 @@
-{"format":1,"seq":264,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":265,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"> pi-action@2.2.0 lint:actions\n> node scripts/lint-actions.mjs\n\n⚠   found 0 problems, 1 warnings\nⓘ   Get help: https://github.com/conventional-changelog/commitlint/#what-is-commitlint\n\nexit=0\n"]]}}]}
