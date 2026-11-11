@@ -40,13 +40,16 @@ export interface ConversationOptions {
 const EMPTY_RESPONSE = "Agent returned empty response";
 const SUMMARY_SUFFIX = "-summary";
 const CONTINUE_SUFFIX = "-continue-";
-const SUMMARY_PROMPT = `IMPORTANT: You completed your work but did not provide a final text summary. This summary is REQUIRED. Please now write a plain-text summary of what you accomplished, including:
-- What changes were made and why
-- Which files were modified
-- Any errors encountered or remaining issues
-- Confirmation that your work is complete
+/**
+ * Sent once when a run ends on a normal stop with no text. Neutral on purpose: the model may have stopped
+ * early, so it is not told its work is done, and tools stay available to finish (it must still end with text).
+ */
+const SUMMARY_PROMPT = `Your last turn ended without a text reply, and a reply is required: it is posted to the issue or pull request. Write a plain-text reply that covers:
+- What you did, and which files you changed (if any)
+- What is left to do, if anything
+- Any errors or open problems
 
-Do NOT call any tools - just provide the text summary.`;
+If something you were asked to do is still unfinished and you can finish it, you may continue with tools first. Either way, end your turn with that text reply.`;
 /** Sent when a response ran out of output tokens with no tool call: the model did not choose to stop. */
 const CONTINUE_PROMPT =
 	"Your last response hit the output token limit (max_tokens) before you finished. Continue where you left off; keep reasoning shorter and act with tools.";

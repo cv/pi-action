@@ -488,6 +488,25 @@ describe("run (durable) with main's modes", () => {
 		});
 	});
 
+	it("asks for a neutral summary, with no claim the work is done", async () => {
+		const w = world();
+		let seen: string[] = [];
+		w.faux.setResponses([
+			fauxAssistantMessage(""),
+			(context) => {
+				seen = userTexts(context.messages);
+				return fauxAssistantMessage("Done: nothing left.");
+			},
+		]);
+		await run(w.deps(w.comment("@pi do it")));
+		expect(seen).toHaveLength(2);
+		expect(seen[1]).toContain("Your last turn ended without a text reply");
+		expect(seen[1]).toContain("What is left to do");
+		expect(seen.join("\n")).not.toContain("completed your work");
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain("Done: nothing left.");
+	});
+
 	it("continues a response cut off by max_tokens, with tools, instead of asking for a summary", async () => {
 		const w = world();
 		let seen: string[] = [];
