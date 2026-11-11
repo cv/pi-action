@@ -4,6 +4,7 @@ import { DEFAULTS } from "./defaults.ts";
 import {
 	parseBoolean,
 	parseCsv,
+	parseExtensionSpecs,
 	parsePositiveInteger,
 	readActionInputs,
 	readCustomProviderConfig,
@@ -40,6 +41,7 @@ describe("readActionInputs", () => {
 				output_mode: "output",
 				prompt: "Generate release notes",
 				pr_number: "42",
+				extensions: "@acme/pi-provider@1.2.3\n./ext.ts",
 			}),
 			{ GITHUB_TOKEN: "env-token" },
 		);
@@ -61,7 +63,19 @@ describe("readActionInputs", () => {
 			prompt: "Generate release notes",
 			prNumber: 42,
 			pollInterval: 5,
+			extensions: ["@acme/pi-provider@1.2.3", "./ext.ts"],
 		});
+	});
+});
+
+describe("parseExtensionSpecs", () => {
+	it("splits lines and commas, skipping blanks and comments", () => {
+		expect(
+			parseExtensionSpecs(
+				"pi-foo@1.2.3, @acme/pi-bar\n\n  # a comment\n./local/ext.ts\n",
+			),
+		).toStrictEqual(["pi-foo@1.2.3", "@acme/pi-bar", "./local/ext.ts"]);
+		expect(parseExtensionSpecs("")).toStrictEqual([]);
 	});
 });
 

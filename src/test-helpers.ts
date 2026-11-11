@@ -112,6 +112,7 @@ export function createActionInputs(
 		prompt: undefined,
 		prNumber: undefined,
 		pollInterval: DEFAULTS.pollInterval,
+		extensions: [],
 		...overrides,
 	};
 }
@@ -141,7 +142,7 @@ export function git(cwd: string, ...args: string[]): string {
 }
 
 /** A temp directory, removed when the current test finishes. */
-function tempDir(prefix: string): string {
+export function tempDir(prefix = "pi-action-"): string {
 	const dir = mkdtempSync(join(tmpdir(), prefix));
 	onTestFinished(() => {
 		rmSync(dir, { recursive: true, force: true });

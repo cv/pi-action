@@ -96,6 +96,8 @@ The action is built with TypeScript on [pi-durable](https://www.npmjs.com/packag
 | [`src/triggers.ts`](src/triggers.ts) | Finding the `@pi` comments a thread still has to answer |
 | [`src/models.ts`](src/models.ts) | Built-in providers with the `api_key` input as an in-memory credential |
 | [`src/custom-provider.ts`](src/custom-provider.ts) | The single custom provider/model from the flat `provider_*`/`model_*` inputs |
+| [`src/extensions.ts`](src/extensions.ts) | The `extensions` input: installing pi extensions from npm, finding their entry points, loading them with jiti, and the `pi` object they get |
+| [`src/extension-provider.ts`](src/extension-provider.ts) | Turning an extension's `pi.registerProvider(name, config)` into a pi-ai provider |
 | [`src/push.ts`](src/push.ts) | The `if: always()` step that pushes unsaved thread state |
 | [`src/storage/git.ts`](src/storage/git.ts) | In-process git objects and compare-and-swap ref updates |
 | [`src/storage/git-storage.ts`](src/storage/git-storage.ts) | `GitStorage`: a pi-durable `Storage` whose log is a chain of commits on one ref |
@@ -121,7 +123,7 @@ Reads every action input into `ActionInputs`, including the custom provider's `p
 #### [`run.ts`](src/run.ts)
 Main orchestration that:
 1. Resolves the run context (trigger, `pr_number`, or direct prompt) and validates permissions
-2. Sets up models from environment variables, the runtime-only `api_key` input, and the custom provider inputs
+2. Sets up models from environment variables, the runtime-only `api_key` input, providers registered by pi extensions (`extensions`), and the custom provider inputs
 3. Opens the thread (fetching `refs/pi/threads/<number>`; in memory for direct prompts)
 4. Submits every unanswered `@pi` comment, then polls for new ones while pi works (comment mode), or runs one request (output mode, `pr_number`, direct prompts)
 5. Posts each answer (or failure) once, or sets the action outputs
@@ -177,6 +179,7 @@ npm run coverage            # With coverage report
 - Tests use dependency injection for easy mocking
 - Mock the pi SDK to test agent integration without real API calls
 - Use [`test-helpers.ts`](src/test-helpers.ts) for common mock factories
+- pi extensions used as fixtures live in [`test/fixtures/extensions/`](test/fixtures/extensions/); [`echo-provider`](test/fixtures/extensions/echo-provider/) registers a provider built on pi-ai's faux provider, so the `extensions` input can be tested end to end without network access
 
 **Coverage thresholds (enforced by pre-push hook):**
 - Statements: 90%

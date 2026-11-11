@@ -26,6 +26,8 @@ export interface ActionInputs {
 	prNumber: number | undefined;
 	/** Seconds between checks for new comments while pi works. */
 	pollInterval: number;
+	/** pi extensions to load (npm specs or workspace paths) for the providers they register. */
+	extensions: string[];
 }
 
 const TRUE_VALUES = new Set(["true", "1", "yes", "y", "on"]);
@@ -35,6 +37,7 @@ const MODEL_INPUT_MODES: ReadonlySet<string> = new Set<ModelInputMode>([
 	"image",
 ]);
 const INTEGER_PATTERN = /^\d+$/u;
+const EXTENSION_SEPARATOR = /[\n,]/u;
 const COMPAT_INPUTS = {
 	supportsDeveloperRole: "compat_supports_developer_role",
 	supportsReasoningEffort: "compat_supports_reasoning_effort",
@@ -46,6 +49,14 @@ export function parseCsv(value: string): string[] {
 		.split(",")
 		.map((entry) => entry.trim())
 		.filter(Boolean);
+}
+
+/** pi extension specs, newline- or comma-separated; blank lines and `#` comments are skipped. */
+export function parseExtensionSpecs(value: string): string[] {
+	return value
+		.split(EXTENSION_SEPARATOR)
+		.map((spec) => spec.trim())
+		.filter((spec) => spec !== "" && !spec.startsWith("#"));
 }
 
 /** true/1/yes/y/on or false/0/no/n/off, in any case; undefined for anything else. */
@@ -140,5 +151,6 @@ export function readActionInputs(
 		prNumber: parsePositiveInteger(readInput("pr_number")),
 		pollInterval:
 			parsePositiveInteger(readInput("poll_interval")) ?? DEFAULTS.pollInterval,
+		extensions: parseExtensionSpecs(readInput("extensions")),
 	};
 }
