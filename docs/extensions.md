@@ -9,21 +9,18 @@ An extension is code that runs inside pi-action, with all the permissions of the
 
 ## Declare extensions
 
-Write one extension per line, or separate them with commas. pi-action ignores empty lines and lines that start with `#`. Do not put a comment after a spec on the same line: pi-action reads it as part of the spec, and the run fails.
-
-Example:
+Write one extension per line, or separate them with commas. pi-action ignores empty lines and `#` comments. A comment can be a full line, or it can follow a spec after a space. The `#` in a git ref such as `github:owner/repo#v1.0.0` is not a comment, because no space comes before it:
 
 ```yaml
 - uses: cv/pi-action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     extensions: |
-      # pit's typescript tool (a pi-durable extension)
-      github:cv/pit#v0.35.0
-      # a provider (a pi extension) from npm, pinned
-      @acme/pi-provider@1.4.2
-      # a provider in this repository
-      ./.pi/extensions/gateway.ts
+      # pi-durable extensions
+      github:cv/pit#v0.35.0          # pit's typescript tool
+      # pi extensions (providers)
+      @acme/pi-provider@1.4.2        # from npm, pinned
+      ./.pi/extensions/gateway.ts    # in this repository
 ```
 
 ### Sources
@@ -74,8 +71,7 @@ A [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) extensi
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     extensions: |
-      # pit's typescript tool (pit/durable)
-      github:cv/pit#v0.35.0
+      github:cv/pit#v0.35.0   # pit's typescript tool (pit/durable)
 ```
 
 ### Package format

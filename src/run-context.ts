@@ -93,8 +93,8 @@ export async function getRunContext(
 			ghClient,
 			piContext: {
 				type: "pull_request",
-				title: pr.title,
-				body: pr.body,
+				title: sanitizeInput(pr.title),
+				body: sanitizeInput(pr.body),
 				number: pr.number,
 				triggerComment: task,
 				task,
@@ -141,7 +141,10 @@ export async function getRunContext(
 	};
 }
 
-/** The issue or PR as the context of a run, its trigger being `triggerComment`. */
+/**
+ * The issue or PR as the context of a run, its trigger being `triggerComment`. Its title and body are sanitized like
+ * the trigger: anyone who can open an issue writes them.
+ */
 async function subjectContext(
 	ghClient: GitHubClient,
 	triggerInfo: TriggerInfo,
@@ -150,8 +153,8 @@ async function subjectContext(
 	log: Log,
 ): Promise<PIContext> {
 	const subject = {
-		title: triggerInfo.issueTitle,
-		body: triggerInfo.issueBody,
+		title: sanitizeInput(triggerInfo.issueTitle),
+		body: sanitizeInput(triggerInfo.issueBody),
 		number: triggerInfo.issueNumber,
 		triggerComment,
 		task,

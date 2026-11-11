@@ -60,9 +60,10 @@ The token is not new to the agent. `actions/checkout` already stores it in the g
 pi-action applies it to:
 
 - The text that contains the trigger phrase: the comment, or the body of an issue or pull request that started pi. This gives the task and `{{trigger_comment}}`.
+- The title and the body of the issue or pull request (in the built-in prompt, and in `{{title}}` and `{{body}}`), also for `pr_number` runs.
 - `/answer` replies, and the titles of questions.
 
-pi-action does **not** apply it to the title and body of the issue or pull request (in the built-in prompt and `{{title}}`, `{{body}}`), to the diff, or to review comments. The model gets this text as it is on GitHub.
+pi-action does **not** apply it to the diff or to review comments. The model gets this text as it is on GitHub. Also, removing hidden text does not stop prompt injection in visible text.
 
 ## Extensions
 

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const ACTION_YML = readFileSync("action.yml", "utf8");
-const INPUTS_DOC = readFileSync("docs/inputs.md", "utf8");
+const README = readFileSync("README.md", "utf8");
 const ACTION_INPUT_NAME_PATTERN = /^ {2}(\w+):$/gmu;
 const DOC_INPUT_NAME_PATTERN = /^\| `([^`]+)` \|/gmu;
 
@@ -24,14 +24,14 @@ function getActionInputNames(): string[] {
 }
 
 function getDocumentedInputNames(): string[] {
-	const inputTableStart = INPUTS_DOC.indexOf(
+	const inputTableStart = README.indexOf(
 		"| Input | Description | Required | Default |",
 	);
 	if (inputTableStart === -1) {
-		throw new Error("docs/inputs.md input table not found");
+		throw new Error("README input table not found");
 	}
-	const nextHeading = INPUTS_DOC.slice(inputTableStart).indexOf("\n#");
-	const inputTable = INPUTS_DOC.slice(
+	const nextHeading = README.slice(inputTableStart).indexOf("\n#");
+	const inputTable = README.slice(
 		inputTableStart,
 		nextHeading === -1 ? undefined : inputTableStart + nextHeading,
 	);
@@ -41,7 +41,7 @@ function getDocumentedInputNames(): string[] {
 }
 
 describe("action input documentation", () => {
-	it("documents every action.yml input in the docs/inputs.md table", () => {
+	it("documents every action.yml input in the README inputs table", () => {
 		expect(getDocumentedInputNames().toSorted(compareStrings)).toStrictEqual(
 			getActionInputNames().toSorted(compareStrings),
 		);

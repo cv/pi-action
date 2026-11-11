@@ -1,6 +1,6 @@
 # Workflow recipes
 
-This page shows how to start pi-action from different events, and how to control who can start it. Start with the workflow in the [quick start](../README.md#quick-start). Then change it with the recipes below. For all inputs, see [Inputs and outputs](inputs.md).
+This page shows how to start pi-action from different events, and how to control who can start it. Start with the workflow in the [quick start](../README.md#quick-start). Then change it with the recipes below. For all inputs, see [Inputs](../README.md#inputs).
 
 ## The parts of the standard workflow
 

@@ -123,7 +123,7 @@ The tests use [Vitest](https://vitest.dev/). They are next to the code (`src/**/
 - **Extension fixtures** are in [`test/fixtures/extensions/`](test/fixtures/extensions/):
   - [`echo-provider`](test/fixtures/extensions/echo-provider/) registers a provider on the faux provider of pi-ai. It tests the `extensions` input end to end.
   - [`durable-ask`](test/fixtures/extensions/durable-ask/) is a pi-durable extension package. Its tool asks two questions as pit does: `ui.ask`, then `ui.answer` entries in later runs.
-- **Documentation tests.** [`src/action-docs.test.ts`](src/action-docs.test.ts) and [`src/defaults.test.ts`](src/defaults.test.ts) compare [`docs/inputs.md`](docs/inputs.md) with `action.yml` and `src/defaults.ts`. [`src/docs.test.ts`](src/docs.test.ts) checks the links in all Markdown files, the template variables in [`docs/prompts.md`](docs/prompts.md), and the `extensions:` examples.
+- **Documentation tests.** [`src/action-docs.test.ts`](src/action-docs.test.ts) and [`src/defaults.test.ts`](src/defaults.test.ts) compare the inputs table in [`README.md`](README.md#inputs) with `action.yml` and `src/defaults.ts`. [`src/docs.test.ts`](src/docs.test.ts) checks the links in all Markdown files, the template variables in [`docs/prompts.md`](docs/prompts.md), and the `extensions:` examples.
 - **Coverage thresholds** ([`vitest.config.ts`](vitest.config.ts)): statements 90%, lines 90%, functions 90%, branches 85%. `npm run coverage` and the `pre-push` hook enforce them.
 
 ## Code style

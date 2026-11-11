@@ -48,7 +48,7 @@ When pi does not know the model, the run fails and pi-action reports the error o
 
 ## A custom provider and model
 
-Use the `provider_*` and `model_*` inputs for one model that pi does not know. You do not need a `models.json` file of pi. Set `provider_base_url` to enable these inputs. For each input, see [Inputs and outputs](inputs.md).
+Use the `provider_*` and `model_*` inputs for one model that pi does not know. You do not need a `models.json` file of pi. Set `provider_base_url` to enable these inputs. For each input, see [Inputs](../README.md#inputs).
 
 This example uses `openai/openai/gpt-5.5` from NVIDIA with the OpenAI Responses API:
 

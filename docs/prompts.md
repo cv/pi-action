@@ -14,7 +14,7 @@ A follow-up does not repeat the issue or the diff, because the thread already ha
 
 The **task** is the text after the first occurrence of the trigger phrase, without spaces at the start and end. The match ignores case. For `@pi please review this`, the task is `please review this`.
 
-Before pi-action finds the task, it removes HTML comments and invisible characters from the text (see [Security](security.md#what-pi-action-removes-from-text)).
+Before pi-action finds the task, it removes HTML comments and invisible characters from the text. It does the same to the title and the body of the issue or pull request (see [Security](security.md#what-pi-action-removes-from-text)).
 
 For a `pr_number` run, the task is `prompt`, or `Please review this pull request` when `prompt` is empty. For a direct prompt, the task is `prompt`.
 
@@ -44,8 +44,8 @@ pi-action uses the built-in prompt when `prompt_template` is empty or has only s
 | `{{type}}` | `issue`, `pull_request`, or `direct` | `issue` |
 | `{{type_display}}` | `Issue`, `Pull Request`, or `Direct Task` | `Pull Request` |
 | `{{number}}` | Number of the issue or pull request. `0` for a direct prompt | `42` |
-| `{{title}}` | Title of the issue or pull request. `Direct prompt` for a direct prompt | `Fix login bug` |
-| `{{body}}` | Body of the issue or pull request. Empty for a direct prompt | The full description |
+| `{{title}}` | Title of the issue or pull request, without HTML comments and invisible characters. `Direct prompt` for a direct prompt | `Fix login bug` |
+| `{{body}}` | Body of the issue or pull request, without HTML comments and invisible characters. Empty for a direct prompt | The full description |
 | `{{task}}` | The [task](#the-task) | `please review this code` |
 | `{{diff}}` | Diff of the pull request. Empty for issues and direct prompts | A unified diff |
 | `{{reviewComments}}` | The `## Existing PR Review Comments` section. Empty when there are none, and for issues | A Markdown section |
