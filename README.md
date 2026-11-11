@@ -361,7 +361,7 @@ Every issue or PR is one pi conversation, stored with [pi-durable](https://www.n
 - **Continuity**: a later `@pi` comment continues the same conversation, with everything pi saw and did before, on whatever runner picks it up. `pr_number` runs (e.g. `workflow_dispatch` reviews) join the PR's thread too; direct prompts without an issue or PR run in memory and store nothing.
 - **Saved as it goes**: the ref is pushed after every model response and tool result, on cancellation (SIGINT/SIGTERM), and once more by the action's `if: always()` step. A run that was cut off resumes its unfinished work next time. Saving needs `contents: write`; without it the run still works and logs a warning.
 - **Teams**: with the `concurrency` group above, runs for one thread never overlap. A run handles every `@pi` comment the thread hasn't answered yet, not just the one that triggered it, so comments whose queued run GitHub cancelled are still answered. Comments posted while pi works join the running conversation (checked every `poll_interval` seconds). Each answer, and each failure, is posted once.
-- **Safety net**: pushes are fast-forward only. If two runs ever race on one thread, the later push is rejected (and logged) instead of overwriting the other's history.
+- **Safety net**: pushes are fast-forward only. If two runs ever race on one thread, the later push is rejected (and logged) instead of overwriting the other's history, and that run stops pushing. Other push failures (a network error, or GitHub answering `[remote rejected] ... (failed)`) are retried after 1, 3 and 10 seconds; if those fail too, the warning is logged and the next turn's push tries again.
 - **Inspecting a thread**:
 
   ```bash

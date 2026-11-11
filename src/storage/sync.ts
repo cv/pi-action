@@ -1,4 +1,6 @@
 // Moving a GitStorage ref between a local repository and a remote: fetch it before opening, push it as it grows.
+import { setTimeout as sleep } from "node:timers/promises";
+
 import type { Batch } from "./git-storage.ts";
 import { assertRefName, git, GitError } from "./git.ts";
 
@@ -11,6 +13,12 @@ export class GitSyncConflictError extends Error {
 	}
 }
 
+/** Runs git in a directory and resolves with its stdout, like `git()`; tests replace it. */
+export type GitRunner = (
+	dir: string,
+	args: readonly string[],
+) => Promise<string>;
+
 export interface GitSyncOptions {
 	/** The work tree (or git dir) to run git in. */
 	readonly repo: string;
@@ -18,9 +26,23 @@ export interface GitSyncOptions {
 	/** Default "origin". */
 	readonly remote?: string | undefined;
 	readonly log?: (message: string) => void;
+	/**
+	 * How long to wait before each retry of a push that failed for another reason than a conflict (a GitHub-side
+	 * `[remote rejected] ... (failed)`, a network error); its length is the number of retries. Default 1 s, 3 s, 10 s.
+	 */
+	readonly retryDelaysMs?: readonly number[] | undefined;
+	/** Default `git()`. */
+	readonly git?: GitRunner | undefined;
 }
 
-const REJECTED_PATTERN = /rejected|non-fast-forward|fetch first|stale info/iu;
+const RETRY_DELAYS_MS = [1000, 3000, 10_000] as const;
+/**
+ * git push's status line for a ref the remote refused because the push is not a fast-forward of what it has
+ * (` ! [rejected]        <src> -> <ref> (fetch first)`, `(non-fast-forward)`, or `(stale info)` for a lease).
+ * Anything else, such as ` ! [remote rejected] <src> -> <ref> (failed)`, is not a conflict and may pass.
+ */
+const CONFLICT_PATTERN =
+	/^\s*!\s*\[rejected\]\s.*\((?:fetch first|non-fast-forward|stale info)\)\s*$/mu;
 const MESSAGE_KINDS = new Set(["pi.assistant", "pi.tool-result"]);
 
 /** A model response or tool result was stored: the end of a turn (or of one of its tool calls). */
@@ -34,8 +56,9 @@ export function isTurnBoundary(batches: readonly Batch[]): boolean {
 
 /**
  * Pushes are fast-forward only, so a concurrent writer on the same ref makes the later push fail
- * (GitSyncConflictError) instead of overwriting the other's history. Pushes are coalesced: at most one runs,
- * and the newest scheduled tip goes next.
+ * (GitSyncConflictError) instead of overwriting the other's history; that stops pushing for good. Other failures
+ * are retried a few times, then reported to the callers waiting on that push, and the next schedule or flush tries
+ * again. Pushes are coalesced: at most one runs, and the newest scheduled tip goes next.
  */
 export class GitSync {
 	readonly ref: string;
@@ -46,7 +69,10 @@ export class GitSync {
 	private remoteTip: string | undefined;
 	private wanted: string | undefined;
 	private running: Promise<void> | undefined;
-	private failure: Error | undefined;
+	/** Why pushing stopped for good: another writer moved the remote ref. */
+	private failure: GitSyncConflictError | undefined;
+	private readonly retryDelaysMs: readonly number[];
+	private readonly git: GitRunner;
 
 	constructor(options: GitSyncOptions) {
 		assertRefName(options.ref);
@@ -54,6 +80,8 @@ export class GitSync {
 		this.ref = options.ref;
 		this.remote = options.remote ?? "origin";
 		this.log = options.log ?? (() => undefined);
+		this.retryDelaysMs = options.retryDelaysMs ?? RETRY_DELAYS_MS;
+		this.git = options.git ?? git;
 	}
 
 	/**
@@ -63,12 +91,12 @@ export class GitSync {
 	async fetch(): Promise<string | undefined> {
 		const tip = await this.remoteHead();
 		if (tip === undefined) {
-			await git(this.repo, ["update-ref", "-d", this.ref]).catch(
+			await this.git(this.repo, ["update-ref", "-d", this.ref]).catch(
 				() => undefined,
 			);
 			this.log(`${this.ref}: new on ${this.remote}`);
 		} else {
-			await git(this.repo, [
+			await this.git(this.repo, [
 				"fetch",
 				"--quiet",
 				"--no-tags",
@@ -83,7 +111,7 @@ export class GitSync {
 
 	/** Look up the remote tip without touching the local ref; undefined when the remote has no such ref. */
 	async remoteHead(): Promise<string | undefined> {
-		const stdout = await git(this.repo, [
+		const stdout = await this.git(this.repo, [
 			"ls-remote",
 			"--refs",
 			this.remote,
@@ -120,27 +148,49 @@ export class GitSync {
 	}
 
 	private async drain(): Promise<void> {
+		let failures = 0;
 		while (this.wanted !== undefined && this.wanted !== this.remoteTip) {
 			const tip = this.wanted;
-			try {
-				// oxlint-disable-next-line eslint/no-await-in-loop -- pushes go one at a time, newest tip next
-				await git(this.repo, [
-					"push",
-					"--quiet",
-					"--no-verify",
-					this.remote,
-					`${tip}:${this.ref}`,
-				]);
-			} catch (error) {
-				const detail =
-					(error instanceof GitError && error.stderr) || String(error);
-				this.failure = REJECTED_PATTERN.test(detail)
-					? new GitSyncConflictError(this.ref, detail)
-					: new Error(`Push of ${this.ref} failed: ${detail}`);
+			// oxlint-disable-next-line eslint/no-await-in-loop -- pushes go one at a time, newest tip next
+			const detail = await this.push(tip);
+			if (detail === undefined) {
+				failures = 0;
+				this.remoteTip = tip;
+				this.log(`${this.ref}: pushed ${tip.slice(0, 7)}`);
+			} else if (CONFLICT_PATTERN.test(detail)) {
+				// The remote has history this one lacks: every later push would be refused the same way.
+				this.failure = new GitSyncConflictError(this.ref, detail);
 				throw this.failure;
+			} else {
+				const delay = this.retryDelaysMs[failures];
+				failures += 1;
+				if (delay === undefined) {
+					throw new Error(
+						`Push of ${this.ref} failed (${failures} attempts): ${detail}`,
+					);
+				}
+				this.log(
+					`${this.ref}: push of ${tip.slice(0, 7)} failed, retrying in ${delay} ms: ${detail}`,
+				);
+				// oxlint-disable-next-line eslint/no-await-in-loop -- a retry waits for the backoff
+				await sleep(delay);
 			}
-			this.remoteTip = tip;
-			this.log(`${this.ref}: pushed ${tip.slice(0, 7)}`);
+		}
+	}
+
+	/** Push `tip` to the ref; resolves with why it failed (git's stderr), undefined when it was pushed. */
+	private async push(tip: string): Promise<string | undefined> {
+		try {
+			await this.git(this.repo, [
+				"push",
+				"--quiet",
+				"--no-verify",
+				this.remote,
+				`${tip}:${this.ref}`,
+			]);
+			return undefined;
+		} catch (error) {
+			return (error instanceof GitError && error.stderr) || String(error);
 		}
 	}
 }
