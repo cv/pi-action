@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import {
 	type FauxResponseStep,
 	fauxAssistantMessage,
+	fauxThinking,
 	fauxToolCall,
 } from "@earendil-works/pi-ai/providers/faux";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -28,6 +29,7 @@ import type { GitHubComment, GitHubReaction } from "./types.ts";
 const REF = "refs/pi/threads/42";
 const FIRST_COMMIT = /pi-durable: seq 1 /u;
 const COMMIT_ID = /^[0-9a-f]{40}$/u;
+const CONTINUE = "Your last response hit the output token limit (max_tokens)";
 
 /** A bare "GitHub" remote, a fresh runner checkout per run, a faux model, and a fake GitHub API. */
 function world() {
@@ -484,6 +486,152 @@ describe("run (durable) with main's modes", () => {
 			response:
 				"Agent failed to provide a response after two attempts. First attempt: Agent returned empty response. Retry attempt: Agent returned empty response.",
 		});
+	});
+
+	it("continues a response cut off by max_tokens, with tools, instead of asking for a summary", async () => {
+		const w = world();
+		let seen: string[] = [];
+		w.faux.setResponses([
+			fauxAssistantMessage([fauxThinking("thinking...")], {
+				stopReason: "length",
+			}),
+			fauxAssistantMessage([fauxToolCall("bash", { command: "echo hi" })], {
+				stopReason: "toolUse",
+			}),
+			(context) => {
+				seen = userTexts(context.messages);
+				return fauxAssistantMessage(`Fixed: ${toolText(context.messages)}`);
+			},
+		]);
+		const deps = w.deps(w.comment("@pi fix it"));
+		await run(deps);
+		expect(seen.filter((t) => t.includes(CONTINUE))).toHaveLength(1);
+		expect(seen.join("\n")).not.toContain("without a text reply");
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain("Fixed: hi");
+		expect(deps.log.warning).toHaveBeenCalledWith(
+			expect.stringContaining("asking it to continue (1 of 3)"),
+		);
+	});
+
+	it("gives up after max_tokens cut-offs in a row, saying so", async () => {
+		const w = world();
+		const contexts: string[][] = [];
+		const cutOff: FauxResponseStep = (context) => {
+			contexts.push(userTexts(context.messages));
+			return fauxAssistantMessage([fauxThinking("hmm")], {
+				stopReason: "length",
+			});
+		};
+		w.faux.setResponses(Array.from({ length: 6 }, () => cutOff));
+		const deps = w.deps(w.comment("@pi fix it"));
+		await run(deps);
+		expect(contexts).toHaveLength(4); // the prompt and three continuations
+		const all = contexts.flat().join("\n");
+		expect(all).not.toContain("completed your work");
+		expect(all).not.toContain("without a text reply");
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain("### ❌ pi Error");
+		expect(w.gh.posted[0]).toContain(
+			"hit the output token limit (max_tokens) 4 times in a row",
+		);
+		expect(w.gh.posted[0]).toContain("model_max_tokens");
+		expect(deps.log.warning).toHaveBeenCalledWith(
+			expect.stringContaining("Consider raising the model_max_tokens input"),
+		);
+	});
+
+	it("resets the cut-off count when a continuation uses tools", async () => {
+		const w = world();
+		const cut = () =>
+			fauxAssistantMessage([fauxThinking("hmm")], { stopReason: "length" });
+		const tool = () =>
+			fauxAssistantMessage([fauxToolCall("bash", { command: "true" })], {
+				stopReason: "toolUse",
+			});
+		w.faux.setResponses([
+			cut(),
+			cut(),
+			cut(),
+			tool(),
+			cut(),
+			cut(),
+			fauxAssistantMessage("Finally done."),
+		]);
+		await run(w.deps(w.comment("@pi fix it")));
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain("Finally done.");
+	});
+
+	it("posts partial text from a cut-off response, says it was cut off, and continues", async () => {
+		const w = world();
+		w.faux.setResponses([
+			fauxAssistantMessage("Here is the first half", { stopReason: "length" }),
+			fauxAssistantMessage("and the second half."),
+		]);
+		await run(w.deps(w.comment("@pi explain")));
+		expect(w.gh.posted).toHaveLength(2);
+		expect(w.gh.posted[0]).toContain("Here is the first half");
+		expect(w.gh.posted[0]).toContain(
+			"cut off at the output token limit (max_tokens); pi is continuing",
+		);
+		expect(w.gh.posted[1]).toContain("and the second half.");
+	});
+
+	it("does not send continuations or post cut-off text again on a later run", async () => {
+		const w = world();
+		w.faux.setResponses([
+			fauxAssistantMessage("Here is the first half", { stopReason: "length" }),
+			fauxAssistantMessage("and the second half."),
+		]);
+		await run(w.deps(w.comment("@pi explain")));
+		expect(w.gh.posted).toHaveLength(2);
+
+		let seen: string[] = [];
+		w.faux.setResponses([
+			(context) => {
+				seen = userTexts(context.messages);
+				return fauxAssistantMessage("Again.");
+			},
+		]);
+		const deps = w.deps(w.comment("@pi again"));
+		deps.env = { ...deps.env, GITHUB_RUN_ID: "778" };
+		await run(deps);
+		expect(seen.filter((t) => t.includes(CONTINUE))).toHaveLength(1);
+		expect(w.gh.posted).toHaveLength(3);
+		expect(w.gh.posted[2]).toContain("Again.");
+	});
+
+	it("includes the partial text when it gives up", async () => {
+		const w = world();
+		w.faux.setResponses(
+			Array.from({ length: 4 }, (_, i) =>
+				fauxAssistantMessage(`part ${i}`, { stopReason: "length" }),
+			),
+		);
+		await run(w.deps(w.comment("@pi explain")));
+		expect(w.gh.posted).toHaveLength(4);
+		expect(w.gh.posted[3]).toContain("The last response, cut off:\n\npart 3");
+	});
+
+	it("does not continue a cut-off response after the timeout", async () => {
+		const w = world();
+		w.faux.setResponses([
+			() => {
+				const until = Date.now() + 1100;
+				while (Date.now() < until) {
+					// a slow response that ends after the deadline
+				}
+				return fauxAssistantMessage([fauxThinking("hmm")], {
+					stopReason: "length",
+				});
+			},
+			fauxAssistantMessage("should not be asked"),
+		]);
+		await run(w.deps(w.comment("@pi fix it"), { timeout: 1 }));
+		expect(w.faux.state.callCount).toBe(1);
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain("Timeout after 1 seconds");
 	});
 
 	it("output mode reports setup failures as outputs", async () => {
