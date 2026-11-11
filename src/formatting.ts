@@ -16,6 +16,41 @@ export function formatErrorComment(error: string, ref?: string): string {
 	return `### ❌ pi Error\n\nFailed to process request: ${error}${footer(ref)}`;
 }
 
+const READ_A_THREAD =
+	"https://github.com/cv/pi-action/blob/main/docs/threads.md#read-a-thread";
+
+/** The commands of docs/threads.md#read-a-thread for `ref` on `remote`. */
+function readCommands(ref: string, remote: string): string[] {
+	return [
+		`git fetch ${remote} '${ref}:${ref}'`,
+		`git log --oneline ${ref}            # one commit for each stored step`,
+		`git show ${ref}:batch.json | jq .   # the records of the newest step`,
+	];
+}
+
+/** How to read the thread with git, for the workflow log. */
+export function formatThreadLog(ref: string, remote: string): string {
+	return [
+		`This conversation is stored in git on ${ref}. To read it:`,
+		...readCommands(ref, remote).map((command) => `  ${command}`),
+		`See ${READ_A_THREAD}`,
+	].join("\n");
+}
+
+/** How to read the thread with git, for the job summary. */
+export function formatThreadSummary(ref: string, remote: string): string {
+	return [
+		"### 🧵 pi thread",
+		"",
+		`This conversation is stored in git on \`${ref}\`. To read it ([more](${READ_A_THREAD})):`,
+		"",
+		"```bash",
+		...readCommands(ref, remote),
+		"```",
+		"",
+	].join("\n");
+}
+
 export function formatReviewComments(comments: GitHubComment[]): string {
 	if (comments.length === 0) {
 		return "";
