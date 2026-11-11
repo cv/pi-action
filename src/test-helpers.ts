@@ -23,6 +23,8 @@ export function createLogger(): Logger {
 		error: vi.fn<Logger["error"]>(),
 		setFailed: vi.fn<Logger["setFailed"]>(),
 		setOutput: vi.fn<Logger["setOutput"]>(),
+		startGroup: vi.fn<Logger["startGroup"]>(),
+		endGroup: vi.fn<Logger["endGroup"]>(),
 	};
 }
 

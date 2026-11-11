@@ -48,7 +48,7 @@ function getActionInputDefault(inputName: string): string {
 	return defaultValue;
 }
 
-function getReadmeInputDefault(inputName: string): string {
+function getDocumentedInputDefault(inputName: string): string {
 	const escapedInputName = inputName.replaceAll(
 		REGEXP_SPECIAL_CHARS_PATTERN,
 		String.raw`\$&`,
@@ -59,7 +59,7 @@ function getReadmeInputDefault(inputName: string): string {
 	).exec(README);
 	const defaultValue = defaultMatch?.[1];
 	if (defaultValue === undefined) {
-		throw new Error(`Input ${inputName} not found in README inputs table`);
+		throw new Error(`Input ${inputName} not found in the README inputs table`);
 	}
 	return defaultValue;
 }
@@ -69,7 +69,7 @@ describe("input defaults", () => {
 		"keeps %s default in sync across source, action.yml, and README",
 		(inputName, expectedDefault) => {
 			expect(getActionInputDefault(inputName)).toBe(expectedDefault);
-			expect(getReadmeInputDefault(inputName)).toBe(expectedDefault);
+			expect(getDocumentedInputDefault(inputName)).toBe(expectedDefault);
 		},
 	);
 });

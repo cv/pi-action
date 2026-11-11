@@ -41,7 +41,9 @@ const MODEL_INPUT_MODES: ReadonlySet<string> = new Set<ModelInputMode>([
 	"image",
 ]);
 const INTEGER_PATTERN = /^\d+$/u;
-const EXTENSION_SEPARATOR = /[\n,]/u;
+const LINE_BREAK = /\r?\n/u;
+/** A `#` at the start of a line or after whitespace starts a comment; `github:owner/repo#ref` keeps its `#`. */
+const EXTENSION_COMMENT = /(?:^|\s)#.*$/u;
 const COMPAT_INPUTS = {
 	supportsDeveloperRole: "compat_supports_developer_role",
 	supportsReasoningEffort: "compat_supports_reasoning_effort",
@@ -55,10 +57,14 @@ export function parseCsv(value: string): string[] {
 		.filter(Boolean);
 }
 
-/** pi extension specs, newline- or comma-separated; blank lines and `#` comments are skipped. */
+/**
+ * pi extension specs, newline- or comma-separated. Blank lines are skipped, and so are `#` comments: whole lines, or
+ * the rest of a line after a spec (`pkg@1.2.3  # why`). Comments are removed before the commas split the line.
+ */
 export function parseExtensionSpecs(value: string): string[] {
 	return value
-		.split(EXTENSION_SEPARATOR)
+		.split(LINE_BREAK)
+		.flatMap((line) => line.replace(EXTENSION_COMMENT, "").split(","))
 		.map((spec) => spec.trim())
 		.filter((spec) => spec !== "" && !spec.startsWith("#"));
 }

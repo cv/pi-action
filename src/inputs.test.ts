@@ -81,6 +81,14 @@ describe("parseExtensionSpecs", () => {
 		).toStrictEqual(["pi-foo@1.2.3", "@acme/pi-bar", "./local/ext.ts"]);
 		expect(parseExtensionSpecs("")).toStrictEqual([]);
 	});
+
+	it("drops comments after a spec, also with commas, and keeps the # of a git ref", () => {
+		expect(
+			parseExtensionSpecs(
+				"github:cv/pit#v0.35.0   # pit's typescript tool, pinned\r\na, b\t# two\n#c\nd,#e\n",
+			),
+		).toStrictEqual(["github:cv/pit#v0.35.0", "a", "b", "d"]);
+	});
 });
 
 describe("readCustomProviderConfig", () => {

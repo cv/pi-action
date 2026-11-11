@@ -5,7 +5,12 @@ import { buildPrompt, formatFollowUp, type PIContext } from "./context.ts";
 import { ThreadConversation, type ThreadResult } from "./conversation.ts";
 import { createDurableExtensions } from "./durable-extensions.ts";
 import { loadExtensions } from "./extensions.ts";
-import { formatErrorComment, formatSuccessComment } from "./formatting.ts";
+import {
+	formatErrorComment,
+	formatSuccessComment,
+	formatThreadLog,
+	formatThreadSummary,
+} from "./formatting.ts";
 import { createGitHubUi, type GitHubUi } from "./github-ui.ts";
 import type { GitHubClient, ReactionTarget } from "./github.ts";
 import type { ActionInputs } from "./inputs.ts";
@@ -24,6 +29,8 @@ export interface Logger extends Log {
 	error: (msg: string) => void;
 	setFailed: (msg: string) => void;
 	setOutput: (name: string, value: string) => void;
+	startGroup: (name: string) => void;
+	endGroup: () => void;
 }
 
 export interface ActionDependencies {
@@ -172,6 +179,23 @@ async function closeThread(thread: Thread, log: Log): Promise<void> {
 	}
 }
 
+/** After the final push: how to read the thread with git, in a log group and the job summary. */
+async function showThread(
+	deps: ActionDependencies,
+	ref: string,
+): Promise<void> {
+	const { log } = deps;
+	const remote = deps.remote ?? "origin";
+	log.startGroup(`How to read ${ref} with git`);
+	log.info(formatThreadLog(ref, remote));
+	log.endGroup();
+	try {
+		await deps.summary?.(formatThreadSummary(ref, remote));
+	} catch (error) {
+		log.warning(`Could not write the job summary: ${getErrorMessage(error)}`);
+	}
+}
+
 export async function run(deps: ActionDependencies): Promise<void> {
 	const resolved = await getRunContext(deps);
 	if (!resolved) {
@@ -293,6 +317,9 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		stopSignals?.();
 		if (thread) {
 			await closeThread(thread, log);
+			if (thread.ref !== undefined) {
+				await showThread(deps, thread.ref);
+			}
 		}
 	}
 }

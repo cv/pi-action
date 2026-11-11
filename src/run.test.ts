@@ -191,6 +191,32 @@ describe("run (durable)", () => {
 		expect(log).toMatch(FIRST_COMMIT);
 	});
 
+	it("shows how to read the thread with git after the final push", async () => {
+		const w = world();
+		w.faux.setResponses([fauxAssistantMessage("Fixed it.")]);
+		const deps = w.deps(w.comment("@pi please fix"));
+		let tipWhenShown = "";
+		vi.mocked(deps.log.startGroup).mockImplementation(() => {
+			tipWhenShown = git(w.remote, "rev-parse", REF).trim();
+		});
+
+		await run(deps);
+
+		expect(deps.log.startGroup).toHaveBeenCalledExactlyOnceWith(
+			`How to read ${REF} with git`,
+		);
+		expect(deps.log.info).toHaveBeenCalledWith(
+			expect.stringContaining(
+				`This conversation is stored in git on ${REF}. To read it:\n  git fetch origin '${REF}:${REF}'\n`,
+			),
+		);
+		expect(deps.log.endGroup).toHaveBeenCalledExactlyOnceWith();
+		expect(tipWhenShown).toBe(git(deps.cwd, "rev-parse", REF).trim());
+		expect(deps.summary).toHaveBeenCalledExactlyOnceWith(
+			expect.stringContaining(`git log --oneline ${REF}`),
+		);
+	});
+
 	it("answers with a provider from a pi extension (the extensions input)", async () => {
 		const w = world();
 		const trigger = w.comment("@pi say something");
@@ -314,6 +340,9 @@ describe("run (durable)", () => {
 		expect(w.gh.posted[0]).toContain("Timeout after 0.3 seconds");
 		expect(w.reacted("confused")).toStrictEqual([trigger.id]);
 		expect(git(w.remote, "rev-parse", REF).trim()).toMatch(COMMIT_ID);
+		expect(deps.log.startGroup).toHaveBeenCalledExactlyOnceWith(
+			`How to read ${REF} with git`,
+		);
 	}, 20_000);
 
 	it("does not repeat a failure report in a later run", async () => {
@@ -402,7 +431,13 @@ describe("run (durable) with main's modes", () => {
 	it("output mode answers a trigger without comments or reactions, and keeps the thread", async () => {
 		const w = world();
 		w.faux.setResponses([fauxAssistantMessage("All good.")]);
-		const deps = w.deps(w.comment("@pi check"), { outputMode: "output" });
+		const summary = vi.fn(async (_markdown: string) => {
+			throw new Error("no summary file");
+		});
+		const deps = {
+			...w.deps(w.comment("@pi check"), { outputMode: "output" }),
+			summary,
+		};
 
 		await run(deps);
 
@@ -413,6 +448,16 @@ describe("run (durable) with main's modes", () => {
 		expect(w.gh.posted).toHaveLength(0);
 		expect(w.gh.addReaction).not.toHaveBeenCalled();
 		expect(git(w.remote, "rev-parse", REF).trim()).toMatch(COMMIT_ID);
+		// A job summary that cannot be written is a warning; the log still shows the thread.
+		expect(deps.log.startGroup).toHaveBeenCalledExactlyOnceWith(
+			`How to read ${REF} with git`,
+		);
+		expect(summary).toHaveBeenCalledExactlyOnceWith(
+			expect.stringContaining(REF),
+		);
+		expect(deps.log.warning).toHaveBeenCalledWith(
+			"Could not write the job summary: no summary file",
+		);
 	});
 
 	it("a direct prompt runs in memory and stores nothing", async () => {
@@ -431,6 +476,8 @@ describe("run (durable) with main's modes", () => {
 			response: "Release notes.",
 		});
 		expect(git(w.remote, "for-each-ref", "refs/pi")).toBe("");
+		expect(deps.log.startGroup).not.toHaveBeenCalled();
+		expect(deps.summary).not.toHaveBeenCalled();
 	});
 
 	it("pr_number reviews join that PR's thread and can post to it", async () => {
@@ -763,6 +810,9 @@ describe("run with a pi-durable extension (installed from npm)", () => {
 		expect(d.reacted("rocket")).toHaveLength(0);
 		expect(d.reacted("confused")).toHaveLength(0);
 		expect(d.gh.getComment).not.toHaveBeenCalled();
+		expect(d.deps.log.startGroup).toHaveBeenCalledExactlyOnceWith(
+			expect.stringMatching(/^How to read refs\/pi\/threads\/\d+ with git$/u),
+		);
 
 		// Ticking Yes starts a new run: the answer reaches the thread, and the tool asks its next question.
 		const yes = d.durableDeps(d.tick(1001, "Yes"));
