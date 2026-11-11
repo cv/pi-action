@@ -3,7 +3,7 @@ import {
 	formatErrorComment,
 	formatReviewComments,
 	formatSuccessComment,
-} from "./formatting.js";
+} from "./formatting.ts";
 
 describe("formatSuccessComment", () => {
 	it("formats response with pi emoji header", () => {

@@ -3,8 +3,8 @@ import {
 	createCustomProvider,
 	readCustomProviderConfig,
 	resolveApiKey,
-} from "./custom-provider.js";
-import { DEFAULTS } from "./defaults.js";
+} from "./custom-provider.ts";
+import { DEFAULTS } from "./defaults.ts";
 
 function createInputReader(
 	values: Record<string, string>,

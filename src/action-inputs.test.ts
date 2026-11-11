@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { readActionInputs } from "./action-inputs.js";
-import { DEFAULTS } from "./defaults.js";
+import { readActionInputs } from "./action-inputs.ts";
+import { DEFAULTS } from "./defaults.ts";
 
 function createInputReader(
 	values: Record<string, string>,

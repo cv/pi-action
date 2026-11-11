@@ -1,4 +1,4 @@
-import type { ModelInputMode } from "./types.js";
+import type { ModelInputMode } from "./types.ts";
 
 export type InputReader = (name: string) => string;
 

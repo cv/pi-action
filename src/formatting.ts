@@ -2,7 +2,7 @@
  * Response formatting utilities for consistent GitHub comment formatting
  */
 
-import type { PullRequestReviewComment } from "./types.js";
+import type { PullRequestReviewComment } from "./types.ts";
 
 export interface CommentFooter {
 	/** The thread's ref, e.g. refs/pi/threads/42. */

@@ -4,7 +4,7 @@ import {
 	extractTask,
 	hasTrigger,
 	renderTemplate,
-} from "./context.js";
+} from "./context.ts";
 
 describe("hasTrigger", () => {
 	it("detects @pi at start", () => {

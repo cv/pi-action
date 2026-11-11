@@ -1,8 +1,8 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Submission } from "@earendil-works/pi-durable";
-import type { Thread } from "./thread.js";
-import type { Trigger } from "./triggers.js";
-import { getErrorMessage } from "./utils.js";
+import type { Thread } from "./thread.ts";
+import type { Trigger } from "./triggers.ts";
+import { getErrorMessage } from "./utils.ts";
 
 type SettledRecord = Awaited<ReturnType<Submission["wait"]>>;
 

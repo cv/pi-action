@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getErrorMessage, TimeoutError, withTimeout } from "./utils.js";
+import { getErrorMessage, TimeoutError, withTimeout } from "./utils.ts";
 
 describe("getErrorMessage", () => {
 	it("extracts message from Error instance", () => {

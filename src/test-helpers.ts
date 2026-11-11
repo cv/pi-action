@@ -6,10 +6,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { vi } from "vitest";
-import { DEFAULTS } from "./defaults.js";
-import type { GitHubClient } from "./github.js";
-import type { ActionInputs } from "./run.js";
-import type { GitHubComment, ModelConfig, TriggerInfo } from "./types.js";
+import { DEFAULTS } from "./defaults.ts";
+import type { GitHubClient } from "./github.ts";
+import type { ActionInputs } from "./run.ts";
+import type { GitHubComment, ModelConfig, TriggerInfo } from "./types.ts";
 
 const since = (list: GitHubComment[], iso?: string) =>
 	iso

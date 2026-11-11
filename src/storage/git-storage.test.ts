@@ -11,9 +11,9 @@ import {
 	Harness,
 } from "@earendil-works/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
-import { tempRepo } from "../test-helpers.js";
-import { GitRepo, RefConflictError } from "./git.js";
-import { GitStorage } from "./git-storage.js";
+import { tempRepo } from "../test-helpers.ts";
+import { GitRepo, RefConflictError } from "./git.ts";
+import { GitStorage } from "./git-storage.ts";
 
 const context = BACKGROUND_CONTEXT;
 const REF = "refs/pi/threads/42";

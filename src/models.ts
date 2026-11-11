@@ -5,8 +5,8 @@ import {
 } from "@earendil-works/pi-ai";
 import type { MutableModels } from "@earendil-works/pi-ai/models";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import { createCustomProvider } from "./custom-provider.js";
-import type { CustomProviderConfig } from "./types.js";
+import { createCustomProvider } from "./custom-provider.ts";
+import type { CustomProviderConfig } from "./types.ts";
 
 export interface ModelSetupOptions {
 	provider: string;

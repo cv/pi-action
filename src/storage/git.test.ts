@@ -3,9 +3,9 @@ import { join } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { ConversationId } from "@earendil-works/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
-import { tempRepo } from "../test-helpers.js";
-import { assertRefName, GitRepo, RefConflictError } from "./git.js";
-import { GitStorage } from "./git-storage.js";
+import { tempRepo } from "../test-helpers.ts";
+import { assertRefName, GitRepo, RefConflictError } from "./git.ts";
+import { GitStorage } from "./git-storage.ts";
 
 const author = { name: "t", email: "t@t" };
 const cleanups: (() => void)[] = [];

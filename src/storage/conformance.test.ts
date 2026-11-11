@@ -4,8 +4,8 @@ import {
 	type StorageConformanceRunner,
 } from "@earendil-works/pi-durable/testing";
 import { describe, expect, it } from "vitest";
-import { tempRepo } from "../test-helpers.js";
-import { GitStorage } from "./git-storage.js";
+import { tempRepo } from "../test-helpers.ts";
+import { GitStorage } from "./git-storage.ts";
 
 const REF = "refs/pi/threads/test";
 

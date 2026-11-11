@@ -4,8 +4,8 @@ import {
 	createGitHubClient,
 	extractTriggerInfo,
 	type GitHubContext,
-} from "./github.js";
-import { createMockGitHubClient, createTriggerInfo } from "./test-helpers.js";
+} from "./github.ts";
+import { createMockGitHubClient, createTriggerInfo } from "./test-helpers.ts";
 
 describe("extractTriggerInfo", () => {
 	describe("comment events", () => {

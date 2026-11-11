@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeInput, validatePermissions } from "./security.js";
+import { sanitizeInput, validatePermissions } from "./security.ts";
 
 function createSecurityContext(
 	overrides: Parameters<typeof validatePermissions>[0],

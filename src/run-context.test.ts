@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ActionDependencies, ActionInputs } from "./run.js";
-import { getRunContext } from "./run-context.js";
-import { createActionInputs, createMockGitHubClient } from "./test-helpers.js";
+import type { ActionDependencies, ActionInputs } from "./run.ts";
+import { getRunContext } from "./run-context.ts";
+import { createActionInputs, createMockGitHubClient } from "./test-helpers.ts";
 
 function deps(
 	inputs: Partial<ActionInputs>,

@@ -1,30 +1,30 @@
 import type { Models } from "@earendil-works/pi-ai/models";
-import { buildPrompt, formatFollowUp, type PIContext } from "./context.js";
-import { ThreadConversation, type ThreadResult } from "./conversation.js";
-import { DEFAULTS } from "./defaults.js";
+import { buildPrompt, formatFollowUp, type PIContext } from "./context.ts";
+import { ThreadConversation, type ThreadResult } from "./conversation.ts";
+import { DEFAULTS } from "./defaults.ts";
 import {
 	type CommentFooter,
 	formatErrorComment,
 	formatSuccessComment,
-} from "./formatting.js";
-import { addReaction, type GitHubClient } from "./github.js";
-import { createActionModels, findModel } from "./models.js";
-import { getRunContext } from "./run-context.js";
-import { GitSyncConflictError } from "./storage/sync.js";
-import { Thread } from "./thread.js";
+} from "./formatting.ts";
+import { addReaction, type GitHubClient } from "./github.ts";
+import { createActionModels, findModel } from "./models.ts";
+import { getRunContext } from "./run-context.ts";
+import { GitSyncConflictError } from "./storage/sync.ts";
+import { Thread } from "./thread.ts";
 import {
 	collectTriggers,
 	type Trigger,
 	type TriggerFilter,
 	triggerFromInfo,
-} from "./triggers.js";
+} from "./triggers.ts";
 import type {
 	CustomProviderConfig,
 	ModelConfig,
 	RepoRef,
 	TriggerInfo,
-} from "./types.js";
-import { getErrorMessage } from "./utils.js";
+} from "./types.ts";
+import { getErrorMessage } from "./utils.ts";
 
 type OutputMode = "comment" | "output";
 

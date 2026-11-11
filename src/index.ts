@@ -7,10 +7,10 @@ import {
 	warning,
 } from "@actions/core";
 import { context, getOctokit } from "@actions/github";
-import { readActionInputs } from "./action-inputs.js";
-import { createGitHubClient } from "./github.js";
-import { run } from "./run.js";
-import { getErrorMessage } from "./utils.js";
+import { readActionInputs } from "./action-inputs.ts";
+import { createGitHubClient } from "./github.ts";
+import { run } from "./run.ts";
+import { getErrorMessage } from "./utils.ts";
 
 run({
 	inputs: readActionInputs(getInput),

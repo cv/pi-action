@@ -3,7 +3,7 @@ import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messag
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
 import { createProvider, type Provider } from "@earendil-works/pi-ai/models";
-import { DEFAULTS } from "./defaults.js";
+import { DEFAULTS } from "./defaults.ts";
 import {
 	getInputOrDefault,
 	type InputReader,
@@ -11,11 +11,11 @@ import {
 	parseModelInputModes,
 	parseOptionalBooleanInput,
 	parsePositiveIntegerInput,
-} from "./inputs.js";
+} from "./inputs.ts";
 import type {
 	CustomProviderCompatConfig,
 	CustomProviderConfig,
-} from "./types.js";
+} from "./types.ts";
 
 /** The model APIs a custom provider may use. */
 const CUSTOM_APIS = {

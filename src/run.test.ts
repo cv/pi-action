@@ -11,14 +11,14 @@ import {
 	fauxToolCall,
 } from "@earendil-works/pi-ai/providers/faux";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { pushThread } from "./push.js";
-import { type ActionDependencies, type ActionInputs, run } from "./run.js";
+import { pushThread } from "./push.ts";
+import { type ActionDependencies, type ActionInputs, run } from "./run.ts";
 import {
 	createActionInputs,
 	createComment,
 	createMockGitHubClient,
-} from "./test-helpers.js";
-import type { GitHubComment } from "./types.js";
+} from "./test-helpers.ts";
+import type { GitHubComment } from "./types.ts";
 
 const REF = "refs/pi/threads/42";
 const FIRST_COMMIT = /pi-durable: seq 1 /u;

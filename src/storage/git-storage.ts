@@ -13,7 +13,7 @@ import {
 	type Storage,
 	type StorageWrite,
 } from "@earendil-works/pi-durable";
-import { GitRepo, type Signature } from "./git.js";
+import { GitRepo, type Signature } from "./git.ts";
 
 const FORMAT_VERSION = 1;
 const BATCH_FILE = "batch.json";

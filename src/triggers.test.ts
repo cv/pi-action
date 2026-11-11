@@ -3,13 +3,13 @@ import {
 	createComment,
 	createMockGitHubClient,
 	createTriggerInfo,
-} from "./test-helpers.js";
+} from "./test-helpers.ts";
 import {
 	collectTriggers,
 	triggerFromInfo,
 	triggerKey,
 	triggersFromComments,
-} from "./triggers.js";
+} from "./triggers.ts";
 
 const filter = {
 	triggerPhrase: "@pi",

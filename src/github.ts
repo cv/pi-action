@@ -13,7 +13,7 @@ import type {
 	RepoRef,
 	TriggerInfo,
 	TriggerSource,
-} from "./types.js";
+} from "./types.ts";
 
 export interface GitHubContext {
 	repo: RepoRef;

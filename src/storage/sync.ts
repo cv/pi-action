@@ -1,7 +1,7 @@
 // Moving a GitStorage ref between a local repository and a remote: fetch it before opening, push it as it grows.
 import { execFile } from "node:child_process";
-import { assertRefName } from "./git.js";
-import type { Batch } from "./git-storage.js";
+import { assertRefName } from "./git.ts";
+import type { Batch } from "./git-storage.ts";
 
 export class GitSyncConflictError extends Error {
 	readonly ref: string;

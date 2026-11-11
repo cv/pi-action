@@ -1,12 +1,12 @@
-import { extractTask, hasTrigger } from "./context.js";
-import type { GitHubClient } from "./github.js";
-import { sanitizeInput, validatePermissions } from "./security.js";
+import { extractTask, hasTrigger } from "./context.ts";
+import type { GitHubClient } from "./github.ts";
+import { sanitizeInput, validatePermissions } from "./security.ts";
 import type {
 	GitHubComment,
 	GitHubUser,
 	TriggerInfo,
 	TriggerSource,
-} from "./types.js";
+} from "./types.ts";
 
 /** One request for pi: an issue/PR body or comment that mentions the trigger phrase. */
 export interface Trigger {

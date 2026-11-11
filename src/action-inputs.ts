@@ -1,12 +1,12 @@
-import { readCustomProviderConfig } from "./custom-provider.js";
-import { DEFAULTS } from "./defaults.js";
+import { readCustomProviderConfig } from "./custom-provider.ts";
+import { DEFAULTS } from "./defaults.ts";
 import {
 	getInputOrDefault,
 	type InputReader,
 	parseCsvInput,
 	parsePositiveIntegerInput,
-} from "./inputs.js";
-import type { ActionInputs } from "./run.js";
+} from "./inputs.ts";
+import type { ActionInputs } from "./run.ts";
 
 const GITHUB_TOKEN_ENV = "GITHUB_TOKEN";
 

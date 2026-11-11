@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { DEFAULTS } from "./defaults.js";
+import { DEFAULTS } from "./defaults.ts";
 
 const ACTION_YML = readFileSync("action.yml", "utf-8");
 const README = readFileSync("README.md", "utf-8");

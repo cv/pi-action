@@ -2,9 +2,9 @@
 // timed out, or crashed). Pushes are fast-forward only, so this never overwrites another run's history.
 import { info, warning } from "@actions/core";
 import { context } from "@actions/github";
-import { GitSync, runGit } from "./storage/sync.js";
-import { threadRef } from "./thread.js";
-import { getErrorMessage } from "./utils.js";
+import { GitSync, runGit } from "./storage/sync.ts";
+import { threadRef } from "./thread.ts";
+import { getErrorMessage } from "./utils.ts";
 
 const ISSUE_KEY = "issue";
 const PULL_REQUEST_KEY = "pull_request";

@@ -10,8 +10,8 @@ import {
 } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
-import { GitStorage } from "./git-storage.js";
-import { GitSync, GitSyncConflictError, isTurnBoundary } from "./sync.js";
+import { GitStorage } from "./git-storage.ts";
+import { GitSync, GitSyncConflictError, isTurnBoundary } from "./sync.ts";
 
 const context = BACKGROUND_CONTEXT;
 const REF = "refs/pi/threads/7";

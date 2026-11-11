@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createActionModels, findModel } from "./models.js";
-import type { CustomProviderConfig } from "./types.js";
+import { createActionModels, findModel } from "./models.ts";
+import type { CustomProviderConfig } from "./types.ts";
 
 const KNOWN_MODELS = /known: /u;
 const UNKNOWN_PROVIDER = /unknown provider/u;
