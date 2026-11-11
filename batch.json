@@ -1,1 +1,1 @@
-{"format":1,"seq":213,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":214,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"\n ✓ src/run.test.ts (31 tests | 28 skipped) 817ms\n\n Test Files  1 passed (1)\n      Tests  3 passed | 28 skipped (31)\n   Start at  20:20:18\n   Duration  1.41s (transform 202ms, setup 21ms, import 458ms, tests 817ms, environment 0ms)\n\n"]]}}]}
