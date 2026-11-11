@@ -1,19 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { formatErrorComment, formatSuccessComment } from "./formatting.js";
 
+const FOOTER_42 =
+	"\n\n---\n<sub>🧵 Thread state: `refs/pi/threads/42` (`git fetch origin refs/pi/threads/42`)</sub>";
+
 describe("formatSuccessComment", () => {
 	it("formats response with pi emoji header", () => {
 		const result = formatSuccessComment("Here is the answer");
 		expect(result).toBe("### 🤖 pi Response\n\nHere is the answer");
 	});
 
-	it("formats response with session link", () => {
-		const result = formatSuccessComment(
-			"Here is the answer",
-			"https://shittycodingagent.ai/session?abc123",
+	it("adds a footer with the thread ref", () => {
+		const result = formatSuccessComment("Here is the answer", {
+			ref: "refs/pi/threads/42",
+		});
+		expect(result).toBe(`### 🤖 pi Response\n\nHere is the answer${FOOTER_42}`);
+	});
+
+	it("lists who it answers when there are several", () => {
+		expect(formatSuccessComment("ok", { replyTo: ["alice", "bob"] })).toBe(
+			"### 🤖 pi Response\n\nok\n\n---\n<sub>↩️ Answers @alice, @bob</sub>",
 		);
-		expect(result).toBe(
-			"### 🤖 pi Response\n\nHere is the answer\n\n---\n📎 [View full session](https://shittycodingagent.ai/session?abc123)",
+		expect(formatSuccessComment("ok", { replyTo: ["alice"] })).toBe(
+			"### 🤖 pi Response\n\nok",
 		);
 	});
 
@@ -36,13 +45,12 @@ describe("formatErrorComment", () => {
 		);
 	});
 
-	it("formats error with session link", () => {
-		const result = formatErrorComment(
-			"Something went wrong",
-			"https://shittycodingagent.ai/session?def456",
-		);
+	it("adds a footer with the thread ref", () => {
+		const result = formatErrorComment("Something went wrong", {
+			ref: "refs/pi/threads/42",
+		});
 		expect(result).toBe(
-			"### ❌ pi Error\n\nFailed to process request: Something went wrong\n\n---\n📎 [View full session](https://shittycodingagent.ai/session?def456)",
+			`### ❌ pi Error\n\nFailed to process request: Something went wrong${FOOTER_42}`,
 		);
 	});
 

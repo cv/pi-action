@@ -27,7 +27,7 @@ describe("extractTriggerInfo", () => {
 			};
 
 			const result = extractTriggerInfo(payload);
-			expect(result).toEqual({
+			expect(result).toMatchObject({
 				isCommentEvent: true,
 				triggerText: "@pi do something",
 				author: { login: "testuser", type: "User" },
@@ -58,7 +58,7 @@ describe("extractTriggerInfo", () => {
 			};
 
 			const result = extractTriggerInfo(payload);
-			expect(result).toEqual({
+			expect(result).toMatchObject({
 				isCommentEvent: true,
 				triggerText: "@pi review this",
 				author: { login: "reviewer", type: "User" },
@@ -85,7 +85,7 @@ describe("extractTriggerInfo", () => {
 			};
 
 			const result = extractTriggerInfo(payload);
-			expect(result).toEqual({
+			expect(result).toMatchObject({
 				isCommentEvent: false,
 				triggerText: "@pi help me with this",
 				author: { login: "creator", type: "User" },
@@ -110,7 +110,7 @@ describe("extractTriggerInfo", () => {
 			};
 
 			const result = extractTriggerInfo(payload);
-			expect(result).toEqual({
+			expect(result).toMatchObject({
 				isCommentEvent: false,
 				triggerText: "@pi please review",
 				author: { login: "contributor", type: "User" },
@@ -193,13 +193,18 @@ describe("createGitHubClient", () => {
 			rest: {
 				reactions: {
 					createForIssueComment: vi.fn(),
+					createForPullRequestReviewComment: vi.fn(),
 					createForIssue: vi.fn(),
 				},
 				issues: {
-					createComment: vi.fn(),
+					createComment: vi.fn().mockResolvedValue({
+						data: { id: 7, html_url: "https://github.com/c/7" },
+					}),
+					listComments: vi.fn(),
 				},
 				pulls: {
 					get: vi.fn(),
+					listReviewComments: vi.fn(),
 				},
 			},
 		};
@@ -237,7 +242,8 @@ describe("createGitHubClient", () => {
 		const octokit = createMockOctokit();
 		const client = createGitHubClient(octokit, mockContext);
 
-		await client.createComment(42, "Hello world");
+		const posted = await client.createComment(42, "Hello world");
+		expect(posted).toEqual({ id: 7, url: "https://github.com/c/7" });
 
 		expect(octokit.rest.issues.createComment).toHaveBeenCalledWith({
 			owner: "testowner",
@@ -245,6 +251,48 @@ describe("createGitHubClient", () => {
 			issue_number: 42,
 			body: "Hello world",
 		});
+	});
+
+	it("routes review comment reactions to the review comment API", async () => {
+		const octokit = createMockOctokit();
+		const client = createGitHubClient(octokit, mockContext);
+
+		await client.addReactionToComment(5, "rocket", "review_comment");
+
+		expect(
+			octokit.rest.reactions.createForPullRequestReviewComment,
+		).toHaveBeenCalledWith({
+			owner: "testowner",
+			repo: "testrepo",
+			comment_id: 5,
+			content: "rocket",
+		});
+		expect(octokit.rest.reactions.createForIssueComment).not.toHaveBeenCalled();
+	});
+
+	it("lists every page of issue and review comments", async () => {
+		const octokit = createMockOctokit();
+		const page = (n: number, start: number) =>
+			Array.from({ length: n }, (_, i) => ({ id: start + i }));
+		octokit.rest.issues.listComments
+			.mockResolvedValueOnce({ data: page(100, 0) })
+			.mockResolvedValueOnce({ data: page(3, 100) });
+		octokit.rest.pulls.listReviewComments.mockResolvedValueOnce({
+			data: page(2, 0),
+		});
+		const client = createGitHubClient(octokit, mockContext);
+
+		const comments = await client.listIssueComments(42, "2026-01-01T00:00:00Z");
+		expect(comments).toHaveLength(103);
+		expect(octokit.rest.issues.listComments).toHaveBeenLastCalledWith({
+			owner: "testowner",
+			repo: "testrepo",
+			issue_number: 42,
+			since: "2026-01-01T00:00:00Z",
+			per_page: 100,
+			page: 2,
+		});
+		expect(await client.listReviewComments(42)).toHaveLength(2);
 	});
 
 	it("getPullRequestDiff calls correct API and returns diff", async () => {
@@ -276,7 +324,11 @@ describe("addReaction", () => {
 
 		await addReaction(client, triggerInfo, "eyes");
 
-		expect(client.addReactionToComment).toHaveBeenCalledWith(123, "eyes");
+		expect(client.addReactionToComment).toHaveBeenCalledWith(
+			123,
+			"eyes",
+			undefined,
+		);
 		expect(client.addReactionToIssue).not.toHaveBeenCalled();
 	});
 

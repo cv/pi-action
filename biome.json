@@ -171,5 +171,7 @@
 			}
 		}
 	},
-	"files": { "ignore": ["dist", "node_modules", "coverage"] }
+	"files": {
+		"ignore": ["dist", "node_modules", "coverage", "src/vendor"]
+	}
 }

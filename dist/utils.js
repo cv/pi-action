@@ -40,3 +40,15 @@ export function withTimeout(promise, timeoutMs, message) {
         });
     });
 }
+/** Compare dotted versions numerically: "22.19.0" >= "22.9.1". */
+export function nodeVersionAtLeast(version, minimum) {
+    const a = version.split(".").map((n) => Number.parseInt(n, 10) || 0);
+    const b = minimum.split(".").map((n) => Number.parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        const diff = (a[i] ?? 0) - (b[i] ?? 0);
+        if (diff !== 0) {
+            return diff > 0;
+        }
+    }
+    return true;
+}

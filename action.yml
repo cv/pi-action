@@ -10,10 +10,13 @@ inputs:
     description: 'GitHub token for API access (issues, PRs, reactions, comments)'
     required: true
   gist_token:
-    description: 'GitHub token with gist scope for session sharing (optional, falls back to github_token)'
+    description: 'Deprecated and ignored: sessions are kept in git on refs/pi/threads/<number>'
     required: false
   pi_auth_json:
-    description: 'Contents of ~/.pi/agent/auth.json for OAuth authentication'
+    description: 'Contents of ~/.pi/agent/auth.json (API keys and OAuth credentials)'
+    required: false
+  models_json:
+    description: 'Contents of ~/.pi/agent/models.json, for custom providers (anthropic-messages, openai-completions and openai-responses APIs)'
     required: false
   trigger_phrase:
     description: 'Phrase to trigger pi (e.g., @pi)'
@@ -29,14 +32,16 @@ inputs:
     default: 'anthropic'
   model:
     description: 'Model ID'
-    default: 'claude-sonnet-4-20250514'
+    default: 'claude-sonnet-5-5'
+  poll_interval:
+    description: 'Seconds between checks for new comments while pi works; new @pi comments join the running conversation'
+    default: '15'
   prompt_template:
     description: 'Custom prompt template with placeholder variables'
     required: false
   share_session:
-    description: 'Include a link to the full session HTML in the response comment'
+    description: 'Deprecated and ignored: sessions are kept in git on refs/pi/threads/<number>'
     required: false
-    default: 'true'
 
 runs:
   using: 'composite'
@@ -134,10 +139,19 @@ runs:
         INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
         INPUT_GIST_TOKEN: ${{ inputs.gist_token }}
         INPUT_PI_AUTH_JSON: ${{ inputs.pi_auth_json }}
+        INPUT_MODELS_JSON: ${{ inputs.models_json }}
         INPUT_TRIGGER_PHRASE: ${{ inputs.trigger_phrase }}
         INPUT_ALLOWED_BOTS: ${{ inputs.allowed_bots }}
         INPUT_TIMEOUT: ${{ inputs.timeout }}
         INPUT_PROVIDER: ${{ inputs.provider }}
         INPUT_MODEL: ${{ inputs.model }}
+        INPUT_POLL_INTERVAL: ${{ inputs.poll_interval }}
         INPUT_PROMPT_TEMPLATE: ${{ inputs.prompt_template }}
         INPUT_SHARE_SESSION: ${{ inputs.share_session }}
+
+    # Pushes the thread's refs/pi/threads/<number> if the step above was cancelled, timed out, or crashed
+    # before its own final push. Fast-forward only: it never overwrites another run's history.
+    - name: Save pi thread state
+      if: always()
+      shell: bash
+      run: node ${{ github.action_path }}/dist/push.js

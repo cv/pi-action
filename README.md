@@ -1,16 +1,19 @@
 # pi-action
 
-A GitHub Action that invokes the [pi coding agent](https://github.com/mariozechner/pi-coding-agent) on issues and pull requests via comment triggers.
+A GitHub Action that runs a durable [pi](https://github.com/earendil-works/pi) coding agent on issues and pull requests, triggered by comments. Each issue or PR is one long-running conversation: follow-up comments continue it, several teammates can talk to it at once, and its full history is stored in your repository as git commits on `refs/pi/threads/<number>`.
 
 ## Features
 
 - 🤖 Trigger pi agent with customizable phrases (default: `@pi`)
+- 🧵 One durable conversation per issue/PR: later `@pi` comments continue where it left off, on any runner
+- 👥 Team-friendly: comments posted while pi works join the running conversation; comments a cancelled or queued run missed are picked up by the next one
+- 💾 State in git, no external storage: each step is a commit on `refs/pi/threads/<number>`, pushed at every turn and once more in an `if: always()` step
 - 🔒 Security-first: Only allows repo owners, members, and collaborators
 - 🤝 Bot allowlist for automation workflows
-- 📝 Works on both issues and pull requests
+- 📝 Works on both issues and pull requests (including review comments)
 - 🆕 Trigger on issue/PR creation, not just comments
 - 🔀 Automatically includes PR diffs for code review tasks
-- 📦 Uses the pi SDK directly - no separate installation needed
+- 🔌 Any pi provider, plus custom providers from your `models.json`
 - 🪝 Auto-installs git hooks to enforce commit conventions for the agent
 
 ## Usage
@@ -36,21 +39,25 @@ jobs:
   pi-response:
     if: contains(github.event.comment.body || github.event.issue.body || github.event.pull_request.body || '', '@pi')
     runs-on: ubuntu-latest
+    # One run per issue/PR at a time (see "Durable threads" below).
+    concurrency:
+      group: pi-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
     permissions:
-      contents: write
+      contents: write       # push code and refs/pi/threads/*
       issues: write
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4   # keep persist-credentials (the default): pi pushes its thread ref
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'        # 22.19 or newer
 
       - name: Run pi-action
-        uses: cv/pi-action@v1
+        uses: cv/pi-action@v2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           pi_auth_json: ${{ secrets.PI_AUTH_JSON }}
@@ -58,13 +65,20 @@ jobs:
 
 ### Authentication
 
-pi requires authentication with your LLM provider. Set up the `PI_AUTH_JSON` secret in your repository:
+pi requires authentication with your LLM provider. Either:
 
-1. Run `pi` locally and complete OAuth authentication
-2. Copy the contents of `~/.pi/agent/auth.json`
-3. Add it as a repository secret named `PI_AUTH_JSON`
+- **`pi_auth_json`**: run `pi` locally, log in, and store the contents of `~/.pi/agent/auth.json` as a repository secret (`PI_AUTH_JSON`). OAuth tokens refreshed during a run are not written back to the secret.
+- **Environment variables**: set provider variables such as `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` on the step.
+- **`models_json`** for custom providers: the contents of `~/.pi/agent/models.json`. Providers using the `anthropic-messages`, `openai-completions`, or `openai-responses` APIs are supported; `apiKey` may be a literal key, an environment variable name, or a `!command`.
 
-Alternatively, you can set provider-specific environment variables (e.g., `ANTHROPIC_API_KEY`).
+```yaml
+- uses: cv/pi-action@v2
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    models_json: ${{ secrets.PI_MODELS_JSON }}
+    provider: 'inference.nvidia'
+    model: 'aws/anthropic/bedrock-claude-opus-5-5'
+```
 
 ### Inputs
 
@@ -73,22 +87,23 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
 | `github_token` | GitHub token for API access (issues, PRs, reactions, comments) | Yes | - |
-| `gist_token` | GitHub token with gist scope for session sharing (optional) | No | - |
 | `pi_auth_json` | Contents of `~/.pi/agent/auth.json` | No | - |
+| `models_json` | Contents of `~/.pi/agent/models.json` (custom providers) | No | - |
 | `trigger_phrase` | Phrase to trigger pi | No | `@pi` |
 | `allowed_bots` | Comma-separated list of allowed bot usernames | No | - |
-| `timeout` | Execution timeout in seconds | No | `300` |
-| `provider` | LLM provider (anthropic, openai, google, etc.) | No | `anthropic` |
-| `model` | Model ID | No | `claude-sonnet-4-20250514` |
-| `prompt_template` | Custom prompt template with placeholder variables | No | (built-in default) |
-| `share_session` | Include a link to the full session HTML in the response comment | No | `true` |
+| `timeout` | Seconds before the run is aborted (its thread is still saved) | No | `1800` |
+| `provider` | LLM provider (anthropic, openai, google, openrouter, a `models_json` provider, …) | No | `anthropic` |
+| `model` | Model ID | No | `claude-sonnet-5-5` |
+| `prompt_template` | Custom template for the first message of a thread | No | (built-in default) |
+| `poll_interval` | Seconds between checks for new comments while pi works | No | `15` |
+| `gist_token`, `share_session` | Deprecated and ignored (sessions live in git now) | No | - |
 
 ### Examples
 
 #### Allow Dependabot to trigger pi
 
 ```yaml
-- uses: cv/pi-action@v1
+- uses: cv/pi-action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     allowed_bots: 'dependabot[bot],renovate[bot]'
@@ -97,7 +112,7 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 #### Use a different model
 
 ```yaml
-- uses: cv/pi-action@v1
+- uses: cv/pi-action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     provider: 'openai'
@@ -107,7 +122,7 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 #### Custom trigger phrase
 
 ```yaml
-- uses: cv/pi-action@v1
+- uses: cv/pi-action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     trigger_phrase: '@assistant'
@@ -118,7 +133,7 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 Customize how GitHub issue/PR context is presented to the pi agent:
 
 ```yaml
-- uses: cv/pi-action@v1
+- uses: cv/pi-action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     prompt_template: |
@@ -153,50 +168,24 @@ Customize how GitHub issue/PR context is presented to the pi agent:
 
 See [examples/prompt-templates.md](examples/prompt-templates.md) for more template examples.
 
-#### Session Sharing
+#### Durable threads
 
-By default, pi-action shares the complete session (including tool executions and agent reasoning) as a secret GitHub gist and includes a link in the response comment. This helps with debugging and provides full transparency of what the agent did.
+Every issue or PR is one pi conversation, stored with [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) as a chain of git commits on `refs/pi/threads/<number>` in your repository (a custom ref: it doesn't show up as a branch).
 
-```yaml
-- uses: cv/pi-action@v1
-  with:
-    github_token: ${{ secrets.GITHUB_TOKEN }}
-    pi_auth_json: ${{ secrets.PI_AUTH_JSON }}
-    share_session: true  # Default: true
-```
+- **Continuity**: a later `@pi` comment continues the same conversation, with everything pi saw and did before, on whatever runner picks it up.
+- **Saved as it goes**: the ref is pushed after every model response and tool result, on cancellation (SIGINT/SIGTERM), and once more by the action's `if: always()` step. A run that was cut off resumes its unfinished work next time.
+- **Teams**: with the `concurrency` group above, runs for one thread never overlap. A run handles every `@pi` comment the thread hasn't answered yet, not just the one that triggered it, so comments whose queued run GitHub cancelled are still answered. Comments posted while pi works join the running conversation (checked every `poll_interval` seconds). Each comment is answered once, and failures are reported once.
+- **Safety net**: pushes are fast-forward only. If two runs ever race on one thread, the later push is rejected (and logged) instead of overwriting the other's history.
+- **Inspecting a thread**:
 
-To disable session sharing:
+  ```bash
+  git fetch origin 'refs/pi/threads/*:refs/pi/threads/*'
+  git log --oneline refs/pi/threads/42          # one commit per stored step
+  git show refs/pi/threads/42:batch.json | jq   # the newest step's records
+  ```
 
-```yaml
-- uses: cv/pi-action@v1
-  with:
-    github_token: ${{ secrets.GITHUB_TOKEN }}
-    pi_auth_json: ${{ secrets.PI_AUTH_JSON }}
-    share_session: false  # Disable session links
-```
-
-**Session sharing includes:**
-- Full conversation history
-- All tool executions (file reads, bash commands, edits)
-- Agent reasoning and decision process
-- Error details when things go wrong
-
-Sessions are uploaded as **secret** (non-public) GitHub gists and are accessible via a viewer at `https://shittycodingagent.ai/session?<gist_id>`.
-
-**Note:** The default `GITHUB_TOKEN` does not have permission to create gists. To enable session sharing, provide a separate Personal Access Token (PAT) with the `gist` scope via the `gist_token` input:
-
-```yaml
-- uses: cv/pi-action@v1
-  with:
-    github_token: ${{ secrets.GITHUB_TOKEN }}  # For issues, PRs, reactions
-    gist_token: ${{ secrets.PAT_WITH_GIST_SCOPE }}  # PAT with gist scope only
-    pi_auth_json: ${{ secrets.PI_AUTH_JSON }}
-    share_session: true
-```
-
-This separation follows the principle of least privilege - the PAT only needs `gist` scope, not full repo access.
-
-If gist creation fails (e.g., due to missing permissions), the action will gracefully continue and post the response without a session link.
+  Anyone who can read the repository can read these refs, including tool output. Keep secrets out of the agent's reach as you would for any CI job.
+- **Pruning**: `git gc` won't shrink a thread (its history is reachable). Delete a finished thread with `git push origin :refs/pi/threads/42`.
 
 #### Comments only (no issue/PR creation triggers)
 
@@ -219,12 +208,14 @@ jobs:
 1. When a comment or issue/PR containing the trigger phrase is posted, the action is triggered
 2. The action validates that the author has write access to the repository (see [`src/security.ts`](src/security.ts))
 3. An 👀 reaction is added to acknowledge the request
-4. **Git hooks are installed** in the target repository to enforce commit conventions (see [action.yml](action.yml#L44-L107))
-5. The pi SDK is invoked with the issue/PR context and the task from the trigger (see [`src/agent.ts`](src/agent.ts))
-6. **Session is shared** as a secret GitHub gist with a preview URL (if `share_session` is enabled)
-7. The response is posted as a new comment with a 🚀 reaction, including the session link
+4. **Git hooks are installed** in the target repository to enforce commit conventions (see [action.yml](action.yml))
+5. The thread's ref is fetched and its conversation reopened (see [`src/thread.ts`](src/thread.ts)); unfinished work from an earlier run resumes
+6. Every unanswered `@pi` comment is submitted: the first one of a new thread with the issue/PR context (see [`src/context.ts`](src/context.ts)), later ones as follow-ups (see [`src/triggers.ts`](src/triggers.ts))
+7. While pi works, new comments join the conversation; the ref is pushed at every turn
+8. Each answer is posted as a comment with a 🚀 reaction on the comments it answers (❌ and 😕 on failure)
+9. The thread is closed and pushed; the `if: always()` step pushes again if the run was cut short
 
-The main orchestration logic is in [`src/run.ts`](src/run.ts), with prompt building in [`src/context.ts`](src/context.ts).
+The main orchestration logic is in [`src/run.ts`](src/run.ts). The git storage backend is vendored from [cv/git-backed-pi-durable](https://github.com/cv/git-backed-pi-durable) in [`src/vendor`](src/vendor).
 
 ### Git Hooks for the Agent
 

@@ -10,3 +10,5 @@ export declare class TimeoutError extends Error {
     constructor(message: string, timeoutMs: number);
 }
 export declare function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message?: string): Promise<T>;
+/** Compare dotted versions numerically: "22.19.0" >= "22.9.1". */
+export declare function nodeVersionAtLeast(version: string, minimum: string): boolean;

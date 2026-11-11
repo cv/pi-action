@@ -11,12 +11,6 @@ export interface RepoRef {
     name: string;
 }
 /**
- * Session interface for session sharing
- */
-export interface Session {
-    exportToHtml: (outputPath?: string) => string;
-}
-/**
  * Model configuration - commonly passed together
  */
 export interface ModelConfig {
@@ -24,6 +18,8 @@ export interface ModelConfig {
     model: string;
     timeout: number;
 }
+/** Where a trigger came from: an issue/PR body, an issue comment, or a PR review comment. */
+export type TriggerSource = "body" | "comment" | "review_comment";
 export interface TriggerInfo {
     isCommentEvent: boolean;
     triggerText: string;
@@ -34,64 +30,79 @@ export interface TriggerInfo {
     issueBody: string;
     commentId?: number;
     isPullRequest: boolean;
+    source?: TriggerSource;
+    createdAt?: string;
+    url?: string;
 }
-export type AgentResult = {
-    success: true;
-    response: string;
-    session?: Session;
-} | {
-    success: false;
-    error: string;
-    session?: Session;
-};
+/** A comment as listed by the REST API. */
+export interface GitHubComment {
+    id: number;
+    body?: string | null;
+    user?: {
+        login: string;
+        type: string;
+    } | null;
+    author_association: string;
+    created_at: string;
+    html_url: string;
+}
+type Params<T> = {
+    owner: string;
+    repo: string;
+} & T;
 export interface OctokitClient {
     rest: {
         reactions: {
-            createForIssueComment: (params: {
-                owner: string;
-                repo: string;
+            createForIssueComment: (params: Params<{
                 comment_id: number;
                 content: GitHubReaction;
-            }) => Promise<unknown>;
-            createForIssue: (params: {
-                owner: string;
-                repo: string;
+            }>) => Promise<unknown>;
+            createForPullRequestReviewComment: (params: Params<{
+                comment_id: number;
+                content: GitHubReaction;
+            }>) => Promise<unknown>;
+            createForIssue: (params: Params<{
                 issue_number: number;
                 content: GitHubReaction;
-            }) => Promise<unknown>;
+            }>) => Promise<unknown>;
         };
         issues: {
-            createComment: (params: {
-                owner: string;
-                repo: string;
+            createComment: (params: Params<{
                 issue_number: number;
                 body: string;
-            }) => Promise<unknown>;
+            }>) => Promise<{
+                data: {
+                    id: number;
+                    html_url: string;
+                };
+            }>;
+            listComments: (params: Params<{
+                issue_number: number;
+                since?: string;
+                per_page?: number;
+                page?: number;
+            }>) => Promise<{
+                data: GitHubComment[];
+            }>;
         };
         pulls: {
-            get: (params: {
-                owner: string;
-                repo: string;
+            get: (params: Params<{
                 pull_number: number;
                 mediaType: {
                     format: string;
                 };
-            }) => Promise<{
+            }>) => Promise<{
                 data: unknown;
             }>;
-        };
-        gists: {
-            create: (params: {
-                files: Record<string, {
-                    content: string;
-                }>;
-                public?: boolean;
-                description?: string;
-            }) => Promise<{
-                data: {
-                    html_url?: string;
-                };
+            listReviewComments: (params: Params<{
+                pull_number: number;
+                since?: string;
+                per_page?: number;
+                page?: number;
+            }>) => Promise<{
+                data: GitHubComment[];
             }>;
         };
     };
 }
+export {};

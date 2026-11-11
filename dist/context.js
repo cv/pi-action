@@ -60,3 +60,9 @@ ${context.task}
     }
     return prompt;
 }
+/** A later comment on an existing thread: the conversation already has the issue's context. */
+export function formatFollowUp(input) {
+    const verb = input.reviewComment ? "commented on the diff" : "commented";
+    const where = input.url ? ` (${input.url})` : "";
+    return `**@${input.author}** ${verb}${where}:\n\n${input.task}`;
+}

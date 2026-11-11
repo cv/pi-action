@@ -11,3 +11,10 @@ export interface PIContext {
 }
 export declare function renderTemplate(template: string, context: PIContext): string;
 export declare function buildPrompt(context: PIContext, customTemplate?: string): string;
+/** A later comment on an existing thread: the conversation already has the issue's context. */
+export declare function formatFollowUp(input: {
+    author: string;
+    task: string;
+    url?: string;
+    reviewComment?: boolean;
+}): string;

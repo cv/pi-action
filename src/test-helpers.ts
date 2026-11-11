@@ -2,22 +2,61 @@
  * Test helper functions to reduce duplication in test files
  */
 import { vi } from "vitest";
-import type { AgentConfig } from "./agent.js";
 import type { PIContext } from "./context.js";
 import { DEFAULTS } from "./defaults.js";
 import type { GitHubClient } from "./github.js";
-import type { ModelConfig, RepoRef, TriggerInfo } from "./types.js";
+import type {
+	GitHubComment,
+	ModelConfig,
+	RepoRef,
+	TriggerInfo,
+} from "./types.js";
 
 /**
- * Creates a mock GitHub client with all required methods
+ * Creates a mock GitHub client with all required methods. `comments` backs listIssueComments, and posted
+ * comments are recorded in `posted`.
  */
-export function createMockGitHubClient(): GitHubClient {
+export function createMockGitHubClient(
+	comments: GitHubComment[] = [],
+	reviewComments: GitHubComment[] = [],
+): GitHubClient & { posted: string[] } {
+	const posted: string[] = [];
+	const since = (list: GitHubComment[], iso?: string) =>
+		iso
+			? list.filter((c) => Date.parse(c.created_at) >= Date.parse(iso))
+			: [...list];
 	return {
+		posted,
 		addReactionToComment: vi.fn(),
 		addReactionToIssue: vi.fn(),
-		createComment: vi.fn(),
+		createComment: vi.fn((_issue: number, body: string) => {
+			posted.push(body);
+			return Promise.resolve({
+				id: 1000 + posted.length,
+				url: `https://github.com/o/r/issues/1#c${posted.length}`,
+			});
+		}),
 		getPullRequestDiff: vi.fn().mockResolvedValue(""),
-		createGist: vi.fn().mockResolvedValue("https://gist.github.com/test123"),
+		listIssueComments: vi.fn(async (_issue: number, iso?: string) =>
+			since(comments, iso),
+		),
+		listReviewComments: vi.fn(async (_pr: number, iso?: string) =>
+			since(reviewComments, iso),
+		),
+	};
+}
+
+export function createComment(
+	overrides: Partial<GitHubComment> = {},
+): GitHubComment {
+	return {
+		id: 1,
+		body: "@pi do something",
+		user: { login: "user", type: "User" },
+		author_association: "MEMBER",
+		created_at: "2026-01-01T00:00:00Z",
+		html_url: "https://github.com/o/r/issues/1#issuecomment-1",
+		...overrides,
 	};
 }
 
@@ -57,21 +96,6 @@ export function createPIContext(overrides: Partial<PIContext> = {}): PIContext {
 }
 
 /**
- * Creates an AgentConfig object with sensible defaults and optional overrides
- */
-export function createAgentConfig(
-	overrides: Partial<AgentConfig> = {},
-): AgentConfig {
-	return {
-		provider: DEFAULTS.provider,
-		model: DEFAULTS.model,
-		timeout: DEFAULTS.timeout,
-		cwd: "/test/dir",
-		...overrides,
-	};
-}
-
-/**
  * Creates a ModelConfig object with sensible defaults and optional overrides
  */
 export function createModelConfig(
@@ -93,15 +117,5 @@ export function createRepoRef(overrides: Partial<RepoRef> = {}): RepoRef {
 		owner: "testowner",
 		name: "testrepo",
 		...overrides,
-	};
-}
-
-/**
- * Creates a mock session for pi agent testing
- */
-export function createMockSession() {
-	return {
-		subscribe: vi.fn(),
-		prompt: vi.fn(),
 	};
 }
