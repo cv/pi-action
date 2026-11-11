@@ -5,23 +5,14 @@
 import type { PullRequestReviewComment } from "./types.js";
 
 export interface CommentFooter {
-	/** Link to the workflow run holding the session artifact. */
-	shareUrl?: string | undefined;
 	/** The thread's ref, e.g. refs/pi/threads/42. */
 	ref?: string | undefined;
 }
 
 function footer(info: CommentFooter | undefined): string {
-	const parts: string[] = [];
-	if (info?.shareUrl) {
-		parts.push(`📎 [Download session artifact](${info.shareUrl})`);
-	}
-	if (info?.ref) {
-		parts.push(
-			`🧵 Thread state: \`${info.ref}\` (\`git fetch origin ${info.ref}\`)`,
-		);
-	}
-	return parts.length > 0 ? `\n\n---\n${parts.join("\n")}` : "";
+	return info?.ref
+		? `\n\n---\n🧵 Thread state: \`${info.ref}\` (\`git fetch origin ${info.ref}\`)`
+		: "";
 }
 
 export function formatSuccessComment(

@@ -112,8 +112,6 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 | `compat_supports_reasoning_effort` | Whether OpenAI-compatible custom provider supports `reasoning_effort` | No | - |
 | `compat_force_adaptive_thinking` | Use adaptive thinking for an Anthropic-compatible custom model (`provider_api: anthropic-messages`); required by Claude Opus 4.6+ and Sonnet 4.6+ | No | - |
 | `prompt_template` | Custom prompt template with placeholder variables | No | (built-in default) |
-| `share_session` | Upload `session.md` and `session.jsonl` (the thread transcript) as a GitHub Actions artifact and link it in the response comment | No | `true` |
-| `session_artifact_name` | Artifact name for shared session files; useful when invoking pi-action multiple times in one workflow run | No | `pi-session-<run_id>-<run_attempt>` |
 | `output_mode` | `comment` to post on the issue/PR, or `output` to set action outputs only | No | `comment` |
 | `prompt` | Direct prompt for the agent (use with `output_mode: output`, or with `pr_number`) | No | - |
 | `pr_number` | Pull request number to load explicitly (useful for `workflow_dispatch`) | No | - |
@@ -232,7 +230,6 @@ Use `output_mode: output` with `prompt` when you want pi-action to run in automa
 The action sets these outputs in output mode:
 - `response`
 - `success`
-- `share_url` (workflow run URL containing the session artifact, when session sharing succeeds)
 
 #### Explicit PR review mode
 
@@ -289,37 +286,17 @@ Customize how GitHub issue/PR context is presented to the pi agent:
 
 See [examples/prompt-templates.md](examples/prompt-templates.md) for more template examples.
 
-#### Session Sharing
+#### Reading a thread
 
-By default, pi-action uploads the complete session (including tool executions and agent reasoning) as a GitHub Actions artifact and includes a link in the response comment. This helps with debugging and provides full transparency of what the agent did.
+A thread's history is its git log. Custom refs aren't fetched by default, so fetch it first:
 
-```yaml
-- uses: cv/pi-action@v2
-  with:
-    github_token: ${{ secrets.GITHUB_TOKEN }}
-    share_session: true  # Default: true
-  env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```bash
+git fetch origin 'refs/pi/threads/42:refs/pi/threads/42'
+git log --oneline refs/pi/threads/42            # one commit per saved step
+git show refs/pi/threads/42:batch.json | jq .   # what the latest step stored
 ```
 
-To disable session sharing:
-
-```yaml
-- uses: cv/pi-action@v2
-  with:
-    github_token: ${{ secrets.GITHUB_TOKEN }}
-    share_session: false  # Disable session links
-  env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-```
-
-**Session sharing includes:**
-- Full conversation history
-- All tool executions (file reads, bash commands, edits)
-- Agent reasoning and decision process
-- Error details when things go wrong
-
-Sessions are uploaded as workflow artifacts containing `session.md` (a readable transcript of the whole thread) and `session.jsonl` (every stored entry). Artifacts inherit the workflow run's repository visibility and retention settings, and require no extra PAT beyond the standard `GITHUB_TOKEN`.
+Add `git config --add remote.origin.fetch '+refs/pi/*:refs/pi/*'` to fetch every thread on each `git fetch`.
 
 #### Durable threads
 
@@ -366,7 +343,7 @@ jobs:
 6. Every unanswered `@pi` comment is submitted: the first one of a new thread with the issue/PR context (see [`src/context.ts`](src/context.ts)), later ones as follow-ups (see [`src/triggers.ts`](src/triggers.ts))
 7. While pi works, new comments join the conversation and the ref is pushed at every turn (see [`src/conversation.ts`](src/conversation.ts))
 8. Each answer is posted as a comment with a 🚀 reaction on the comments it answers (❌ and 😕 on failure); an empty answer is followed by one request for a summary
-9. **Session is shared** as a GitHub Actions artifact with the thread transcript (if `share_session` is enabled), and the thread is pushed; the `if: always()` step pushes again if the run was cut short
+9. The thread is pushed; the `if: always()` step pushes again if the run was cut short
 
 The main orchestration logic is in [`src/run.ts`](src/run.ts).
 

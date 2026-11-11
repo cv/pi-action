@@ -10,7 +10,6 @@ import {
 import { addReaction, type GitHubClient } from "./github.js";
 import { createActionModels, findModel } from "./models.js";
 import { getRunContext } from "./run-context.js";
-import { exportSession, getRunUrl } from "./share.js";
 import { GitSyncConflictError } from "./storage/sync.js";
 import { Thread } from "./thread.js";
 import {
@@ -43,7 +42,6 @@ export interface ActionInputs {
 	apiKey: string | undefined;
 	customProvider: CustomProviderConfig | undefined;
 	promptTemplate: string | undefined;
-	shareSession: boolean;
 	outputMode: OutputMode;
 	prompt: string | undefined;
 	prNumber: number | undefined;
@@ -216,10 +214,7 @@ class ActionRun {
 	}
 
 	private footer(thread?: Thread): CommentFooter {
-		return {
-			shareUrl: this.inputs.shareSession ? getRunUrl(this.env) : undefined,
-			ref: thread?.ref,
-		};
+		return { ref: thread?.ref };
 	}
 
 	private async converse(thread: Thread): Promise<void> {
@@ -330,10 +325,6 @@ class ActionRun {
 		const { log } = this.deps;
 		log.setOutput("success", result.success ? "true" : "false");
 		log.setOutput("response", result.success ? result.response : result.error);
-		const { shareUrl } = this.footer();
-		if (shareUrl) {
-			log.setOutput("share_url", shareUrl);
-		}
 	}
 
 	/** A failure before the conversation could run (no model, no thread). */
@@ -358,16 +349,6 @@ class ActionRun {
 		const { log } = this.deps;
 		if (!thread) {
 			return;
-		}
-		if (this.inputs.shareSession) {
-			const url = await exportSession(
-				this.piContext.title,
-				await thread.entries(),
-				{ runUrl: getRunUrl(this.env) },
-			);
-			if (url) {
-				log.info(`Session exported for the artifact: ${url}`);
-			}
 		}
 		try {
 			await thread.close();

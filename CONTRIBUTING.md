@@ -96,7 +96,6 @@ The action is built with TypeScript on [pi-durable](https://www.npmjs.com/packag
 | [`src/triggers.ts`](src/triggers.ts) | Finding the `@pi` comments a thread still has to answer |
 | [`src/models.ts`](src/models.ts) | Built-in providers with the `api_key` input as an in-memory credential |
 | [`src/custom-provider.ts`](src/custom-provider.ts) | The single custom provider/model from the flat `provider_*`/`model_*` inputs |
-| [`src/share.ts`](src/share.ts) | Exporting the thread transcript for the session artifact |
 | [`src/push.ts`](src/push.ts) | The `if: always()` step that pushes unsaved thread state |
 | [`src/storage/git.ts`](src/storage/git.ts) | In-process git objects and compare-and-swap ref updates |
 | [`src/storage/git-storage.ts`](src/storage/git-storage.ts) | `GitStorage`: a pi-durable `Storage` whose log is a chain of commits on one ref |
@@ -126,7 +125,7 @@ Main orchestration that:
 3. Opens the thread (fetching `refs/pi/threads/<number>`; in memory for direct prompts)
 4. Submits every unanswered `@pi` comment, then polls for new ones while pi works (comment mode), or runs one request (output mode, `pr_number`, direct prompts)
 5. Posts each answer (or failure) once, or sets the action outputs
-6. Exports the session artifact and pushes the thread
+6. Pushes the thread
 
 #### [`thread.ts`](src/thread.ts)
 Wraps a pi-durable `Harness` on `GitStorage`:

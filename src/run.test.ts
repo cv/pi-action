@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
@@ -87,7 +87,6 @@ function world() {
 		inputs: createActionInputs({
 			modelConfig: { provider: model.provider, model: model.id, timeout: 30 },
 			pollInterval: 0.05,
-			shareSession: false,
 			...inputs,
 		}),
 		context: {
@@ -422,35 +421,6 @@ describe("run (durable) with main's modes", () => {
 			response:
 				"Agent failed to provide a response after two attempts. First attempt: Agent returned empty response. Retry attempt: Agent returned empty response.",
 		});
-	});
-
-	it("exports the session for the artifact step and links the run", async () => {
-		const w = world();
-		const artifacts = mkdtempSync(join(tmpdir(), "pi-action-artifacts-"));
-		dirs.push(artifacts);
-		vi.stubEnv("RUNNER_TEMP", artifacts);
-		try {
-			w.faux.setResponses([fauxAssistantMessage("Shared.")]);
-			await run(w.deps(w.comment("@pi share"), { shareSession: true }));
-		} finally {
-			vi.unstubAllEnvs();
-		}
-		expect(w.gh.posted[0]).toContain(
-			"[Download session artifact](https://github.com/o/r/actions/runs/777)",
-		);
-		const transcript = readFileSync(
-			join(artifacts, "pi-action-session", "session.md"),
-			"utf8",
-		);
-		expect(transcript).toContain("# Fix the thing");
-		expect(transcript).toContain("Shared.");
-		const lines = readFileSync(
-			join(artifacts, "pi-action-session", "session.jsonl"),
-			"utf8",
-		)
-			.trim()
-			.split("\n");
-		expect(lines.length).toBeGreaterThan(2);
 	});
 
 	it("output mode reports setup failures as outputs", async () => {

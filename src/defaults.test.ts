@@ -21,7 +21,6 @@ const DEFAULT_CASES = [
 	["model_input", DEFAULTS.customModelInput],
 	["model_context_window", String(DEFAULTS.customModelContextWindow)],
 	["model_max_tokens", String(DEFAULTS.customModelMaxTokens)],
-	["share_session", String(DEFAULTS.shareSession)],
 	["output_mode", DEFAULTS.outputMode],
 ] as const;
 

@@ -115,7 +115,6 @@ export function createActionInputs(
 		apiKey: undefined,
 		customProvider: undefined,
 		promptTemplate: undefined,
-		shareSession: DEFAULTS.shareSession,
 		outputMode: DEFAULTS.outputMode,
 		prompt: undefined,
 		prNumber: undefined,

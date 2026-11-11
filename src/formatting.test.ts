@@ -11,22 +11,10 @@ describe("formatSuccessComment", () => {
 		expect(result).toBe("### 🤖 pi Response\n\nHere is the answer");
 	});
 
-	it("formats response with session link", () => {
-		const result = formatSuccessComment("Here is the answer", {
-			shareUrl: "https://github.com/cv/pi-action/actions/runs/1",
-		});
+	it("adds the thread ref as a footer", () => {
+		const result = formatSuccessComment("ok", { ref: "refs/pi/threads/42" });
 		expect(result).toBe(
-			"### 🤖 pi Response\n\nHere is the answer\n\n---\n📎 [Download session artifact](https://github.com/cv/pi-action/actions/runs/1)",
-		);
-	});
-
-	it("adds the thread ref under the session link", () => {
-		const result = formatSuccessComment("ok", {
-			shareUrl: "https://github.com/o/r/actions/runs/1",
-			ref: "refs/pi/threads/42",
-		});
-		expect(result).toBe(
-			"### 🤖 pi Response\n\nok\n\n---\n📎 [Download session artifact](https://github.com/o/r/actions/runs/1)\n🧵 Thread state: `refs/pi/threads/42` (`git fetch origin refs/pi/threads/42`)",
+			"### 🤖 pi Response\n\nok\n\n---\n🧵 Thread state: `refs/pi/threads/42` (`git fetch origin refs/pi/threads/42`)",
 		);
 		expect(formatErrorComment("no", { ref: "refs/pi/threads/7" })).toBe(
 			"### ❌ pi Error\n\nFailed to process request: no\n\n---\n🧵 Thread state: `refs/pi/threads/7` (`git fetch origin refs/pi/threads/7`)",
@@ -73,15 +61,6 @@ describe("formatErrorComment", () => {
 		const result = formatErrorComment("Something went wrong");
 		expect(result).toBe(
 			"### ❌ pi Error\n\nFailed to process request: Something went wrong",
-		);
-	});
-
-	it("formats error with session link", () => {
-		const result = formatErrorComment("Something went wrong", {
-			shareUrl: "https://github.com/cv/pi-action/actions/runs/1",
-		});
-		expect(result).toBe(
-			"### ❌ pi Error\n\nFailed to process request: Something went wrong\n\n---\n📎 [Download session artifact](https://github.com/cv/pi-action/actions/runs/1)",
 		);
 	});
 

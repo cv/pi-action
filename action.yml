@@ -81,14 +81,6 @@ inputs:
   prompt_template:
     description: 'Custom prompt template with placeholder variables'
     required: false
-  share_session:
-    description: 'Upload session.md and session.jsonl (the thread transcript) as a GitHub Actions artifact and link it in the response comment'
-    required: false
-    default: 'true'
-  session_artifact_name:
-    description: 'GitHub Actions artifact name for shared session files; defaults to pi-session-<run_id>-<run_attempt>'
-    required: false
-    default: ''
   output_mode:
     description: 'How to deliver results: comment (post to issue/PR) or output (set action outputs only)'
     required: false
@@ -109,9 +101,6 @@ outputs:
   success:
     description: 'Whether the agent succeeded (true/false) when output_mode is output'
     value: ${{ steps.run-pi-action.outputs.success }}
-  share_url:
-    description: 'URL to the workflow run containing the session artifact, if session sharing is enabled'
-    value: ${{ steps.run-pi-action.outputs.share_url }}
 
 runs:
   using: 'composite'
@@ -152,7 +141,6 @@ runs:
         INPUT_COMPAT_SUPPORTS_REASONING_EFFORT: ${{ inputs.compat_supports_reasoning_effort }}
         INPUT_COMPAT_FORCE_ADAPTIVE_THINKING: ${{ inputs.compat_force_adaptive_thinking }}
         INPUT_PROMPT_TEMPLATE: ${{ inputs.prompt_template }}
-        INPUT_SHARE_SESSION: ${{ inputs.share_session }}
         INPUT_OUTPUT_MODE: ${{ inputs.output_mode }}
         INPUT_PROMPT: ${{ inputs.prompt }}
         INPUT_PR_NUMBER: ${{ inputs.pr_number }}
@@ -165,11 +153,3 @@ runs:
       run: npx --prefix ${{ github.action_path }} tsx ${{ github.action_path }}/src/push.ts
       env:
         INPUT_PR_NUMBER: ${{ inputs.pr_number }}
-
-    - name: Upload pi session artifact
-      if: ${{ inputs.share_session == 'true' }}
-      uses: actions/upload-artifact@v7
-      with:
-        name: ${{ inputs.session_artifact_name || format('pi-session-{0}-{1}', github.run_id, github.run_attempt) }}
-        path: ${{ runner.temp }}/pi-action-session
-        if-no-files-found: ignore

@@ -28,7 +28,6 @@ describe("readActionInputs", () => {
 			apiKey: undefined,
 			customProvider: undefined,
 			promptTemplate: undefined,
-			shareSession: DEFAULTS.shareSession,
 			outputMode: DEFAULTS.outputMode,
 			prompt: undefined,
 			prNumber: undefined,
@@ -53,7 +52,6 @@ describe("readActionInputs", () => {
 				model_reasoning: "true",
 				model_input: "text,image",
 				prompt_template: "Task: {{task}}",
-				share_session: "false",
 				output_mode: "output",
 				prompt: "Generate release notes",
 				pr_number: "42",
@@ -81,7 +79,6 @@ describe("readActionInputs", () => {
 			}),
 		);
 		expect(inputs.promptTemplate).toBe("Task: {{task}}");
-		expect(inputs.shareSession).toBe(false);
 		expect(inputs.outputMode).toBe("output");
 		expect(inputs.prompt).toBe("Generate release notes");
 		expect(inputs.prNumber).toBe(42);

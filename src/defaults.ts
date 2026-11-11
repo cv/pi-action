@@ -8,7 +8,6 @@ export const DEFAULTS = {
 	allowedAssociations: ["OWNER", "MEMBER"],
 	timeout: 1800,
 	pollInterval: 15,
-	shareSession: true,
 	provider: "anthropic",
 	model: "claude-sonnet-5-5",
 	customProviderApi: "openai-completions",

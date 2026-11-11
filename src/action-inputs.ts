@@ -3,7 +3,6 @@ import { DEFAULTS } from "./defaults.js";
 import {
 	getInputOrDefault,
 	type InputReader,
-	parseBooleanInput,
 	parseCsvInput,
 	parsePositiveIntegerInput,
 } from "./inputs.js";
@@ -47,10 +46,6 @@ export function readActionInputs(
 		apiKey: readInput("api_key") || undefined,
 		customProvider: readCustomProviderConfig(readInput),
 		promptTemplate: readInput("prompt_template") || undefined,
-		shareSession: parseBooleanInput(
-			readInput("share_session"),
-			DEFAULTS.shareSession,
-		),
 		outputMode: getOutputMode(readInput),
 		prompt: readInput("prompt") || undefined,
 		prNumber: prNumber > 0 ? prNumber : undefined,
