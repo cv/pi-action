@@ -1,6 +1,7 @@
 // What a run works on: the pull request of pr_number, a direct prompt, or the issue/PR/comment that triggered it.
 import { extractTask, hasTrigger, type PIContext } from "./context.ts";
 import { formatReviewComments } from "./formatting.ts";
+import { isQuestionComment } from "./github-ui.ts";
 import { extractTriggerInfo, type GitHubClient } from "./github.ts";
 import type { ActionDependencies } from "./run.ts";
 import { sanitizeInput, validatePermissions } from "./security.ts";
@@ -52,6 +53,12 @@ function permittedTrigger(deps: ActionDependencies): TriggerInfo | null {
 	}
 	if (!hasTrigger(info.triggerText, inputs.triggerPhrase)) {
 		log.info(`No trigger phrase "${inputs.triggerPhrase}" found, skipping`);
+		return null;
+	}
+	if (info.source === "comment" && isQuestionComment(info.triggerText)) {
+		log.info(
+			"An answer to a question from an extension, not a request; skipping",
+		);
 		return null;
 	}
 	if (!validatePermissions(info.author, info.authorAssociation, inputs)) {

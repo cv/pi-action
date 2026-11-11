@@ -96,6 +96,9 @@ export interface GitHubClient {
 		issueNumber: number,
 		body: string,
 	) => Promise<{ id: number; url: string }>;
+	/** One issue/PR conversation comment, as it is now. */
+	getComment: (commentId: number) => Promise<GitHubComment>;
+	updateComment: (commentId: number, body: string) => Promise<void>;
 	getPullRequest: (
 		pullNumber: number,
 	) => Promise<{ number: number; title: string; body: string }>;
@@ -172,6 +175,24 @@ export function createGitHubClient(
 				body,
 			});
 			return { id: data.id, url: data.html_url };
+		},
+
+		async getComment(commentId) {
+			const { data } = await issues.getComment({
+				owner,
+				repo,
+				comment_id: commentId,
+			});
+			return data;
+		},
+
+		async updateComment(commentId, body) {
+			await issues.updateComment({
+				owner,
+				repo,
+				comment_id: commentId,
+				body,
+			});
 		},
 
 		async getPullRequest(pullNumber) {

@@ -4,6 +4,7 @@ import {
 	error as logError,
 	setFailed,
 	setOutput,
+	summary,
 	warning,
 } from "@actions/core";
 import { context, getOctokit } from "@actions/github";
@@ -23,6 +24,9 @@ run({
 		}),
 	log: { info, warning, error: logError, setFailed, setOutput },
 	cwd: process.cwd(),
+	summary: async (markdown) => {
+		await summary.addRaw(markdown).write();
+	},
 }).catch((caughtError: unknown) => {
 	setFailed(getErrorMessage(caughtError));
 });

@@ -38,17 +38,29 @@ const since = (list: GitHubComment[], iso?: string) =>
 export function createMockGitHubClient(
 	comments: GitHubComment[] = [],
 	reviewComments: GitHubComment[] = [],
-): GitHubClient & { posted: string[] } {
+): GitHubClient & { posted: string[]; bodies: Map<number, string> } {
 	const posted: string[] = [];
+	/** The current body of each posted comment, by ID (tests may edit them, as a user ticking a box). */
+	const bodies = new Map<number, string>();
 	return {
 		posted,
+		bodies,
 		addReaction: vi.fn(),
 		createComment: vi.fn(async (_issue: number, body: string) => {
 			posted.push(body);
-			return {
-				id: 1000 + posted.length,
-				url: `https://github.com/o/r/issues/1#c${posted.length}`,
-			};
+			const id = 1000 + posted.length;
+			bodies.set(id, body);
+			return { id, url: `https://github.com/o/r/issues/1#c${posted.length}` };
+		}),
+		getComment: vi.fn(async (id: number) =>
+			createComment({
+				id,
+				body: bodies.get(id) ?? null,
+				user: { login: "github-actions[bot]", type: "Bot" },
+			}),
+		),
+		updateComment: vi.fn(async (id: number, body: string) => {
+			bodies.set(id, body);
 		}),
 		getPullRequest: vi
 			.fn()
@@ -113,6 +125,9 @@ export function createActionInputs(
 		prNumber: undefined,
 		pollInterval: DEFAULTS.pollInterval,
 		extensions: [],
+		trustProject: DEFAULTS.trustProject,
+		agentDir: undefined,
+		uiTimeout: DEFAULTS.uiTimeout,
 		...overrides,
 	};
 }

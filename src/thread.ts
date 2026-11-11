@@ -9,6 +9,7 @@ import {
 	type Conversation,
 	createRegistry,
 	type EntryId,
+	type Extension,
 	Harness,
 	MemoryStorage,
 	type Storage,
@@ -41,6 +42,8 @@ export interface ThreadOptions {
 	model: Model<Api>;
 	log: Log;
 	remote?: string | undefined;
+	/** pi-durable extensions from the `extensions` input, installed after the coding tools. */
+	extensions?: readonly Extension[];
 }
 
 export interface ThreadInput {
@@ -124,6 +127,9 @@ export class Thread {
 		const storage: Storage = persistence?.storage ?? new MemoryStorage();
 		const registry = createRegistry();
 		registry.install(CodingTools);
+		for (const extension of options.extensions ?? []) {
+			registry.install(extension);
+		}
 		const harness = await Harness.open(
 			storage,
 			{

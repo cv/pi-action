@@ -12,12 +12,14 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Provider } from "@earendil-works/pi-ai/models";
+import type { Extension } from "@earendil-works/pi-durable";
 import { createJiti } from "jiti";
 
 import {
 	type ExtensionProviderConfig,
 	parseProviderConfig,
 } from "./extension-provider.ts";
+import type { DurableHostOptions } from "./types.ts";
 import { field, getErrorMessage, isRecord } from "./utils.ts";
 
 type Env = Record<string, string | undefined>;
@@ -34,6 +36,22 @@ export type ExtensionProvider = { id: string; source: string } & (
 );
 
 /** Runs npm with these arguments in `cwd`. */
+/**
+ * A pi-durable extension a package declares with `pi.durable`: its `createPiDurableExtension` factory, called with
+ * the run's host options once they are known.
+ */
+export interface DurableExtensionFactory {
+	/** The entry module, as shown in the log. */
+	source: string;
+	create: (options: DurableHostOptions) => Promise<Extension>;
+}
+
+/** What the `extensions` input loaded: model providers, and pi-durable extensions for the conversation. */
+export interface LoadedExtensions {
+	providers: ExtensionProvider[];
+	durable: DurableExtensionFactory[];
+}
+
 export type NpmRunner = (
 	args: string[],
 	cwd: string,
@@ -59,6 +77,12 @@ const NPM_MAX_BUFFER = 16 * 1024 * 1024;
 /** Packages pi provides to extensions; pi-action maps the ones it has to its own copies. */
 const HOST_PACKAGES = ["@earendil-works/pi-ai", "@mariozechner/pi-ai"];
 const PI_AI = "@earendil-works/pi-ai";
+/** pi-durable, and chord (its contexts), which pi-durable extensions share with the host. */
+const DURABLE_PACKAGES = [
+	"@earendil-works/pi-durable",
+	"@earendil-works/chord",
+];
+const EXTENSION_LISTS = ["tools", "sections", "hooks", "wraps", "tasks"];
 
 type Source = { kind: "path"; path: string } | { kind: "npm"; spec: string };
 
@@ -156,13 +180,18 @@ async function installPackages(
 	}));
 }
 
-function readPiExtensions(dir: string): string[] | undefined {
+/** The `pi` field of a directory's package.json; undefined without one. */
+function readPiManifest(dir: string): unknown {
 	const path = join(dir, "package.json");
 	if (!existsSync(path)) {
 		return undefined;
 	}
 	const manifest: unknown = JSON.parse(readFileSync(path, "utf8"));
-	const extensions = field(field(manifest, "pi"), "extensions");
+	return field(manifest, "pi");
+}
+
+function readPiExtensions(dir: string): string[] | undefined {
+	const extensions = field(readPiManifest(dir), "extensions");
 	return Array.isArray(extensions)
 		? extensions.filter((entry) => typeof entry === "string")
 		: undefined;
@@ -243,21 +272,17 @@ function packageRoot(entry: string): string {
 	return dir;
 }
 
-/**
- * Aliases mapping pi's host packages to pi-action's copies, like pi's extension loader: the pi-ai root is the
- * compat entry point (a superset of the root), and each exported subpath (wildcards expanded) its own file.
- */
-function hostAliases(): Record<string, string> {
-	const root = packageRoot(fileURLToPath(import.meta.resolve(PI_AI)));
-	const packageJson = join(root, "package.json");
-	const exportsField = field(
-		JSON.parse(readFileSync(packageJson, "utf8")),
-		"exports",
+/** A package's exported subpaths (wildcards expanded, the root and package.json left out) and their files. */
+function exportedSubpaths(pkg: string): [string, string][] {
+	const root = packageRoot(fileURLToPath(import.meta.resolve(pkg)));
+	const manifest: unknown = JSON.parse(
+		readFileSync(join(root, "package.json"), "utf8"),
 	);
+	const exportsField = field(manifest, "exports");
 	const exports = isRecord(exportsField) ? Object.entries(exportsField) : [];
-	const subpaths = exports.flatMap(([key, target]): [string, string][] => {
+	return exports.flatMap(([key, target]): [string, string][] => {
 		const file = isRecord(target) ? field(target, "import") : target;
-		if (typeof file !== "string" || key === "./package.json") {
+		if (typeof file !== "string" || key === "./package.json" || key === ".") {
 			return [];
 		}
 		const name = key.slice(2);
@@ -277,15 +302,31 @@ function hostAliases(): Record<string, string> {
 				join(dir, match),
 			]);
 	});
-	const compat = fileURLToPath(import.meta.resolve(`${PI_AI}/compat`));
+}
+
+/**
+ * Aliases mapping pi's host packages to pi-action's copies, like pi's extension loader, so extensions share the
+ * host's instances: the pi-ai root is the compat entry point (a superset of the root), pi-durable's and chord's
+ * roots are their own, and each exported subpath is its own file.
+ */
+export function hostAliases(): Record<string, string> {
 	const aliases = new Map<string, string>();
-	for (const name of HOST_PACKAGES) {
-		aliases.set(name, compat);
-		for (const [subpath, file] of subpaths) {
-			if (subpath) {
+	const add = (names: readonly string[], pkg: string, rootFile: string) => {
+		const subpaths = exportedSubpaths(pkg);
+		for (const name of names) {
+			aliases.set(name, rootFile);
+			for (const [subpath, file] of subpaths) {
 				aliases.set(`${name}/${subpath}`, file);
 			}
 		}
+	};
+	add(
+		HOST_PACKAGES,
+		PI_AI,
+		fileURLToPath(import.meta.resolve(`${PI_AI}/compat`)),
+	);
+	for (const pkg of DURABLE_PACKAGES) {
+		add([pkg], pkg, fileURLToPath(import.meta.resolve(pkg)));
 	}
 	return Object.fromEntries(aliases);
 }
@@ -380,6 +421,74 @@ export function createExtensionApi(
 	});
 }
 
+/** An entry relative to the workspace when it is inside it. */
+function displayPath(entry: string, cwd: string): string {
+	return isAbsolute(entry) && !relative(cwd, entry).startsWith("..")
+		? relative(cwd, entry)
+		: entry;
+}
+
+/** A package's `pi.durable` entry module, resolved; undefined when it declares none. */
+export function findDurableEntry(dir: string): string | undefined {
+	if (!isDirectory(dir)) {
+		return undefined;
+	}
+	const durable = field(readPiManifest(dir), "durable");
+	if (durable === undefined) {
+		return undefined;
+	}
+	if (typeof durable !== "string" || durable === "") {
+		throw new TypeError("pi.durable in package.json must be a module path");
+	}
+	const entry = resolve(dir, durable);
+	if (!existsSync(entry)) {
+		throw new Error(`pi.durable entry ${durable} not found`);
+	}
+	return entry;
+}
+
+function isDurableExtension(value: unknown): value is Extension {
+	return (
+		isRecord(value) &&
+		typeof value["name"] === "string" &&
+		value["name"] !== "" &&
+		EXTENSION_LISTS.every(
+			(key) => value[key] === undefined || Array.isArray(value[key]),
+		)
+	);
+}
+
+/** A pi-durable entry's factory: its `createPiDurableExtension` export, else its default export. */
+async function loadDurableEntry(
+	entry: string,
+	jiti: ReturnType<typeof createJiti>,
+	shown: string,
+): Promise<DurableExtensionFactory> {
+	const module: unknown = await jiti.import(entry);
+	const named = field(module, "createPiDurableExtension");
+	const factory =
+		typeof named === "function" ? named : field(module, "default");
+	if (typeof factory !== "function") {
+		throw new TypeError(
+			`${shown} exports no createPiDurableExtension function (named or default)`,
+		);
+	}
+	return {
+		source: shown,
+		async create(options) {
+			const extension: unknown = await Reflect.apply(factory, undefined, [
+				options,
+			]);
+			if (!isDurableExtension(extension)) {
+				throw new TypeError(
+					`${shown}: createPiDurableExtension() did not return a pi-durable extension (an object with a name)`,
+				);
+			}
+			return extension;
+		},
+	};
+}
+
 async function loadEntry(
 	entry: string,
 	jiti: ReturnType<typeof createJiti>,
@@ -387,10 +496,7 @@ async function loadEntry(
 	log: ExtensionLog,
 	cwd: string,
 ): Promise<void> {
-	const shown =
-		isAbsolute(entry) && !relative(cwd, entry).startsWith("..")
-			? relative(cwd, entry)
-			: entry;
+	const shown = displayPath(entry, cwd);
 	const factory: unknown = await jiti.import(entry, { default: true });
 	if (typeof factory !== "function") {
 		throw new TypeError(`${shown} has no default export function`);
@@ -408,17 +514,52 @@ async function loadEntry(
 }
 
 /**
- * Installs and loads the `extensions` input and returns the providers they registered. npm packages are
- * installed into a temporary directory (never the repository) without lifecycle scripts; paths load in place.
- * Extensions run in this process with its permissions and environment.
+ * Loads one installed package or path: its pi-durable extension when it declares one (`pi.durable`), else its pi
+ * extensions, for their providers.
+ */
+async function loadRoot(
+	root: { name: string; path: string },
+	jiti: ReturnType<typeof createJiti>,
+	loaded: LoadedExtensions,
+	log: ExtensionLog,
+	cwd: string,
+): Promise<void> {
+	const durable = findDurableEntry(root.path);
+	if (durable !== undefined) {
+		if ((readPiExtensions(root.path) ?? []).length > 0) {
+			log.info(
+				`${root.name} has a pi-durable extension (pi.durable) and pi extensions (pi.extensions); loading only the pi-durable one, as the others need pi's coding agent`,
+			);
+		}
+		const shown = displayPath(durable, cwd);
+		loaded.durable.push(await loadDurableEntry(durable, jiti, shown));
+		log.info(`Loaded pi-durable extension ${shown}`);
+		return;
+	}
+	const entries = findExtensionEntries(root.path);
+	if (entries.length === 0) {
+		log.warning(
+			`${root.name} has no pi extensions; it is installed for other extensions to import`,
+		);
+	}
+	for (const entry of entries) {
+		// oxlint-disable-next-line eslint/no-await-in-loop -- extensions load one after another, in order, like pi's
+		await loadEntry(entry, jiti, loaded.providers, log, cwd);
+	}
+}
+
+/**
+ * Installs and loads the `extensions` input: the providers pi extensions register, and the pi-durable extensions
+ * packages declare. npm packages are installed into a temporary directory (never the repository) without lifecycle
+ * scripts; paths load in place. Extensions run in this process with its permissions and environment.
  */
 export async function loadExtensions(
 	options: LoadExtensionsOptions,
-): Promise<ExtensionProvider[]> {
+): Promise<LoadedExtensions> {
 	const { specs, cwd, log } = options;
-	const providers: ExtensionProvider[] = [];
+	const loaded: LoadedExtensions = { providers: [], durable: [] };
 	if (specs.length === 0) {
-		return providers;
+		return loaded;
 	}
 	const env = options.env ?? process.env;
 	const sources = specs.map((spec) => ({
@@ -445,28 +586,18 @@ export async function loadExtensions(
 		alias: hostAliases(),
 	});
 	for (const root of roots) {
-		const entries = findExtensionEntries(root.path);
-		if (entries.length === 0) {
-			if (!existsSync(root.path)) {
-				throw new Error(`Extension ${root.name} not found`);
-			}
-			log.warning(
-				`${root.name} has no pi extensions; it is installed for other extensions to import`,
+		if (!existsSync(root.path)) {
+			throw new Error(`Extension ${root.name} not found`);
+		}
+		try {
+			// oxlint-disable-next-line eslint/no-await-in-loop -- extensions load one after another, in order, like pi's
+			await loadRoot(root, jiti, loaded, log, cwd);
+		} catch (error) {
+			throw new Error(
+				`Could not load pi extension ${root.name}: ${getErrorMessage(error)}`,
+				{ cause: error },
 			);
 		}
-		for (const entry of entries) {
-			try {
-				// oxlint-disable-next-line eslint/no-await-in-loop -- extensions load one after another, in order, like pi's
-				await loadEntry(entry, jiti, providers, log, cwd);
-			} catch (error) {
-				throw new Error(
-					`Could not load pi extension ${root.name}: ${getErrorMessage(error)}`,
-					{
-						cause: error,
-					},
-				);
-			}
-		}
 	}
-	return providers;
+	return loaded;
 }

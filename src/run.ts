@@ -1,9 +1,12 @@
 import type { Models } from "@earendil-works/pi-ai/models";
+import type { Extension } from "@earendil-works/pi-durable";
 
 import { buildPrompt, formatFollowUp, type PIContext } from "./context.ts";
 import { ThreadConversation, type ThreadResult } from "./conversation.ts";
+import { createDurableExtensions } from "./durable-extensions.ts";
 import { loadExtensions } from "./extensions.ts";
 import { formatErrorComment, formatSuccessComment } from "./formatting.ts";
+import { createGitHubUi } from "./github-ui.ts";
 import type { GitHubClient, ReactionTarget } from "./github.ts";
 import type { ActionInputs } from "./inputs.ts";
 import { createActionModels, findModel } from "./models.ts";
@@ -34,19 +37,56 @@ export interface ActionDependencies {
 	/** Git remote holding the thread refs. Default "origin". */
 	remote?: string;
 	env?: Env;
+	/** Appends Markdown to the job summary (notifications from pi-durable extensions). */
+	summary?: (markdown: string) => Promise<void>;
 }
 
-/** The action's model setup: the built-in and custom providers, and those the `extensions` input registers. */
-async function defaultModels(deps: ActionDependencies): Promise<Models> {
+/**
+ * The `extensions` input and the model setup: the built-in and custom providers and those extensions register
+ * (unless `createModels` overrides it), and the pi-durable extensions for the thread, which get the GitHub UI when
+ * the run posts to an issue or PR.
+ */
+async function setUp(
+	deps: ActionDependencies,
+	gh: GitHubClient,
+	issueNumber: number | undefined,
+): Promise<{ models: Models; extensions: Extension[] }> {
 	const { inputs, log, cwd } = deps;
 	const env = deps.env ?? process.env;
-	const providers = await loadExtensions({
+	const loaded = await loadExtensions({
 		specs: inputs.extensions,
 		cwd,
 		log,
 		env,
 	});
-	return createActionModels(inputs, { providers, env, log });
+	const models = deps.createModels
+		? await deps.createModels(inputs)
+		: await createActionModels(inputs, {
+				providers: loaded.providers,
+				env,
+				log,
+			});
+	const ui =
+		inputs.outputMode === "comment" && issueNumber !== undefined
+			? createGitHubUi({
+					gh,
+					issueNumber,
+					allow: inputs,
+					pollIntervalMs: inputs.pollInterval * 1000,
+					timeoutMs: inputs.uiTimeout * 1000,
+					log,
+					summary: deps.summary,
+				})
+			: undefined;
+	const extensions = await createDurableExtensions(loaded.durable, {
+		cwd,
+		agentDir: inputs.agentDir,
+		trustProject: inputs.trustProject,
+		ui,
+		log,
+		env,
+	});
+	return { models, extensions };
 }
 
 /** On cancellation (SIGINT, then SIGTERM), push what the thread has so far before the runner kills us. */
@@ -174,9 +214,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 	let thread: Thread | undefined;
 	let stopSignals: (() => void) | undefined;
 	try {
-		const models = deps.createModels
-			? await deps.createModels(inputs)
-			: await defaultModels(deps);
+		const { models, extensions } = await setUp(deps, gh, issueNumber);
 		const opened = await Thread.open({
 			cwd: deps.cwd,
 			issueNumber,
@@ -184,6 +222,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			model: findModel(models, inputs.provider, inputs.model),
 			log,
 			remote: deps.remote,
+			extensions,
 		});
 		thread = opened;
 		stopSignals = pushOnSignals(opened, log);

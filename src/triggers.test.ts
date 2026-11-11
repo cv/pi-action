@@ -71,6 +71,11 @@ describe("triggersFromComments", () => {
 				user: { login: "evil[bot]", type: "Bot" },
 			}),
 			createComment({ id: 6, body: "@pi ghost", user: null }),
+			createComment({ id: 7, body: "/answer yes, @pi" }),
+			createComment({
+				id: 8,
+				body: "<!-- pi-action:question q1 -->\n### ❓ Ask @pi?",
+			}),
 		];
 		expect(
 			triggersFromComments(comments, "comment", 1, filter).map(

@@ -1,4 +1,5 @@
 import { extractTask, hasTrigger } from "./context.ts";
+import { isQuestionComment } from "./github-ui.ts";
 import { type GitHubClient, toUserType } from "./github.ts";
 import {
 	type Allowlists,
@@ -77,7 +78,10 @@ export function triggerFromInfo(
 	);
 }
 
-/** The comments that mention the trigger phrase and whose authors may run pi. */
+/**
+ * The comments that mention the trigger phrase and whose authors may run pi. Questions from extensions and their
+ * `/answer` replies are never triggers, even when they mention the phrase.
+ */
 export function triggersFromComments(
 	comments: GitHubComment[],
 	source: Exclude<TriggerSource, "body">,
@@ -86,7 +90,11 @@ export function triggersFromComments(
 ): Trigger[] {
 	return comments.flatMap(
 		({ id, body, user, author_association, created_at, html_url }) => {
-			if (!(user && hasTrigger(body ?? "", filter.triggerPhrase))) {
+			const text = body ?? "";
+			if (
+				!(user && hasTrigger(text, filter.triggerPhrase)) ||
+				isQuestionComment(text)
+			) {
 				return [];
 			}
 			const author: GitHubUser = {

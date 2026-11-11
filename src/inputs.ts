@@ -28,6 +28,12 @@ export interface ActionInputs {
 	pollInterval: number;
 	/** pi extensions to load (npm specs or workspace paths) for the providers they register. */
 	extensions: string[];
+	/** Whether pi-durable extensions may load and run the repository's own configuration (`trust_project`). */
+	trustProject: boolean;
+	/** The agent directory for pi-durable extensions; a temp dir when unset. */
+	agentDir: string | undefined;
+	/** Seconds a question from an extension waits for an answer on GitHub. */
+	uiTimeout: number;
 }
 
 const TRUE_VALUES = new Set(["true", "1", "yes", "y", "on"]);
@@ -152,5 +158,10 @@ export function readActionInputs(
 		pollInterval:
 			parsePositiveInteger(readInput("poll_interval")) ?? DEFAULTS.pollInterval,
 		extensions: parseExtensionSpecs(readInput("extensions")),
+		trustProject:
+			parseBoolean(readInput("trust_project")) ?? DEFAULTS.trustProject,
+		agentDir: readInput("agent_dir").trim() || undefined,
+		uiTimeout:
+			parsePositiveInteger(readInput("ui_timeout")) ?? DEFAULTS.uiTimeout,
 	};
 }

@@ -1,11 +1,14 @@
-import { resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 import {
 	type FauxResponseStep,
 	fauxAssistantMessage,
 	fauxToolCall,
 } from "@earendil-works/pi-ai/providers/faux";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { ActionInputs } from "./inputs.ts";
 import { pushThread } from "./push.ts";
@@ -17,6 +20,7 @@ import {
 	createMockGitHubClient,
 	fauxModels,
 	git,
+	tempDir,
 	tempRemote,
 } from "./test-helpers.ts";
 import type { GitHubComment, GitHubReaction } from "./types.ts";
@@ -75,6 +79,7 @@ function world() {
 		log: createLogger(),
 		cwd: clone("--depth", "1"),
 		createModels: async () => models,
+		summary: vi.fn(async (_markdown: string) => undefined),
 		env: {
 			GITHUB_REPOSITORY: "o/r",
 			GITHUB_RUN_ID: "777",
@@ -424,4 +429,141 @@ describe("run (durable) with main's modes", () => {
 		});
 		expect(w.gh.posted).toHaveLength(0);
 	});
+});
+
+describe("run with a pi-durable extension (installed from npm)", () => {
+	let packs = "";
+	let spec = "";
+	beforeAll(() => {
+		packs = mkdtempSync(join(tmpdir(), "pi-action-packs-"));
+		execFileSync(
+			"npm",
+			[
+				"pack",
+				"--silent",
+				"--pack-destination",
+				packs,
+				resolve("test/fixtures/extensions/durable-ask"),
+			],
+			{ stdio: "ignore" },
+		);
+		spec = `npm:file:${join(packs, readdirSync(packs)[0] ?? "")}`;
+	}, 60_000);
+
+	afterAll(() => {
+		rmSync(packs, { recursive: true, force: true });
+	});
+
+	/** The text of the last tool result the model saw. */
+	const toolText = (messages: { role: string; content: unknown }[]): string => {
+		const result = messages.findLast((m) => m.role === "toolResult");
+		return Array.isArray(result?.content)
+			? (result.content as { text?: string }[])
+					.map((b) => b.text ?? "")
+					.join("")
+			: "";
+	};
+
+	/** A run whose model calls the extension's ask_user tool, then answers with what it reported. */
+	function durableWorld(inputs: Partial<ActionInputs> = {}) {
+		const w = world();
+		w.faux.setResponses([
+			fauxAssistantMessage([fauxToolCall("ask_user", {})], {
+				stopReason: "toolUse",
+			}),
+			(context) =>
+				fauxAssistantMessage(`Tool said: ${toolText(context.messages)}`),
+		]);
+		const runnerTemp = tempDir();
+		const deps = w.deps(w.comment("@pi deploy"), {
+			extensions: [spec],
+			...inputs,
+		});
+		deps.env = { ...process.env, ...deps.env, RUNNER_TEMP: runnerTemp };
+		return { ...w, deps, runnerTemp };
+	}
+
+	/** Someone ticks `labels` on each question at its second poll. Returns the polls per comment. */
+	function tickOnSecondPoll(
+		gh: ReturnType<typeof world>["gh"],
+		labels: string[],
+	): Map<number, number> {
+		const polls = new Map<number, number>();
+		vi.mocked(gh.getComment).mockImplementation(async (id) => {
+			const count = (polls.get(id) ?? 0) + 1;
+			polls.set(id, count);
+			let body = gh.bodies.get(id) ?? "";
+			for (const label of count === 2 ? labels : []) {
+				body = body.replace(`- [ ] ${label}`, `- [x] ${label}`);
+			}
+			gh.bodies.set(id, body);
+			return createComment({ id, body });
+		});
+		return polls;
+	}
+
+	it("answers the extension's questions with checkboxes ticked on GitHub", async () => {
+		const d = durableWorld();
+		const polls = tickOnSecondPoll(d.gh, ["Yes", "green"]);
+
+		await run(d.deps);
+
+		expect(d.gh.posted).toHaveLength(3);
+		expect(d.gh.posted[0]).toContain("### ❓ Deploy?");
+		expect(d.gh.posted[0]).toContain("- [ ] Yes\n- [ ] No");
+		expect(d.gh.posted[1]).toContain("- [ ] red\n- [ ] green");
+		expect(d.gh.posted[2]).toContain(
+			`Tool said: confirm=true select=green agentDir=${join(d.runnerTemp, "pi-action-agent-")}`,
+		);
+		expect(d.gh.bodies.get(1001)).toContain("✅ Answered: Yes");
+		expect(d.gh.bodies.get(1002)).toContain("✅ Answered: green");
+		expect([polls.get(1001), polls.get(1002)]).toStrictEqual([2, 2]);
+		expect(d.deps.summary).toHaveBeenCalledWith(
+			expect.stringContaining("deploy=true"),
+		);
+		expect(d.deps.log.info).toHaveBeenCalledWith(
+			expect.stringContaining("loading only the pi-durable one"),
+		);
+		expect(d.deps.log.info).toHaveBeenCalledWith(
+			"durable-ask: trustProject=false",
+		);
+		expect(d.reacted("rocket")).toHaveLength(1);
+	}, 120_000);
+
+	it("continues without answers when nobody ticks a box in time", async () => {
+		const d = durableWorld({ uiTimeout: 0.2 });
+
+		await run(d.deps);
+
+		expect(d.gh.posted[2]).toContain("Tool said: confirm=false select=none");
+		expect(d.gh.bodies.get(1001)).toContain("pi continued without one");
+		expect(d.gh.bodies.get(1002)).toContain("pi continued without one");
+	}, 120_000);
+
+	it("stops waiting for an answer when the run is aborted", async () => {
+		const d = durableWorld({ timeout: 1.5, uiTimeout: 60 });
+
+		await run(d.deps);
+
+		expect(d.gh.bodies.get(1001)).toContain("pi stopped waiting");
+		expect(d.gh.posted).toHaveLength(2); // the question, then the timeout
+		expect(d.gh.posted[1]).toContain("Timeout after 1.5 seconds");
+	}, 120_000);
+
+	it("gives the extension no UI in output mode, and passes trust_project", async () => {
+		const d = durableWorld({ outputMode: "output", trustProject: true });
+
+		await run(d.deps);
+
+		expect(
+			Object.fromEntries(vi.mocked(d.deps.log.setOutput).mock.calls),
+		).toMatchObject({
+			success: "true",
+			response: expect.stringContaining("Tool said: no ui"),
+		});
+		expect(d.gh.posted).toHaveLength(0);
+		expect(d.deps.log.info).toHaveBeenCalledWith(
+			"durable-ask: trustProject=true",
+		);
+	}, 120_000);
 });

@@ -98,6 +98,8 @@ The action is built with TypeScript on [pi-durable](https://www.npmjs.com/packag
 | [`src/custom-provider.ts`](src/custom-provider.ts) | The single custom provider/model from the flat `provider_*`/`model_*` inputs |
 | [`src/extensions.ts`](src/extensions.ts) | The `extensions` input: installing pi extensions from npm, finding their entry points, loading them with jiti, and the `pi` object they get |
 | [`src/extension-provider.ts`](src/extension-provider.ts) | Turning an extension's `pi.registerProvider(name, config)` into a pi-ai provider |
+| [`src/durable-extensions.ts`](src/durable-extensions.ts) | Creating the pi-durable extensions (`pi.durable`) with the run's host options |
+| [`src/github-ui.ts`](src/github-ui.ts) | Questions from pi-durable extensions as GitHub comments: checkboxes, `/answer` replies, the job summary |
 | [`src/push.ts`](src/push.ts) | The `if: always()` step that pushes unsaved thread state |
 | [`src/storage/git.ts`](src/storage/git.ts) | In-process git objects and compare-and-swap ref updates |
 | [`src/storage/git-storage.ts`](src/storage/git-storage.ts) | `GitStorage`: a pi-durable `Storage` whose log is a chain of commits on one ref |
@@ -179,7 +181,7 @@ npm run coverage            # With coverage report
 - Tests use dependency injection for easy mocking
 - Mock the pi SDK to test agent integration without real API calls
 - Use [`test-helpers.ts`](src/test-helpers.ts) for common mock factories
-- pi extensions used as fixtures live in [`test/fixtures/extensions/`](test/fixtures/extensions/); [`echo-provider`](test/fixtures/extensions/echo-provider/) registers a provider built on pi-ai's faux provider, so the `extensions` input can be tested end to end without network access
+- pi extensions used as fixtures live in [`test/fixtures/extensions/`](test/fixtures/extensions/); [`echo-provider`](test/fixtures/extensions/echo-provider/) registers a provider built on pi-ai's faux provider, so the `extensions` input can be tested end to end without network access; [`durable-ask`](test/fixtures/extensions/durable-ask/) is a pi-durable extension package with a tool that asks `ui.confirm` and `ui.select`
 
 **Coverage thresholds (enforced by pre-push hook):**
 - Statements: 90%

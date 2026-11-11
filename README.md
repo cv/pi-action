@@ -14,6 +14,7 @@ A GitHub Action that runs a durable [pi](https://github.com/earendil-works/pi) c
 - 🆕 Trigger on issue/PR creation, not just comments
 - 🔀 Automatically includes PR diffs for code review tasks
 - 🧩 Loads model providers from [pi extensions](https://github.com/earendil-works/pi) on npm or in your repository
+- 🛠️ Loads [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) extensions (tools for the conversation), and answers their questions with checkboxes on the issue/PR
 - 📦 Built on [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) - no separate installation needed
 - 🪝 Auto-installs git hooks to enforce commit conventions for the agent
 
@@ -107,7 +108,10 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 | `compat_supports_developer_role` | Whether OpenAI-compatible custom provider supports developer role messages | No | - |
 | `compat_supports_reasoning_effort` | Whether OpenAI-compatible custom provider supports `reasoning_effort` | No | - |
 | `compat_force_adaptive_thinking` | Use adaptive thinking for an Anthropic-compatible custom model (`provider_api: anthropic-messages`); required by Claude Opus 4.6+ and Sonnet 4.6+ | No | - |
-| `extensions` | pi extensions whose model providers `provider`/`model` can select: npm package specs or workspace paths, one per line or comma-separated (see [Providers from pi extensions](#providers-from-pi-extensions)) | No | - |
+| `extensions` | pi extensions whose model providers `provider`/`model` can select, and pi-durable extensions whose tools pi gets: npm package specs or workspace paths, one per line or comma-separated (see [Providers from pi extensions](#providers-from-pi-extensions) and [pi-durable extensions](#pi-durable-extensions)) | No | - |
+| `trust_project` | Let pi-durable extensions trust the repository and run its own configuration (see [pi-durable extensions](#pi-durable-extensions)) | No | `false` |
+| `agent_dir` | Agent directory (user-level state) for pi-durable extensions, relative to the workspace | No | (a temp dir under `RUNNER_TEMP`) |
+| `ui_timeout` | Seconds a question from a pi-durable extension waits for an answer on the issue/PR | No | `300` |
 | `prompt_template` | Custom prompt template with placeholder variables | No | (built-in default) |
 | `output_mode` | `comment` to post on the issue/PR, or `output` to set action outputs only | No | `comment` |
 | `prompt` | Direct prompt for the agent (use with `output_mode: output`, or with `pr_number`) | No | - |
@@ -232,6 +236,35 @@ A provider that ships as a [pi extension](https://github.com/earendil-works/pi) 
 - **Not supported**: tools, commands, event handlers, UI, flags, and everything else an extension can do in pi's coding agent are ignored, with a warning in the log; the agent keeps pi-action's read, write, edit and bash tools. OAuth logins (`oauth`) can't run on a runner, so use an API key. Image and classifier models are skipped. An extension that fails to load fails the run.
 
 **Security**: an extension is code that runs inside the action, with the job's permissions and environment: it can read the `github_token`, `api_key` and every secret in the step's `env`, and act on your repository. Load only extensions you trust, pin npm versions (`name@1.2.3`), and prefer reviewing a pinned copy committed to the repository (a path). npm itself runs without the action's `INPUT_*` variables.
+
+#### pi-durable extensions
+
+A package that ships a [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) extension, such as [pit](https://github.com/cv/pit)'s `pit/durable`, adds its tools and prompt sections to every conversation. List it in `extensions` like any other:
+
+```yaml
+- uses: cv/pi-action@v2
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    extensions: |
+      @acme/pi-durable-tools@1.0.0
+```
+
+- **Discovery**: a package whose `package.json` has `pi.durable` (a module path, such as `"pi": { "durable": "./src/durable/index.ts" }`) is a pi-durable extension package. Its module exports `createPiDurableExtension(options)` (or a default export with the same signature), which returns a pi-durable `Extension` (`{ name, tools?, sections?, hooks?, wraps?, tasks? }`). A package with both `pi.durable` and `pi.extensions` loads only its pi-durable entry (its pi extensions need pi's coding agent), and says so in the log.
+- **Loading**: as for pi extensions (same install, TypeScript without a build step). Imports of `@earendil-works/pi-durable` and `@earendil-works/chord` (and their subpaths) get the action's copies, so the extension shares the host's instances.
+- **Host options**: `createPiDurableExtension` receives `{ cwd, agentDir, trustProject, ui, log }`: the workspace; `agent_dir` (resolved against the workspace) or a fresh temp directory under `RUNNER_TEMP`; `trust_project`; the GitHub UI below, in comment mode on an issue or PR (omitted in output mode and for direct prompts); and the action's log (`info`, `warning`).
+- **Installation into the conversation**: the extensions are installed after pi-action's coding tools (read, write, edit, bash), for every conversation: comment mode, `pr_number` runs and direct prompts. Their names must be unique.
+- **`trust_project`** (default `false`) tells the extension it may load and run the repository's own configuration (for pit: `.pi/pit.json` and `.pi/functions`). Anyone who can push a branch or open a PR can change those files, so turn it on only for repositories whose code you would run anyway, and never for workflows that run on untrusted PRs.
+
+##### Questions on GitHub
+
+When an extension asks its user something (`ui.confirm`, `ui.select`, `ui.input`), pi-action posts the question as a comment on the issue or PR and waits up to `ui_timeout` seconds (default 300), checking every `poll_interval` seconds. The run's own timeout still applies.
+
+- **`confirm` and `select`**: the comment has a task list (`- [ ] Yes`, `- [ ] No`, or one box per option). Tick a box to answer; the first ticked box counts. The comment is then edited to show the answer (`✅ Answered: Yes`).
+- **`input`**: reply with a comment that starts with `/answer`, such as `/answer release-2.1`. The text after `/answer` is the answer. The first `/answer` reply posted after the question counts, from someone allowed to run pi (`allowed_users`, `allowed_associations`, `allowed_bots`); pi reacts 👍 to it. Questions and `/answer` replies are never `@pi` requests, even when they mention `@pi`.
+- **No answer**: on timeout, or when the run stops, the comment is edited to say pi continued without an answer; `confirm` returns `false`, `select` and `input` nothing.
+- **`notify`**: notifications go to the log and the job summary, not to comments.
+
+**Trust model**: checkboxes are answered by editing pi-action's comment, and GitHub lets only people with write access to the repository edit someone else's comment, so a ticked box comes from a collaborator with write access (who may not be in `allowed_users`; GitHub doesn't tell who ticked it). Each question carries a hidden marker (`<!-- pi-action:question <id> -->`); a question whose marker or options were changed is ignored, as if unanswered, and restored. `/answer` replies can come from anyone, so they count only from people allowed to run pi.
 
 #### Output mode and direct prompts
 
@@ -390,7 +423,7 @@ The action only responds to authorized users (see [`src/security.ts`](src/securi
 
 Collaborators are not allowed by default. Add `COLLABORATOR` to `allowed_associations` if you want outside collaborators to trigger pi.
 
-pi extensions loaded with `extensions` run with the job's permissions; see [Providers from pi extensions](#providers-from-pi-extensions).
+pi extensions loaded with `extensions` run with the job's permissions; see [Providers from pi extensions](#providers-from-pi-extensions). For pi-durable extensions, keep `trust_project` off unless you trust everyone who can change the repository, and see [Questions on GitHub](#questions-on-github) for who can answer their questions.
 
 Input is sanitized to remove:
 - HTML comments (potential injection vectors)

@@ -1,0 +1,18 @@
+{
+	"name": "pi-action-durable-ask",
+	"version": "1.0.0",
+	"description": "Test fixture: a package with a pi-durable extension whose tool asks the user on GitHub",
+	"keywords": [
+		"pi-package"
+	],
+	"type": "module",
+	"peerDependencies": {
+		"@earendil-works/pi-durable": "*"
+	},
+	"pi": {
+		"durable": "./durable.ts",
+		"extensions": [
+			"./coding-agent.ts"
+		]
+	}
+}
