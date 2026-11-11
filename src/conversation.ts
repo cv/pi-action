@@ -39,13 +39,42 @@ export interface ConversationOptions {
 
 const EMPTY_RESPONSE = "Agent returned empty response";
 const SUMMARY_SUFFIX = "-summary";
-const SUMMARY_PROMPT = `IMPORTANT: You completed your work but did not provide a final text summary. This summary is REQUIRED. Please now write a plain-text summary of what you accomplished, including:
-- What changes were made and why
-- Which files were modified
-- Any errors encountered or remaining issues
-- Confirmation that your work is complete
+const CONTINUE_SUFFIX = "-continue-";
+/**
+ * Sent once when a run ends on a normal stop with no text. Neutral on purpose: the model may have stopped
+ * early, so it is not told its work is done, and tools stay available to finish (it must still end with text).
+ */
+const SUMMARY_PROMPT = `Your last turn ended without a text reply, and a reply is required: it is posted to the issue or pull request. Write a plain-text reply that covers:
+- What you did, and which files you changed (if any)
+- What is left to do, if anything
+- Any errors or open problems
 
-Do NOT call any tools - just provide the text summary.`;
+If something you were asked to do is still unfinished and you can finish it, you may continue with tools first. Either way, end your turn with that text reply.`;
+/** Sent when a response ran out of output tokens with no tool call: the model did not choose to stop. */
+const CONTINUE_PROMPT =
+	"Your last response hit the output token limit (max_tokens) before you finished. Continue where you left off; keep reasoning shorter and act with tools.";
+/** How many responses in a row may hit the output token limit before the run gives up. */
+const MAX_CUT_OFFS = 3;
+const CUT_OFF_NOTE =
+	"\n\n_This response was cut off at the output token limit (max_tokens); pi is continuing._";
+
+/** A response that hit the output token limit too often (or at the timeout): an error with any partial text. */
+function cutOffResult(
+	text: string,
+	count: number,
+	timedOutAfter: number | undefined,
+): ThreadResult {
+	const reason =
+		timedOutAfter === undefined
+			? `pi's responses hit the output token limit (max_tokens) ${count} times in a row, so the run stopped before the work was finished. Raise \`model_max_tokens\` (for a custom provider) or use a model with a larger output limit, then ask again.`
+			: `Timeout after ${timedOutAfter} seconds, while the last response was cut off at the output token limit (max_tokens).`;
+	return {
+		success: false,
+		error: text
+			? `${reason}\n\nThe last response, cut off:\n\n${text}`
+			: reason,
+	};
+}
 
 function describeUnanswered(
 	record: SettledRecord,
@@ -74,6 +103,8 @@ export class ThreadConversation {
 	private delivering: Promise<void> = Promise.resolve();
 	private posted = new Map<string, string>();
 	private timedOut = false;
+	/** When the run times out; set once the initial triggers are submitted. */
+	private deadline = Number.POSITIVE_INFINITY;
 	private readonly options: ConversationOptions;
 
 	constructor(options: ConversationOptions) {
@@ -85,9 +116,9 @@ export class ThreadConversation {
 		this.posted = await thread.postedResults();
 		await this.submitAll(initial);
 
-		const deadline = Date.now() + timeoutSeconds * 1000;
+		this.deadline = Date.now() + timeoutSeconds * 1000;
 		for (;;) {
-			const remaining = deadline - Date.now();
+			const remaining = this.deadline - Date.now();
 			if (remaining <= 0) {
 				this.timedOut = true;
 				break;
@@ -152,20 +183,23 @@ export class ThreadConversation {
 			.catch(() => undefined);
 	}
 
-	/** Submit and wait; an empty answer is followed by one request for a summary (as pi-action always did). */
+	/**
+	 * Submit and wait. A response cut off by the output token limit is continued (see `settle()`); an empty
+	 * answer is followed by one request for a summary (as pi-action always did).
+	 */
 	private async answer(
 		trigger: Trigger,
 		content: string,
 	): Promise<SettledResult> {
-		const outcome = await this.submitAndWait(trigger, trigger.key, content);
+		const outcome = await this.settle(trigger, trigger.key, content);
 		// An answer an earlier run delivered (or a question it is waiting on) is not asked for again.
-		if (!(outcome.empty && !this.timedOut) || this.posted.has(outcome.key)) {
+		if (!(outcome.empty && !this.outOfTime()) || this.posted.has(outcome.key)) {
 			return outcome;
 		}
 		this.options.log.warning(
 			"Agent returned empty response from first attempt. Re-prompting for a summary.",
 		);
-		const retry = await this.submitAndWait(
+		const retry = await this.settle(
 			trigger,
 			`${trigger.key}${SUMMARY_SUFFIX}`,
 			SUMMARY_PROMPT,
@@ -181,6 +215,63 @@ export class ThreadConversation {
 				error: `Agent failed to provide a response after two attempts. First attempt: ${EMPTY_RESPONSE}. Retry attempt: ${EMPTY_RESPONSE}.`,
 			},
 		};
+	}
+
+	/**
+	 * Submit and wait; while the answer was cut off by the output token limit (no tool call: the agent loop
+	 * ended, but the model did not choose to stop), ask it to continue, with tools. Partial text is posted as it
+	 * comes. After `MAX_CUT_OFFS` cut-offs in a row (a run that used tools in between resets the count), or at
+	 * the timeout, the result is an error that says so. Continuations have stable keys, so a re-run gets the same
+	 * submissions back rather than sending them again.
+	 */
+	private async settle(
+		trigger: Trigger,
+		key: string,
+		content: string,
+	): Promise<SettledResult> {
+		const { log } = this.options;
+		let outcome = await this.submitAndWait(trigger, key, content);
+		let inARow = 0;
+		for (let continuation = 1; outcome.cutOff; continuation += 1) {
+			inARow = outcome.cutOff.usedTools ? 1 : inARow + 1;
+			const { text } = outcome.cutOff;
+			if (inARow > MAX_CUT_OFFS || this.outOfTime()) {
+				const timedOutAfter =
+					inARow > MAX_CUT_OFFS ? undefined : this.options.timeoutSeconds;
+				log.warning(
+					timedOutAfter === undefined
+						? `pi's responses hit the output token limit (max_tokens) ${inARow} times in a row; giving up. Consider raising the model_max_tokens input.`
+						: "Timed out while pi's response was cut off at the output token limit (max_tokens); not continuing.",
+				);
+				return {
+					key: outcome.key,
+					empty: false,
+					result: cutOffResult(text, inARow, timedOutAfter),
+				};
+			}
+			log.warning(
+				`pi's response hit the output token limit (max_tokens) without a tool call; asking it to continue (${inARow} of ${MAX_CUT_OFFS}). Consider raising the model_max_tokens input.`,
+			);
+			if (text) {
+				this.enqueueDelivery(trigger, {
+					key: outcome.key,
+					empty: false,
+					result: { success: true, response: `${text}${CUT_OFF_NOTE}` },
+				});
+			}
+			// oxlint-disable-next-line eslint/no-await-in-loop -- each continuation follows the cut-off one
+			outcome = await this.submitAndWait(
+				trigger,
+				`${key}${CONTINUE_SUFFIX}${continuation}`,
+				CONTINUE_PROMPT,
+			);
+		}
+		return outcome;
+	}
+
+	/** The run timed out, or is about to: no more prompts are sent. */
+	private outOfTime(): boolean {
+		return this.timedOut || Date.now() >= this.deadline;
 	}
 
 	private async submitAndWait(
@@ -216,9 +307,10 @@ export class ThreadConversation {
 		});
 		const record = await submission.wait(BACKGROUND_CONTEXT);
 		if (record.status === "done" && record.answer !== undefined) {
-			const { text, toolCalls } = await this.options.thread.answerText(
-				record.answer,
-			);
+			// An input submission always has its entry; without one, the range is just the answer.
+			const input = record.entry ?? record.answer;
+			const { text, toolCalls, stopReason, usedTools } =
+				await this.options.thread.answerText(record.answer, input);
 			const questions = asked().slice(askedBefore);
 			if (toolCalls && questions.length > 0) {
 				// The run ended on a question (its tool round asked to terminate): the answer comes in a later run.
@@ -226,6 +318,14 @@ export class ThreadConversation {
 					key: `answer-${record.answer}`,
 					empty: false,
 					waiting: questions,
+					result: { success: true, response: text },
+				};
+			}
+			if (stopReason === "length" && !toolCalls) {
+				return {
+					key: `answer-${record.answer}`,
+					empty: false,
+					cutOff: { text, usedTools },
 					result: { success: true, response: text },
 				};
 			}
@@ -300,4 +400,6 @@ interface SettledResult {
 	result: ThreadResult;
 	/** The run ended on these questions: nothing is posted, the answers start a later run. */
 	waiting?: readonly string[];
+	/** The answer hit the output token limit with no tool call (`settle()` continues it). */
+	cutOff?: { text: string; usedTools: boolean };
 }

@@ -91,7 +91,7 @@ Only `github_token` is necessary. All other inputs have a default or are optiona
 | `model_reasoning` | The custom model supports reasoning (thinking) | No | `false` |
 | `model_input` | Comma-separated input types of the custom model (`text` or `text,image`) | No | `text` |
 | `model_context_window` | Context window of the custom model, in tokens | No | `128000` |
-| `model_max_tokens` | Maximum output tokens of the custom model | No | `16384` |
+| `model_max_tokens` | Maximum output tokens of the custom model (reasoning counts toward it). A response that hits it with no tool call is continued, up to 3 times in a row and within `timeout`; partial text is posted, marked as cut off. If it keeps hitting the limit, pi posts an error that says so: raise this value, up to the provider's limit for the model | No | `16384` |
 | `compat_supports_developer_role` | The OpenAI-compatible custom provider supports developer role messages | No | - |
 | `compat_supports_reasoning_effort` | The OpenAI-compatible custom provider supports `reasoning_effort` | No | - |
 | `compat_force_adaptive_thinking` | Use adaptive thinking for an Anthropic-compatible custom model (`provider_api: anthropic-messages`). Claude Opus 4.6+ and Sonnet 4.6+ need it | No | - |
