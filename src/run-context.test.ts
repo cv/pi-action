@@ -134,4 +134,18 @@ describe("getRunContext", () => {
 			expect.stringContaining("does not have permission"),
 		);
 	});
+
+	it("skips an /answer reply to an extension's question, even if it mentions the phrase", async () => {
+		const d = deps(
+			{},
+			{
+				...issue("Bug"),
+				comment: createComment({ body: "/answer ask @pi later" }),
+			},
+		);
+		await expect(getRunContext(d)).resolves.toBeNull();
+		expect(d.log.info).toHaveBeenCalledWith(
+			expect.stringContaining("not a request"),
+		);
+	});
 });

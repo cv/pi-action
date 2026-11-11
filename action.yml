@@ -79,7 +79,15 @@ inputs:
     description: 'Use adaptive thinking for an Anthropic-compatible custom model (required by Claude Opus 4.6+ and Sonnet 4.6+)'
     required: false
   extensions:
-    description: 'pi extensions to load for the model providers they register: npm package specs or paths relative to the workspace, one per line or comma-separated. npm packages are installed into a temp directory without lifecycle scripts. Extensions run inside the action with the job''s permissions and environment.'
+    description: 'pi extensions to load: npm package specs or paths relative to the workspace, one per line or comma-separated. pi extensions contribute the model providers they register; packages with a pi-durable extension (pi.durable in package.json) add their tools to the conversation. npm packages are installed into a temp directory without lifecycle scripts. Extensions run inside the action with the job''s permissions and environment.'
+    required: false
+    default: ''
+  trust_project:
+    description: 'Let pi-durable extensions trust the repository: load and run its own configuration (such as .pi/ files). Only for repositories whose code you would run anyway; anyone who can open a PR can change those files.'
+    required: false
+    default: 'false'
+  agent_dir:
+    description: 'Agent directory (user-level state) for pi-durable extensions, relative to the workspace; a fresh temp directory under RUNNER_TEMP when empty'
     required: false
     default: ''
   prompt_template:
@@ -163,6 +171,8 @@ runs:
         INPUT_COMPAT_SUPPORTS_REASONING_EFFORT: ${{ inputs.compat_supports_reasoning_effort }}
         INPUT_COMPAT_FORCE_ADAPTIVE_THINKING: ${{ inputs.compat_force_adaptive_thinking }}
         INPUT_EXTENSIONS: ${{ inputs.extensions }}
+        INPUT_TRUST_PROJECT: ${{ inputs.trust_project }}
+        INPUT_AGENT_DIR: ${{ inputs.agent_dir }}
         INPUT_PROMPT_TEMPLATE: ${{ inputs.prompt_template }}
         INPUT_OUTPUT_MODE: ${{ inputs.output_mode }}
         INPUT_PROMPT: ${{ inputs.prompt }}

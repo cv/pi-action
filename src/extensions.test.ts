@@ -2,14 +2,19 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { createRegistry } from "@earendil-works/pi-durable";
 import { describe, expect, it, vi } from "vitest";
 
 import {
 	classifySpec,
 	createExtensionApi,
 	type ExtensionProvider,
+	findDurableEntry,
 	findExtensionEntries,
+	hostAliases,
 	loadExtensions,
 	type NpmRunner,
 } from "./extensions.ts";
@@ -24,6 +29,17 @@ const NO_DEFAULT = /has no default export function/u;
 const COULD_NOT_LOAD = /Could not load pi extension .*boom/u;
 const NPM_FAILED = /npm could not install nope@9: E404 not found/u;
 const BAD_REGISTER = /takes a provider name and config/u;
+const NO_FACTORY = /exports no createPiDurableExtension function/u;
+const NOT_DURABLE = /did not return a pi-durable extension/u;
+const BAD_DURABLE = /pi\.durable in package\.json must be a module path/u;
+const MISSING_DURABLE = /pi\.durable entry \.\/gone\.ts not found/u;
+const DURABLE_FIXTURE = "./test/fixtures/extensions/durable-ask";
+const HOST = {
+	cwd: "/w",
+	agentDir: "/a",
+	trustProject: false,
+	log: createLogger(),
+};
 
 function write(path: string, content: string): string {
 	mkdirSync(dirname(path), { recursive: true });
@@ -171,13 +187,13 @@ describe("loadExtensions", () => {
 				log: createLogger(),
 				runNpm,
 			}),
-		).resolves.toStrictEqual([]);
+		).resolves.toStrictEqual({ providers: [], durable: [] });
 		expect(runNpm).not.toHaveBeenCalled();
 	});
 
 	it("loads a TypeScript extension from a workspace path", async () => {
 		const log = createLogger();
-		const providers = await loadExtensions({
+		const { providers } = await loadExtensions({
 			specs: ["./test/fixtures/extensions/echo-provider"],
 			cwd: process.cwd(),
 			log,
@@ -211,7 +227,7 @@ describe("loadExtensions", () => {
 		const workspace = tempDir();
 		const log = createLogger();
 
-		const providers = await loadExtensions({
+		const { providers } = await loadExtensions({
 			specs: [`npm:file:${join(packs, tarball)}`],
 			cwd: workspace,
 			log,
@@ -251,7 +267,7 @@ describe("loadExtensions", () => {
 				env: { RUNNER_TEMP: tempDir(), INPUT_API_KEY: "secret", PATH: "/bin" },
 				runNpm,
 			}),
-		).resolves.toStrictEqual([]);
+		).resolves.toStrictEqual({ providers: [], durable: [] });
 		const [call] = runNpm.mock.calls;
 		expect(call?.[0]).toStrictEqual(
 			expect.arrayContaining([
@@ -315,7 +331,7 @@ describe("loadExtensions", () => {
 				"}",
 			].join("\n"),
 		);
-		const providers = await loadExtensions({
+		const { providers } = await loadExtensions({
 			specs: ["./ext"],
 			cwd,
 			log: createLogger(),
@@ -323,5 +339,101 @@ describe("loadExtensions", () => {
 		expect(providers.map((p) => [p.id, p.kind])).toStrictEqual([
 			["native", "provider"],
 		]);
+	});
+});
+
+describe("loadExtensions: pi-durable extension packages", () => {
+	it("loads only the pi.durable entry of a package that also has pi extensions", async () => {
+		const log = createLogger();
+		const loaded = await loadExtensions({
+			specs: [DURABLE_FIXTURE],
+			cwd: process.cwd(),
+			log,
+		});
+		expect(loaded.providers).toStrictEqual([]);
+		expect(loaded.durable.map((d) => d.source)).toStrictEqual([
+			"test/fixtures/extensions/durable-ask/durable.ts",
+		]);
+		expect(log.info).toHaveBeenCalledWith(
+			`${resolve(DURABLE_FIXTURE)} has a pi-durable extension (pi.durable) and pi extensions (pi.extensions); loading only the pi-durable one, as the others need pi's coding agent`,
+		);
+		expect(log.info).toHaveBeenCalledWith(
+			"Loaded pi-durable extension test/fixtures/extensions/durable-ask/durable.ts",
+		);
+		const extension = await loaded.durable[0]?.create(HOST);
+		expect(extension?.name).toBe("durable-ask");
+		expect(extension?.tools?.map((t) => t.name)).toStrictEqual(["ask_user"]);
+		expect(HOST.log.info).toHaveBeenCalledWith(
+			"durable-ask: trustProject=false",
+		);
+	});
+
+	it("takes a default export, and shares the host's pi-durable and chord", async () => {
+		const cwd = tempDir(); // outside the repository: only the aliases can resolve these imports
+		write(
+			join(cwd, "ext/package.json"),
+			JSON.stringify({ pi: { durable: "./main.ts" } }),
+		);
+		write(
+			join(cwd, "ext/main.ts"),
+			[
+				'import { createRegistry } from "@earendil-works/pi-durable";',
+				'import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";',
+				"export default (options: { cwd: string }) => ({ name: options.cwd, sections: [], createRegistry, BACKGROUND_CONTEXT });",
+			].join("\n"),
+		);
+		const { durable } = await loadExtensions({
+			specs: ["./ext"],
+			cwd,
+			log: createLogger(),
+		});
+		const extension = await durable[0]?.create(HOST);
+		expect(extension?.name).toBe("/w");
+		expect(extension).toHaveProperty("createRegistry", createRegistry);
+		expect(extension).toHaveProperty("BACKGROUND_CONTEXT", BACKGROUND_CONTEXT);
+	});
+
+	it("fails clearly for bad pi.durable entries and factories", async () => {
+		const cwd = tempDir();
+		const pkg = (dir: string, durable: unknown, code = "") => {
+			write(
+				join(cwd, dir, "package.json"),
+				JSON.stringify({ pi: { durable } }),
+			);
+			write(join(cwd, dir, "main.ts"), code);
+		};
+		pkg("none", "./main.ts", "export const other = 1;\n");
+		pkg(
+			"bad-result",
+			"./main.ts",
+			"export function createPiDurableExtension() { return { tools: 1 }; }\n",
+		);
+		pkg("not-a-path", 42);
+		pkg("gone", "./gone.ts");
+		const load = async (spec: string) =>
+			loadExtensions({ specs: [spec], cwd, log: createLogger() });
+		await expect(load("./none")).rejects.toThrow(NO_FACTORY);
+		await expect(load("./not-a-path")).rejects.toThrow(BAD_DURABLE);
+		await expect(load("./gone")).rejects.toThrow(MISSING_DURABLE);
+		const { durable } = await load("./bad-result");
+		await expect(durable[0]?.create(HOST)).rejects.toThrow(NOT_DURABLE);
+		expect(findDurableEntry(join(cwd, "none", "main.ts"))).toBeUndefined();
+	});
+
+	it("aliases pi-durable and chord, with their subpaths", () => {
+		const aliases = hostAliases();
+		expect(Object.keys(aliases)).toStrictEqual(
+			expect.arrayContaining([
+				"@earendil-works/pi-ai",
+				"@mariozechner/pi-ai/models",
+				"@earendil-works/pi-durable",
+				"@earendil-works/pi-durable/tools",
+				"@earendil-works/chord",
+				"@earendil-works/chord/context",
+			]),
+		);
+		expect(aliases["@earendil-works/pi-durable"]).toBe(
+			fileURLToPath(import.meta.resolve("@earendil-works/pi-durable")),
+		);
 	});
 });

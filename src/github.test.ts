@@ -160,8 +160,11 @@ describe("createGitHubClient", () => {
 						data: { id: 7, html_url: "https://github.com/c/7" },
 					}),
 					listComments: vi.fn(),
+					getComment: vi.fn(),
+					updateComment: vi.fn(),
 				},
 				pulls: { get: vi.fn(), listReviewComments: vi.fn() },
+				repos: { getCollaboratorPermissionLevel: vi.fn() },
 			},
 		};
 		const client = createGitHubClient(octokit, { owner: "o", name: "r" });
@@ -212,6 +215,43 @@ describe("createGitHubClient", () => {
 			repo: "r",
 			issue_number: 42,
 			body: "Hello",
+		});
+	});
+
+	it("gets and updates an issue comment", async () => {
+		const { client, issues } = setup();
+		const comment = { id: 7, body: "Hi", author_association: "NONE" };
+		issues.getComment.mockResolvedValueOnce({ data: comment });
+		await expect(client.getComment(7)).resolves.toBe(comment);
+		await client.updateComment(7, "Bye");
+		expect(issues.getComment).toHaveBeenCalledWith({
+			owner: "o",
+			repo: "r",
+			comment_id: 7,
+		});
+		expect(issues.updateComment).toHaveBeenCalledWith({
+			owner: "o",
+			repo: "r",
+			comment_id: 7,
+			body: "Bye",
+		});
+	});
+
+	it("reads a user's role on the repository", async () => {
+		const { client, repos } = setup();
+		repos.getCollaboratorPermissionLevel
+			.mockResolvedValueOnce({
+				data: { permission: "write", role_name: "maintain" },
+			})
+			.mockResolvedValueOnce({ data: { permission: "read" } });
+		await expect(client.getCollaboratorPermission("ada")).resolves.toBe(
+			"maintain",
+		);
+		await expect(client.getCollaboratorPermission("bob")).resolves.toBe("read");
+		expect(repos.getCollaboratorPermissionLevel).toHaveBeenCalledWith({
+			owner: "o",
+			repo: "r",
+			username: "ada",
 		});
 	});
 

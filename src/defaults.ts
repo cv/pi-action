@@ -17,4 +17,5 @@ export const DEFAULTS = {
 	customModelContextWindow: 128_000,
 	customModelMaxTokens: 16_384,
 	outputMode: "comment",
+	trustProject: false,
 } as const;

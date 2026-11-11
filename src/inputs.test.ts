@@ -42,6 +42,8 @@ describe("readActionInputs", () => {
 				prompt: "Generate release notes",
 				pr_number: "42",
 				extensions: "@acme/pi-provider@1.2.3\n./ext.ts",
+				trust_project: "true",
+				agent_dir: " .pi/agent ",
 			}),
 			{ GITHUB_TOKEN: "env-token" },
 		);
@@ -64,6 +66,8 @@ describe("readActionInputs", () => {
 			prNumber: 42,
 			pollInterval: 5,
 			extensions: ["@acme/pi-provider@1.2.3", "./ext.ts"],
+			trustProject: true,
+			agentDir: ".pi/agent",
 		});
 	});
 });

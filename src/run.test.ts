@@ -1,11 +1,14 @@
-import { resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 import {
 	type FauxResponseStep,
 	fauxAssistantMessage,
 	fauxToolCall,
 } from "@earendil-works/pi-ai/providers/faux";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { ActionInputs } from "./inputs.ts";
 import { pushThread } from "./push.ts";
@@ -17,6 +20,7 @@ import {
 	createMockGitHubClient,
 	fauxModels,
 	git,
+	tempDir,
 	tempRemote,
 } from "./test-helpers.ts";
 import type { GitHubComment, GitHubReaction } from "./types.ts";
@@ -75,6 +79,7 @@ function world() {
 		log: createLogger(),
 		cwd: clone("--depth", "1"),
 		createModels: async () => models,
+		summary: vi.fn(async (_markdown: string) => undefined),
 		env: {
 			GITHUB_REPOSITORY: "o/r",
 			GITHUB_RUN_ID: "777",
@@ -96,7 +101,78 @@ const userTexts = (messages: { role: string; content: unknown }[]) =>
 						.join(""),
 		);
 
+/** The text of the last tool result the model saw. */
+const toolText = (messages: { role: string; content: unknown }[]): string => {
+	const result = messages.findLast((m) => m.role === "toolResult");
+	return Array.isArray(result?.content)
+		? (result.content as { text?: string }[]).map((b) => b.text ?? "").join("")
+		: "";
+};
+
+/** Git as on a runner: no global or system config, so no identity. */
+function runnerGitEnv(): Record<string, string> {
+	const home = tempDir();
+	const global = join(home, "gitconfig");
+	writeFileSync(global, "");
+	return { HOME: home, GIT_CONFIG_GLOBAL: global, GIT_CONFIG_NOSYSTEM: "1" };
+}
+
 describe("run (durable)", () => {
+	it("ignores edited comments that are not answers to questions", async () => {
+		const w = world();
+		const trigger = w.comment("@pi fix it");
+		const deps = w.deps(
+			undefined,
+			{},
+			{
+				action: "edited",
+				comment: trigger,
+				issue: {
+					number: 42,
+					title: "Fix the thing",
+					body: "It is broken",
+					user: { login: "o", type: "User" },
+				},
+			},
+		);
+		await run(deps);
+		expect(deps.log.info).toHaveBeenCalledWith(
+			"An edited comment that is not an answer to a question; skipping",
+		);
+		expect(w.gh.addReaction).not.toHaveBeenCalled();
+		expect(w.gh.posted).toHaveLength(0);
+	});
+
+	it("gives the agent's tools GH_TOKEN and a git identity when the runner has none", async () => {
+		const w = world();
+		w.faux.setResponses([
+			fauxAssistantMessage(
+				[
+					fauxToolCall("bash", {
+						command:
+							'printf "%s|%s|%s" "$GH_TOKEN" "$GIT_AUTHOR_NAME" "$GIT_COMMITTER_EMAIL"',
+					}),
+				],
+				{ stopReason: "toolUse" },
+			),
+			(context) =>
+				fauxAssistantMessage(`Tool said: ${toolText(context.messages)}`),
+		]);
+		const deps = w.deps(w.comment("@pi who am I?"));
+		deps.env = { ...deps.env, ...runnerGitEnv() };
+
+		await run(deps);
+
+		expect(w.gh.posted[0]).toContain(
+			"Tool said: test-token|github-actions[bot]|41898282+github-actions[bot]@users.noreply.github.com",
+		);
+		expect(deps.log.info).toHaveBeenCalledWith(
+			"The agent's tools get GH_TOKEN, GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME, GIT_COMMITTER_EMAIL",
+		);
+		// Without pi-durable extensions, the action's own environment is left alone.
+		expect(deps.env).not.toHaveProperty("GH_TOKEN");
+	});
+
 	it("answers a trigger, posts once, and pushes the thread to the remote", async () => {
 		const w = world();
 		w.faux.setResponses([fauxAssistantMessage("Fixed it.")]);
@@ -424,4 +500,181 @@ describe("run (durable) with main's modes", () => {
 		});
 		expect(w.gh.posted).toHaveLength(0);
 	});
+});
+
+describe("run with a pi-durable extension (installed from npm)", () => {
+	let packs = "";
+	let spec = "";
+	beforeAll(() => {
+		packs = mkdtempSync(join(tmpdir(), "pi-action-packs-"));
+		execFileSync(
+			"npm",
+			[
+				"pack",
+				"--silent",
+				"--pack-destination",
+				packs,
+				resolve("test/fixtures/extensions/durable-ask"),
+			],
+			{ stdio: "ignore" },
+		);
+		spec = `npm:file:${join(packs, readdirSync(packs)[0] ?? "")}`;
+	}, 60_000);
+
+	afterAll(() => {
+		rmSync(packs, { recursive: true, force: true });
+	});
+
+	/**
+	 * The model calls the extension's ask_user tool until it reports something other than a posted question, then
+	 * says what it reported. A run that posts a question ends without asking the model again (`terminate`).
+	 */
+	const askUntilAnswered: FauxResponseStep = (context) => {
+		const said = toolText(context.messages);
+		return said === "" || said.startsWith("Question posted")
+			? fauxAssistantMessage([fauxToolCall("ask_user", {})], {
+					stopReason: "toolUse",
+				})
+			: fauxAssistantMessage(`Tool said: ${said}`);
+	};
+
+	function durableWorld(inputs: Partial<ActionInputs> = {}) {
+		const w = world();
+		w.faux.setResponses(Array.from({ length: 10 }, () => askUntilAnswered));
+		const runnerTemp = tempDir();
+		/** A run on the extension's runner, for `payload` (default: a new `@pi deploy` comment). */
+		const durableDeps = (payload?: Record<string, unknown>) => {
+			const deps = w.deps(
+				payload ? undefined : w.comment("@pi deploy"),
+				{ extensions: [spec], ...inputs },
+				payload,
+			);
+			deps.env = { ...process.env, ...deps.env, RUNNER_TEMP: runnerTemp };
+			return deps;
+		};
+		/** Someone with write access ticks `label` on question comment `id`: the `issue_comment` `edited` event. */
+		const tick = (id: number, label: string, sender = "ada") => {
+			const before = w.gh.bodies.get(id) ?? "";
+			const after = before.replace(`- [ ] ${label}`, `- [x] ${label}`);
+			w.gh.bodies.set(id, after);
+			return {
+				action: "edited",
+				issue: {
+					number: 42,
+					title: "Fix the thing",
+					body: "It is broken",
+					user: { login: "o", type: "User" },
+				},
+				comment: {
+					id,
+					body: after,
+					user: { login: "github-actions[bot]", type: "Bot" },
+					author_association: "NONE",
+					created_at: new Date().toISOString(),
+					updated_at: new Date().toISOString(),
+					html_url: `https://github.com/o/r/issues/42#issuecomment-${id}`,
+				},
+				changes: { body: { from: before } },
+				sender: { login: sender, type: "User" },
+			};
+		};
+		return { ...w, durableDeps, tick, runnerTemp, deps: durableDeps() };
+	}
+
+	it("posts a question, ends the run quietly, and continues when a box is ticked", async () => {
+		const d = durableWorld();
+		let seen: string[] = [];
+		await run(d.deps);
+
+		// The run ends on the question: no pi Response comment, no reaction for a result.
+		expect(d.gh.posted).toHaveLength(1);
+		expect(d.gh.posted[0]).toContain("### ❓ Deploy?");
+		expect(d.gh.posted[0]).toContain("- [ ] Yes\n- [ ] No");
+		expect(d.deps.log.info).toHaveBeenCalledWith(
+			"pi asked a question and ended its turn; waiting for an answer to https://github.com/o/r/issues/1#c1",
+		);
+		expect(d.reacted("rocket")).toHaveLength(0);
+		expect(d.reacted("confused")).toHaveLength(0);
+		expect(d.gh.getComment).not.toHaveBeenCalled();
+
+		// Ticking Yes starts a new run: the answer reaches the thread, and the tool asks its next question.
+		const yes = d.durableDeps(d.tick(1001, "Yes"));
+		await run(yes);
+		expect(d.gh.bodies.get(1001)).toContain("**✅ Answered: Yes by @ada**");
+		expect(d.gh.posted).toHaveLength(2);
+		expect(d.gh.posted[1]).toContain("- [ ] red\n- [ ] green");
+
+		// Ticking green: the tool gets both answers, and pi answers.
+		d.faux.setResponses([
+			async (...args) => {
+				seen = userTexts(args[0].messages);
+				return askUntilAnswered(...args);
+			},
+			askUntilAnswered,
+		]);
+		const green = d.durableDeps(d.tick(1002, "green"));
+		await run(green);
+		expect(d.gh.posted).toHaveLength(3);
+		expect(d.gh.posted[2]).toContain(
+			`Tool said: confirm=true select=green agentDir=${join(d.runnerTemp, "pi-action-agent-")}`,
+		);
+		expect(seen.at(-1)).toBe(
+			"**@ada** answered pi's question *Color* (https://github.com/o/r/issues/42#issuecomment-1002): green",
+		);
+		expect(d.reacted("rocket")).toStrictEqual([1002]);
+		expect(green.summary).toHaveBeenCalledWith(
+			expect.stringContaining("deploy=true"),
+		);
+		expect(d.deps.log.info).toHaveBeenCalledWith(
+			expect.stringContaining("loading only the pi-durable one"),
+		);
+		expect(d.deps.log.info).toHaveBeenCalledWith(
+			"durable-ask: trustProject=false",
+		);
+	}, 120_000);
+
+	it("ignores a box ticked by someone without write access", async () => {
+		const d = durableWorld();
+		await run(d.deps);
+		vi.mocked(d.gh.getCollaboratorPermission).mockResolvedValue("read");
+		const deps = d.durableDeps(d.tick(1001, "Yes", "mallory"));
+		await run(deps);
+		expect(deps.log.warning).toHaveBeenCalledWith(
+			expect.stringContaining("@mallory ticked a box"),
+		);
+		expect(d.gh.bodies.get(1001)).not.toContain("Answered");
+		expect(d.gh.posted).toHaveLength(1);
+	}, 120_000);
+
+	it("sets the tools' variables in the environment the extension shares, unless set", async () => {
+		const d = durableWorld({ outputMode: "output" });
+		const env = { ...d.deps.env, ...runnerGitEnv() };
+		Reflect.deleteProperty(env, "GH_TOKEN");
+		Reflect.deleteProperty(env, "GITHUB_TOKEN");
+		d.deps.env = env;
+
+		await run(d.deps);
+
+		expect(env).toMatchObject({
+			GH_TOKEN: "test-token",
+			GIT_AUTHOR_NAME: "pi-action tests", // set by the workflow (here, the test setup)
+		});
+	}, 120_000);
+
+	it("gives the extension no UI in output mode, and passes trust_project", async () => {
+		const d = durableWorld({ outputMode: "output", trustProject: true });
+
+		await run(d.deps);
+
+		expect(
+			Object.fromEntries(vi.mocked(d.deps.log.setOutput).mock.calls),
+		).toMatchObject({
+			success: "true",
+			response: expect.stringContaining("Tool said: no ui"),
+		});
+		expect(d.gh.posted).toHaveLength(0);
+		expect(d.deps.log.info).toHaveBeenCalledWith(
+			"durable-ask: trustProject=true",
+		);
+	}, 120_000);
 });

@@ -1,15 +1,19 @@
 import type { Models } from "@earendil-works/pi-ai/models";
+import type { Extension } from "@earendil-works/pi-durable";
 
 import { buildPrompt, formatFollowUp, type PIContext } from "./context.ts";
 import { ThreadConversation, type ThreadResult } from "./conversation.ts";
+import { createDurableExtensions } from "./durable-extensions.ts";
 import { loadExtensions } from "./extensions.ts";
 import { formatErrorComment, formatSuccessComment } from "./formatting.ts";
+import { createGitHubUi, type GitHubUi } from "./github-ui.ts";
 import type { GitHubClient, ReactionTarget } from "./github.ts";
 import type { ActionInputs } from "./inputs.ts";
 import { createActionModels, findModel } from "./models.ts";
 import { getRunContext } from "./run-context.ts";
 import { GitSyncConflictError } from "./storage/sync.ts";
 import { Thread } from "./thread.ts";
+import { toolEnv } from "./tool-env.ts";
 import { collectTriggers, type Trigger, triggerFromInfo } from "./triggers.ts";
 import type { Log, TriggerInfo } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
@@ -34,19 +38,61 @@ export interface ActionDependencies {
 	/** Git remote holding the thread refs. Default "origin". */
 	remote?: string;
 	env?: Env;
+	/** Appends Markdown to the job summary (notifications from pi-durable extensions). */
+	summary?: (markdown: string) => Promise<void>;
 }
 
-/** The action's model setup: the built-in and custom providers, and those the `extensions` input registers. */
-async function defaultModels(deps: ActionDependencies): Promise<Models> {
+/**
+ * The `extensions` input and the model setup: the built-in and custom providers and those extensions register
+ * (unless `createModels` overrides it), the pi-durable extensions for the thread, which get the GitHub UI when
+ * the run posts to an issue or PR, and the variables the agent's tools get (see `toolEnv()`). pi-durable extensions
+ * run in this process, so when there are any, those variables are set in its environment too (after npm ran).
+ */
+async function setUp(
+	deps: ActionDependencies,
+	gh: GitHubClient,
+	issueNumber: number | undefined,
+): Promise<{
+	models: Models;
+	extensions: Extension[];
+	tools: Record<string, string>;
+	ui: GitHubUi | undefined;
+}> {
 	const { inputs, log, cwd } = deps;
 	const env = deps.env ?? process.env;
-	const providers = await loadExtensions({
+	const loaded = await loadExtensions({
 		specs: inputs.extensions,
 		cwd,
 		log,
 		env,
 	});
-	return createActionModels(inputs, { providers, env, log });
+	const models = deps.createModels
+		? await deps.createModels(inputs)
+		: await createActionModels(inputs, {
+				providers: loaded.providers,
+				env,
+				log,
+			});
+	const tools = await toolEnv({ token: inputs.githubToken, cwd, env });
+	if (Object.keys(tools).length > 0) {
+		log.info(`The agent's tools get ${Object.keys(tools).join(", ")}`);
+	}
+	if (loaded.durable.length > 0) {
+		Object.assign(env, tools);
+	}
+	const ui =
+		inputs.outputMode === "comment" && issueNumber !== undefined
+			? createGitHubUi({ gh, issueNumber, log, summary: deps.summary })
+			: undefined;
+	const extensions = await createDurableExtensions(loaded.durable, {
+		cwd,
+		agentDir: inputs.agentDir,
+		trustProject: inputs.trustProject,
+		ui,
+		log,
+		env,
+	});
+	return { models, extensions, tools, ui };
 }
 
 /** On cancellation (SIGINT, then SIGTERM), push what the thread has so far before the runner kills us. */
@@ -101,12 +147,13 @@ async function initialTriggers(
 	piContext: PIContext,
 	triggerInfo: TriggerInfo | undefined,
 	since: Date | undefined,
+	answer: Trigger | undefined,
 ): Promise<Trigger[]> {
 	const { inputs } = deps;
 	if (!triggerInfo) {
 		return [oneOffTrigger(piContext, deps.env ?? process.env)];
 	}
-	const current = triggerFromInfo(triggerInfo, inputs.triggerPhrase);
+	const current = answer ?? triggerFromInfo(triggerInfo, inputs.triggerPhrase);
 	return inputs.outputMode === "comment"
 		? collectTriggers(gh, triggerInfo, inputs, since, current)
 		: [current];
@@ -174,9 +221,11 @@ export async function run(deps: ActionDependencies): Promise<void> {
 	let thread: Thread | undefined;
 	let stopSignals: (() => void) | undefined;
 	try {
-		const models = deps.createModels
-			? await deps.createModels(inputs)
-			: await defaultModels(deps);
+		const { models, extensions, tools, ui } = await setUp(
+			deps,
+			gh,
+			issueNumber,
+		);
 		const opened = await Thread.open({
 			cwd: deps.cwd,
 			issueNumber,
@@ -184,6 +233,8 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			model: findModel(models, inputs.provider, inputs.model),
 			log,
 			remote: deps.remote,
+			extensions,
+			toolEnv: tools,
 		});
 		thread = opened;
 		stopSignals = pushOnSignals(opened, log);
@@ -203,10 +254,14 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			log,
 			timeoutSeconds: inputs.timeout,
 			pollIntervalMs: inputs.pollInterval * 1000,
-			message: async (trigger, first) =>
-				first
+			message: async (trigger, first) => {
+				if (trigger.answer) {
+					return trigger.text;
+				}
+				return first
 					? buildPrompt(contextFor(piContext, trigger), inputs.promptTemplate)
-					: formatFollowUp(trigger),
+					: formatFollowUp(trigger);
+			},
 			deliver: async (trigger, result, alreadyPosted) =>
 				report(
 					result,
@@ -217,9 +272,17 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			...(interactive
 				? { poll: async () => collectTriggers(gh, interactive, inputs, since) }
 				: {}),
+			...(ui ? { asked: () => ui.asked } : {}),
 		});
 		await conversation.run(
-			await initialTriggers(deps, gh, piContext, triggerInfo, opened.startedAt),
+			await initialTriggers(
+				deps,
+				gh,
+				piContext,
+				triggerInfo,
+				opened.startedAt,
+				resolved.answer,
+			),
 		);
 	} catch (error) {
 		await report(
