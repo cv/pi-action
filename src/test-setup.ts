@@ -6,3 +6,9 @@ for (const name of Object.keys(process.env)) {
 		delete process.env[name];
 	}
 }
+
+// CI runners have no global git identity; tests that run `git commit` need one.
+process.env.GIT_AUTHOR_NAME = "pi-action tests";
+process.env.GIT_AUTHOR_EMAIL = "tests@pi-action.invalid";
+process.env.GIT_COMMITTER_NAME = "pi-action tests";
+process.env.GIT_COMMITTER_EMAIL = "tests@pi-action.invalid";
