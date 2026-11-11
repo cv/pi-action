@@ -1,1 +1,1 @@
-{"format":1,"seq":441,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",0,"arguments","command"]," releases as their own `chore: release` commit.\n\n## Possible follow-up (not in this PR)\n\npi-action doesn't put"]]}}]}
+{"format":1,"seq":442,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",0,"arguments","command"]," `AGENTS.md"]]}}]}
