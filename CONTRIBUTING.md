@@ -145,7 +145,7 @@ The tests use [Vitest](https://vitest.dev/). They are next to the code (`src/**/
 | Workflow | What it does |
 |----------|--------------|
 | [`ci.yml`](.github/workflows/ci.yml) | Runs `npm run check` on pushes and pull requests to `main` |
-| [`pi-assistant.yml`](.github/workflows/pi-assistant.yml) | Uses the action of this checkout to answer `@pi` requests in this repository |
+| [`pi-assistant.yml`](.github/workflows/pi-assistant.yml) | Uses the action of this checkout to answer `@pi` requests in this repository. It acts as the `pi-action-agent` GitHub App (secrets `PI_APP_CLIENT_ID` and `PI_APP_PRIVATE_KEY`), so that pi can open pull requests and its pushes run CI |
 | [`pi-direct-dogfood.yml`](.github/workflows/pi-direct-dogfood.yml) | `workflow_dispatch`: runs a direct prompt in `output` mode |
 | [`pi-pr-review-dogfood.yml`](.github/workflows/pi-pr-review-dogfood.yml) | `workflow_dispatch`: reviews a pull request with `pr_number` in `output` mode |
 
