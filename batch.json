@@ -1,1 +1,1 @@
-{"format":1,"seq":336,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":337,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"      Tests  30 passed (30)\nUnstaged changes detected. Temporarily saving them to `/home/runner/.cache/prek/patches/1794428563470-24062.patch`\n"]]}}]}
