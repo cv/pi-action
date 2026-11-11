@@ -9,7 +9,7 @@ import { renderTemplate } from "./context.ts";
 import { classifySpec } from "./extensions.ts";
 import { parseExtensionSpecs } from "./inputs.ts";
 
-const ROOT_DOCS = ["README.md", "CONTRIBUTING.md"];
+const ROOT_DOCS = ["README.md", "CONTRIBUTING.md", "AGENTS.md"];
 const DOC_DIRS = ["docs", "examples"];
 const FENCE_PATTERN = /^(\s*)```[^\n]*\n[\s\S]*?^\1```\s*$/gmu;
 const INLINE_CODE_PATTERN = /`[^`\n]*`/gu;
