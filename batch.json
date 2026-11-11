@@ -1,1 +1,1 @@
-{"format":1,"seq":288,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"arguments","command"],".d.ts | head -3; grep -n \"SubmissionSettl"]]}}]}
+{"format":1,"seq":289,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"arguments","command"],"ement =\" -A15 node_modules/@earendil-works/pi-durable/dist/types.d.ts | head -20"]]}}]}
