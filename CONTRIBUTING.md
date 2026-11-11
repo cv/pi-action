@@ -212,9 +212,9 @@ This verifies the TypeScript production entrypoint without emitting JavaScript. 
 ## Code Style
 
 - TypeScript with every strict compiler option on (see [`tsconfig.json`](tsconfig.json)); Node runs it directly, so only erasable syntax
-- [oxlint](https://oxc.rs/docs/guide/usage/linter) with type-aware rules (see [`.oxlintrc.json`](.oxlintrc.json)): every rule category is an error, and the few rules that are off say why. Warnings fail the build, and so do `oxlint-disable` comments that no longer suppress anything
+- [oxlint](https://oxc.rs/docs/guide/usage/linter) with type-aware rules (see [`.oxlintrc.json`](.oxlintrc.json)): every rule category except the experimental `nursery` is an error, plus `typescript/no-unnecessary-condition` from it. Rules that are off are grouped with the reason they are off. Warnings fail the build, and so do `oxlint-disable` comments that no longer suppress anything
 - [oxfmt](https://oxc.rs/docs/guide/usage/formatter) formats the code and JSON, and sorts imports (see [`.oxfmtrc.json`](.oxfmtrc.json)); Markdown and YAML are formatted by hand
-- An `oxlint-disable-next-line <rule> -- <reason>` comment is fine when a rule is wrong for one line; say why
+- An `oxlint-disable-next-line <rule> -- <reason>` comment is fine when a rule is wrong for one line; put the reason after `--`
 - Values from outside (JSON, GitHub payloads, git output) are `unknown` until checked, not cast
 
 ## Pull Request Guidelines

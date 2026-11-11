@@ -156,8 +156,7 @@ export class GitStorage implements Storage {
 		);
 		for (const { sha, batch } of batches) {
 			try {
-				// Seq is a branded number; the log is where seqs come from.
-				// oxlint-disable-next-line typescript/no-unsafe-type-assertion
+				// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Seq is a branded number; the log is where seqs come from
 				this.memory.prepareCommit(batch.writes, batch.seq as Seq).apply();
 			} catch (error) {
 				throw new GitStorageCorruptionError(
@@ -291,8 +290,7 @@ export class GitStorage implements Storage {
 		context?: Context,
 	): ReturnType<MemoryStorage["entry"]> {
 		const memory = await this.readable();
-		// The overloads differ by arity, so the third argument tells which one the caller used.
-		/* oxlint-disable typescript/no-unsafe-type-assertion */
+		/* oxlint-disable typescript/no-unsafe-type-assertion -- the overloads differ by arity, so the third argument tells which one the caller used */
 		return context === undefined
 			? memory.entry(idOrConversation as EntryId, idOrContext as Context)
 			: memory.entry(
@@ -388,7 +386,6 @@ export class GitStorage implements Storage {
 	}
 }
 
-/** `pi-durable: seq 12 (entry, task×2)` plus trailers, so `git log` reads well. */
 function isBatch(value: unknown): value is Batch {
 	if (typeof value !== "object" || value === null) {
 		return false;
@@ -400,6 +397,7 @@ function isBatch(value: unknown): value is Batch {
 	);
 }
 
+/** `pi-durable: seq 12 (entry, task×2)` plus trailers, so `git log` reads well. */
 function commitMessage(batch: Batch): string {
 	const counts = new Map<string, number>();
 	for (const write of batch.writes) {

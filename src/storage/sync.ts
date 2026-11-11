@@ -41,11 +41,7 @@ export function isTurnBoundary(batches: readonly Batch[]): boolean {
 	);
 }
 
-/**
- * Pushes are fast-forward only, so a concurrent writer on the same ref makes the later push fail
- * (GitSyncConflictError) instead of overwriting the other's history. Pushes are coalesced: at most one runs,
- * and the newest scheduled tip goes next.
- */
+/** Runs git in `cwd`; rejects with an Error carrying `stdout` and `stderr`. */
 export const runGit: GitRunner = async (args, cwd) =>
 	new Promise((resolve, reject) => {
 		execFile(
@@ -67,6 +63,11 @@ export const runGit: GitRunner = async (args, cwd) =>
 		);
 	});
 
+/**
+ * Pushes are fast-forward only, so a concurrent writer on the same ref makes the later push fail
+ * (GitSyncConflictError) instead of overwriting the other's history. Pushes are coalesced: at most one runs,
+ * and the newest scheduled tip goes next.
+ */
 export class GitSync {
 	readonly ref: string;
 	readonly remote: string;

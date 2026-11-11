@@ -28,7 +28,7 @@
 		"check": "npm run typecheck && npm run lint && npm run coverage && npm run analyze",
 		"lint": "oxlint --type-aware --deny-warnings --report-unused-disable-directives && oxfmt --check && npm run lint:actions",
 		"analyze": "knip --treat-config-hints-as-errors && jscpd --config .jscpd.json src",
-		"fix": "oxlint --type-aware --fix && oxfmt",
+		"fix": "oxfmt && oxlint --type-aware --fix && oxfmt",
 		"lint:actions": "node scripts/lint-actions.mjs",
 		"typecheck": "tsc -p tsconfig.build.json && tsc",
 		"prepare": "prek install --allow-missing-config --hook-type pre-commit --hook-type commit-msg --hook-type prepare-commit-msg --hook-type pre-push"

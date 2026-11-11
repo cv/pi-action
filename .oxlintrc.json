@@ -74,8 +74,11 @@
 		// Too noisy against library types, and unreachable without wrapping them.
 		"typescript/prefer-readonly-parameter-types": "off",
 
-		// promise-function-async makes promise-returning functions async; the type-aware typescript/require-await
-		// still catches pointless async, the base rule would flag every one of them.
+		// From the nursery category (otherwise off): Biome enforced this one.
+		"typescript/no-unnecessary-condition": "error",
+
+		// promise-function-async makes every promise-returning function async, including callbacks that must return
+		// a promise but have nothing to await (`async () => models`); both require-await rules would flag those.
 		"eslint/require-await": "off",
 		"typescript/require-await": "off",
 

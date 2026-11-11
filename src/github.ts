@@ -40,13 +40,28 @@ type TriggerComment = SupportedWebhookPayload extends infer Payload
 		: never
 	: never;
 
+/** The payload comes from outside: check the parts we read instead of trusting the webhook types. */
 function isSupportedWebhookPayload(
 	payload: unknown,
 ): payload is SupportedWebhookPayload {
+	if (typeof payload !== "object" || payload === null) {
+		return false;
+	}
+	const subject: unknown =
+		Reflect.get(payload, "pull_request") ?? Reflect.get(payload, "issue");
+	const comment: unknown = Reflect.get(payload, "comment");
+	return hasAuthor(subject) && (comment === undefined || hasAuthor(comment));
+}
+
+function hasAuthor(value: unknown): boolean {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+	const user: unknown = Reflect.get(value, "user");
 	return (
-		typeof payload === "object" &&
-		payload !== null &&
-		("issue" in payload || "pull_request" in payload)
+		typeof user === "object" &&
+		user !== null &&
+		typeof Reflect.get(user, "login") === "string"
 	);
 }
 
@@ -264,8 +279,7 @@ export function createGitHubClient(
 				pull_number: pullNumber,
 				mediaType: { format: "diff" },
 			});
-			// With the diff media type the API returns text, but Octokit still types the response as a PR object.
-			// oxlint-disable-next-line typescript/no-unsafe-type-assertion
+			// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the diff media type returns text; Octokit still types it as a PR
 			return diff as unknown as string;
 		},
 

@@ -103,11 +103,14 @@ describe("GitRepo", () => {
 		const opened = await Promise.all(
 			[join(r.dir, ".git"), linked].map(async (path) => GitRepo.open(path)),
 		);
-		for (const git of opened) {
-			// oxlint-disable-next-line eslint/no-await-in-loop -- one repository at a time
-			expect((await git.commits(tip)).map((c) => c.id)).toStrictEqual([tip]);
+		try {
+			for (const git of opened) {
+				// oxlint-disable-next-line eslint/no-await-in-loop -- one repository at a time
+				expect((await git.commits(tip)).map((c) => c.id)).toStrictEqual([tip]);
+			}
+		} finally {
+			await Promise.all(opened.map(async (git) => git.close()));
 		}
-		await Promise.all(opened.map(async (git) => git.close()));
 		await expect(GitRepo.open(join(r.dir, "b.git"))).resolves.toBeInstanceOf(
 			GitRepo,
 		);

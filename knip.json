@@ -5,6 +5,7 @@
 		"src/push.ts",
 		"src/**/*.test.ts",
 		"scripts/*.mjs",
+		"scripts/*.js",
 		"scripts/**/*.test.js"
 	],
 	"project": ["src/**/*.ts", "*.config.{js,ts}"],

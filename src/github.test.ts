@@ -9,6 +9,27 @@ import {
 import { createMockGitHubClient, createTriggerInfo } from "./test-helpers.ts";
 
 describe("extractTriggerInfo", () => {
+	it.each([
+		[
+			"an issue without a user",
+			{ issue: { number: 1, title: "t", body: "@pi x" } },
+		],
+		[
+			"a comment without a user",
+			{
+				issue: {
+					number: 1,
+					title: "t",
+					body: "",
+					user: { login: "a", type: "User" },
+				},
+				comment: { id: 2, body: "@pi x" },
+			},
+		],
+	])("skips %s (webhook payloads are not trusted)", (_name, payload) => {
+		expect(extractTriggerInfo(payload)).toBeNull();
+	});
+
 	describe("comment events", () => {
 		it("extracts info from issue comment", () => {
 			const payload = {

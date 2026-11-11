@@ -73,7 +73,7 @@ function describeUnanswered(
 		typeof record.detail === "string"
 			? record.detail
 			: JSON.stringify(record.detail);
-	return `${record.reason ?? "unanswered"}: ${detail}`;
+	return `${record.reason}: ${detail}`;
 }
 
 /**

@@ -18,10 +18,6 @@ const since = (list: GitHubComment[], iso?: string) =>
 		? list.filter((c) => Date.parse(c.created_at) >= Date.parse(iso))
 		: [...list];
 
-/**
- * Creates a mock GitHub client with all required methods. `comments` and `reviewComments` back the list
- * methods (live arrays: tests may push to them), and posted comment bodies are recorded in `posted`.
- */
 /** A Logger whose methods are typed mocks. */
 export function createLogger(): Logger {
 	return {
@@ -33,6 +29,10 @@ export function createLogger(): Logger {
 	};
 }
 
+/**
+ * Creates a mock GitHub client with all required methods. `comments` and `reviewComments` back the list
+ * methods (live arrays: tests may push to them), and posted comment bodies are recorded in `posted`.
+ */
 export function createMockGitHubClient(
 	comments: GitHubComment[] = [],
 	reviewComments: GitHubComment[] = [],

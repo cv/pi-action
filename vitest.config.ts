@@ -4,6 +4,8 @@ export default defineConfig({
 	test: {
 		include: ["src/**/*.test.ts", "scripts/**/*.test.js"],
 		setupFiles: ["src/test-setup.ts"],
+		// Several tests drive real git repositories and processes; the 5 s default is tight under coverage.
+		testTimeout: 20_000,
 		coverage: {
 			provider: "v8",
 			include: ["src/**/*.ts"],
