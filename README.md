@@ -110,6 +110,7 @@ All inputs are defined in [`action.yml`](action.yml). Default values are central
 | `model_max_tokens` | Max output tokens for the custom model | No | `16384` |
 | `compat_supports_developer_role` | Whether OpenAI-compatible custom provider supports developer role messages | No | - |
 | `compat_supports_reasoning_effort` | Whether OpenAI-compatible custom provider supports `reasoning_effort` | No | - |
+| `compat_force_adaptive_thinking` | Use adaptive thinking for an Anthropic-compatible custom model (`provider_api: anthropic-messages`); required by Claude Opus 4.6+ and Sonnet 4.6+ | No | - |
 | `prompt_template` | Custom prompt template with placeholder variables | No | (built-in default) |
 | `share_session` | Upload `session.md` and `session.jsonl` (the thread transcript) as a GitHub Actions artifact and link it in the response comment | No | `true` |
 | `session_artifact_name` | Artifact name for shared session files; useful when invoking pi-action multiple times in one workflow run | No | `pi-session-<run_id>-<run_attempt>` |

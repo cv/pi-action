@@ -75,6 +75,9 @@ inputs:
   compat_supports_reasoning_effort:
     description: 'Whether the OpenAI-compatible custom provider supports reasoning_effort'
     required: false
+  compat_force_adaptive_thinking:
+    description: 'Use adaptive thinking for an Anthropic-compatible custom model (required by Claude Opus 4.6+ and Sonnet 4.6+)'
+    required: false
   prompt_template:
     description: 'Custom prompt template with placeholder variables'
     required: false
@@ -147,6 +150,7 @@ runs:
         INPUT_MODEL_MAX_TOKENS: ${{ inputs.model_max_tokens }}
         INPUT_COMPAT_SUPPORTS_DEVELOPER_ROLE: ${{ inputs.compat_supports_developer_role }}
         INPUT_COMPAT_SUPPORTS_REASONING_EFFORT: ${{ inputs.compat_supports_reasoning_effort }}
+        INPUT_COMPAT_FORCE_ADAPTIVE_THINKING: ${{ inputs.compat_force_adaptive_thinking }}
         INPUT_PROMPT_TEMPLATE: ${{ inputs.prompt_template }}
         INPUT_SHARE_SESSION: ${{ inputs.share_session }}
         INPUT_OUTPUT_MODE: ${{ inputs.output_mode }}

@@ -40,11 +40,15 @@ function createCompatConfig(
 	const supportsReasoningEffort = parseOptionalBooleanInput(
 		readInput("compat_supports_reasoning_effort"),
 	);
+	const forceAdaptiveThinking = parseOptionalBooleanInput(
+		readInput("compat_force_adaptive_thinking"),
+	);
 	const compat: CustomProviderCompatConfig = {
 		...(supportsDeveloperRole === undefined ? {} : { supportsDeveloperRole }),
 		...(supportsReasoningEffort === undefined
 			? {}
 			: { supportsReasoningEffort }),
+		...(forceAdaptiveThinking === undefined ? {} : { forceAdaptiveThinking }),
 	};
 	return Object.keys(compat).length > 0 ? compat : undefined;
 }

@@ -36,6 +36,7 @@ export type ModelInputMode = "text" | "image";
 export interface CustomProviderCompatConfig {
 	supportsDeveloperRole?: boolean;
 	supportsReasoningEffort?: boolean;
+	forceAdaptiveThinking?: boolean;
 }
 
 /**

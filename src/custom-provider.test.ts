@@ -31,6 +31,7 @@ describe("readCustomProviderConfig", () => {
 				model_max_tokens: "16384",
 				compat_supports_developer_role: "false",
 				compat_supports_reasoning_effort: "false",
+				compat_force_adaptive_thinking: "true",
 			}),
 		);
 
@@ -47,6 +48,7 @@ describe("readCustomProviderConfig", () => {
 			compat: {
 				supportsDeveloperRole: false,
 				supportsReasoningEffort: false,
+				forceAdaptiveThinking: true,
 			},
 		});
 	});
