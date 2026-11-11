@@ -29,8 +29,6 @@ export interface GitStorageOptions {
 	readonly ref: string;
 	/** Commit author and committer. */
 	readonly author?: Signature;
-	/** fsync objects and the ref before a commit counts as stored. Default false (like JSONL). */
-	readonly fsync?: boolean;
 	/** Append to `logs/<ref>`, as git does for branches. Default false (git doesn't log custom refs either). */
 	readonly reflog?: boolean;
 	/** Open without writing; `commit()` rejects. */
@@ -98,10 +96,7 @@ export class GitStorage implements Storage {
 	}
 
 	static async open(options: GitStorageOptions): Promise<GitStorage> {
-		const repo = await GitRepo.open(
-			options.repo,
-			options.fsync === undefined ? {} : { fsync: options.fsync },
-		);
+		const repo = await GitRepo.open(options.repo);
 		const storage = new GitStorage(repo, options);
 		try {
 			await storage.recover();
@@ -123,34 +118,27 @@ export class GitStorage implements Storage {
 		if (tip === undefined) {
 			return;
 		}
-		// First-parent chain, newest first; reading commits is inherently sequential.
-		const chain: { sha: string; tree: string }[] = [];
-		for (let sha: string | undefined = tip; sha !== undefined; ) {
-			// biome-ignore lint/performance/noAwaitInLoops: each commit names the next one to read
-			const commit = await this.repo.readCommit(sha);
-			if (commit.parents.length > 1) {
-				throw new GitStorageCorruptionError(
-					`Merge commit ${sha} in ${this.ref}`,
-				);
-			}
-			chain.push({ sha, tree: commit.tree });
-			[sha] = commit.parents;
+		const chain = await this.repo.commits(tip);
+		const merge = chain.find((commit) => commit.parents.length > 1);
+		if (merge) {
+			throw new GitStorageCorruptionError(
+				`Merge commit ${merge.id} in ${this.ref}`,
+			);
 		}
-		chain.reverse();
-		// Trees and blobs can be fetched in parallel (cat-file pipelines them).
+		// All reads go to one cat-file process, which pipelines them.
 		const batches = await Promise.all(
-			chain.map(async ({ sha, tree }) => {
-				const entries = await this.repo.readTree(tree);
-				const blob = entries[BATCH_FILE];
-				if (blob === undefined) {
-					throw new GitStorageCorruptionError(
-						`Commit ${sha} has no ${BATCH_FILE}`,
-					);
-				}
-				const object = await this.repo.readObject(blob);
+			chain.map(async ({ id: sha }) => {
+				const content = await this.repo
+					.readFile(sha, BATCH_FILE)
+					.catch((error: unknown) => {
+						throw new GitStorageCorruptionError(
+							`Commit ${sha} has no ${BATCH_FILE}`,
+							{ cause: error },
+						);
+					});
 				let batch: Batch;
 				try {
-					batch = JSON.parse(object.content.toString("utf8"));
+					batch = JSON.parse(content.toString("utf8"));
 				} catch (error) {
 					throw new GitStorageCorruptionError(
 						`Malformed ${BATCH_FILE} in ${sha}`,

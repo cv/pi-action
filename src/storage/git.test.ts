@@ -1,10 +1,4 @@
-import {
-	appendFileSync,
-	mkdirSync,
-	realpathSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { ConversationId } from "@earendil-works/pi-durable";
@@ -47,8 +41,6 @@ async function commitChain(git: GitRepo, files: Record<string, string>[]) {
 const BAD_REF = /Invalid ref name/u;
 const NOT_A_REPO = /Not a git repository/u;
 const MISSING = /is missing/u;
-const NOT_A_COMMIT = /is a blob, not a commit/u;
-const NOT_A_TREE = /is a commit, not a tree/u;
 const NOT_DIRECT = /is not a direct ref/u;
 const NO_BATCH = /has no batch\.json/u;
 const MALFORMED = /Malformed batch\.json/u;
@@ -80,7 +72,7 @@ describe("assertRefName", () => {
 });
 
 describe("GitRepo", () => {
-	it("opens work trees, git dirs, bare repos, and linked worktrees", async () => {
+	it("opens work trees, git dirs, bare repos, and linked worktrees, and refuses anything else", async () => {
 		const r = repo();
 		r.git(
 			"-c",
@@ -96,48 +88,23 @@ describe("GitRepo", () => {
 		const linked = join(r.dir, "..", `${r.dir.split("/").at(-1)}-wt`);
 		r.git("worktree", "add", "-q", linked);
 		cleanups.push(() => rmSync(linked, { recursive: true, force: true }));
-		for (const path of [r.dir, join(r.dir, ".git"), linked]) {
+		r.git("init", "-q", "--bare", "b.git");
+		const tip = await commitChain(await GitRepo.open(r.dir), [{ f: "x" }]);
+		for (const path of [join(r.dir, ".git"), linked]) {
 			// biome-ignore lint/performance/noAwaitInLoops: one at a time
 			const git = await GitRepo.open(path);
-			expect(realpathSync(git.commonDir)).toBe(
-				realpathSync(join(r.dir, ".git")),
-			);
+			expect((await git.commits(tip)).map((c) => c.id)).toEqual([tip]);
 			await git.close();
 		}
-		const bare = repo();
-		bare.git("init", "-q", "--bare", "b.git");
-		const git = await GitRepo.open(join(bare.dir, "b.git"));
-		expect(realpathSync(git.commonDir)).toBe(
-			realpathSync(join(bare.dir, "b.git")),
+		await expect(GitRepo.open(join(r.dir, "b.git"))).resolves.toBeInstanceOf(
+			GitRepo,
 		);
-	});
-
-	it("refuses non-repositories and unsupported formats", async () => {
-		const r = repo();
 		await expect(GitRepo.open(join(r.dir, "nowhere"))).rejects.toThrow(
 			NOT_A_REPO,
 		);
-		writeFileSync(join(r.dir, "sub.git"), "nonsense\n");
-		mkdirSync(join(r.dir, "wt"));
-		writeFileSync(join(r.dir, "wt", ".git"), "not a gitdir line\n");
-		await expect(GitRepo.open(join(r.dir, "wt"))).rejects.toThrow(
-			"Malformed .git file",
-		);
-		const reftable = repo();
-		appendFileSync(
-			join(reftable.dir, ".git", "config"),
-			"[extensions]\n\trefStorage = reftable\n",
-		);
-		await expect(GitRepo.open(reftable.dir)).rejects.toThrow("reftable");
-		const sha256 = repo();
-		appendFileSync(
-			join(sha256.dir, ".git", "config"),
-			"[extensions]\n\tobjectFormat = sha256\n",
-		);
-		await expect(GitRepo.open(sha256.dir)).rejects.toThrow("sha256");
 	});
 
-	it("reads loose and packed objects and refs, and reports missing or mistyped ones", async () => {
+	it("reads chains and files, loose or packed, and reports missing or mistyped ones", async () => {
 		const r = repo();
 		const git = await GitRepo.open(r.dir);
 		const tip = await commitChain(git, [
@@ -145,33 +112,52 @@ describe("GitRepo", () => {
 			{ "a.txt": "two" },
 		]);
 		await git.updateRef("refs/pi/x", tip, undefined);
-		const commit = await git.readCommit(tip);
-		expect(commit.parents).toHaveLength(1);
-		expect(await git.readTree(commit.tree)).toHaveProperty("a.txt");
+		const chain = await git.commits(tip);
+		expect(chain).toHaveLength(2);
+		expect(chain[1]).toEqual({ id: tip, parents: [chain[0]?.id] });
+		expect((await git.readFile(tip, "a.txt")).toString()).toBe("two");
 		await git.close();
 
 		r.git("gc", "-q", "--prune=now");
 		const packed = await GitRepo.open(r.dir);
 		expect(await packed.readRef("refs/pi/x")).toBe(tip);
-		const tree = await packed.readTree((await packed.readCommit(tip)).tree);
-		const blob = String(tree["a.txt"]);
-		expect((await packed.readObject(blob)).content.toString()).toBe("two");
-		await expect(packed.readObject("0".repeat(40))).rejects.toThrow(MISSING);
-		await expect(packed.readCommit(blob)).rejects.toThrow(NOT_A_COMMIT);
-		await expect(packed.readTree(tip)).rejects.toThrow(NOT_A_TREE);
-		await expect(packed.readObject("nope")).rejects.toThrow("Bad object id");
+		expect((await packed.readFile(tip, "a.txt")).toString()).toBe("two");
+		await expect(packed.readFile(tip, "b.txt")).rejects.toThrow(MISSING);
+		await expect(packed.readFile("nope", "a.txt")).rejects.toThrow(
+			"Bad object id",
+		);
+		await expect(packed.commits("nope")).rejects.toThrow("Bad object id");
 		expect(await packed.readRef("refs/pi/none")).toBeUndefined();
 		await packed.close();
 	});
 
-	it("rejects symbolic refs, bad ids, and bad tree entries", async () => {
+	it("moves refs by compare-and-swap, and rejects symbolic refs, bad ids, and bad tree entries", async () => {
 		const r = repo();
 		const git = await GitRepo.open(r.dir);
-		mkdirSync(join(r.dir, ".git", "refs", "pi"), { recursive: true });
-		writeFileSync(
-			join(r.dir, ".git", "refs", "pi", "sym"),
-			"ref: refs/heads/main\n",
+		const [one, two] = [
+			await commitChain(git, [{ f: "1" }]),
+			await commitChain(git, [{ f: "2" }]),
+		];
+		await git.updateRef("refs/pi/w", one, undefined, "first");
+		expect(r.git("reflog", "show", "--format=%gs", "refs/pi/w").trim()).toBe(
+			"first",
 		);
+		await expect(git.updateRef("refs/pi/w", two, undefined)).rejects.toThrow(
+			RefConflictError,
+		);
+		await expect(
+			git.updateRef("refs/pi/w", two, "f".repeat(40)),
+		).rejects.toMatchObject({ actual: one });
+		await git.updateRef("refs/pi/w", two, one);
+		expect(await git.readRef("refs/pi/w")).toBe(two);
+
+		mkdirSync(join(r.dir, ".git", "refs", "pi"), { recursive: true });
+		writeFileSync(join(r.dir, ".git", "refs", "pi", "z.lock"), "");
+		await expect(git.updateRef("refs/pi/z", one, undefined)).rejects.toThrow(
+			"(locked)",
+		);
+
+		r.git("symbolic-ref", "refs/pi/sym", "refs/heads/main");
 		await expect(git.readRef("refs/pi/sym")).rejects.toThrow(NOT_DIRECT);
 		await expect(git.updateRef("refs/pi/y", "nope", undefined)).rejects.toThrow(
 			"Bad object id",
@@ -180,21 +166,38 @@ describe("GitRepo", () => {
 			"Bad tree entry",
 		);
 		await expect(git.writeTree({ a: "zz" })).rejects.toThrow("Bad tree entry");
+		await git.close();
 	});
 
-	it("treats a held lock as a conflict and can write a reflog", async () => {
+	it.each([
+		["SHA-256", ["--object-format=sha256"]],
+		["reftable", ["--ref-format=reftable"]],
+	])("works in %s repositories", async (_name, flags) => {
 		const r = repo();
-		const git = await GitRepo.open(r.dir);
-		const tip = await commitChain(git, [{ f: "x" }]);
-		mkdirSync(join(r.dir, ".git", "refs", "pi"), { recursive: true });
-		writeFileSync(join(r.dir, ".git", "refs", "pi", "z.lock"), "");
-		await expect(
-			git.updateRef("refs/pi/z", tip, undefined),
-		).rejects.toBeInstanceOf(RefConflictError);
-		await git.updateRef("refs/pi/w", tip, undefined, "first");
-		expect(r.git("reflog", "show", "--format=%gs", "refs/pi/w").trim()).toBe(
-			"first",
+		const sub = join(r.dir, "sub");
+		try {
+			r.git("init", "-q", ...flags, sub);
+		} catch {
+			return; // this git is too old for the format
+		}
+		const storage = await GitStorage.open({ repo: sub, ref: "refs/pi/s" });
+		const id = await storage.mintId<ConversationId>();
+		await storage.commit(
+			[
+				[
+					{
+						type: "conversation",
+						value: { id, ownership: { kind: "ownerless" } } as never,
+					},
+				],
+			],
+			() => undefined,
+			BACKGROUND_CONTEXT,
 		);
+		await storage.close(BACKGROUND_CONTEXT);
+		const reopened = await GitStorage.open({ repo: sub, ref: "refs/pi/s" });
+		expect(await reopened.conversation(id, BACKGROUND_CONTEXT)).toBeDefined();
+		await reopened.close(BACKGROUND_CONTEXT);
 	});
 });
 
@@ -207,7 +210,7 @@ describe("GitStorage corruption and modes", () => {
 		if (merge) {
 			const other = await commitChain(git, [{ "batch.json": "{}" }]);
 			tip = await git.writeCommit({
-				tree: (await git.readCommit(tip)).tree,
+				tree: r.git("rev-parse", `${tip}^{tree}`).trim(),
 				parents: [tip, other],
 				author,
 				message: "merge\n",
@@ -242,12 +245,11 @@ describe("GitStorage corruption and modes", () => {
 		).rejects.toThrow(MERGE);
 	});
 
-	it("can open read-only and with fsync and a reflog", async () => {
+	it("can open read-only and with a reflog", async () => {
 		const r = repo();
 		const writer = await GitStorage.open({
 			repo: r.dir,
 			ref: "refs/pi/m",
-			fsync: true,
 			reflog: true,
 		});
 		const id = await writer.mintId<ConversationId>();

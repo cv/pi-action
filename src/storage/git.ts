@@ -1,13 +1,19 @@
-// Minimal in-process git object store: loose-object writes, ref reads/CAS updates.
-// Objects git has packed (after fetch or gc) are read through one long-lived `git cat-file --batch`.
-import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+// The git side of GitStorage. Objects are hashed and written as loose objects in-process (a step is one blob,
+// one tree, and one commit, so spawning git for each would cost more than the write). Everything else goes through
+// git: the object directory and hash come from rev-parse, the ref moves with update-ref's compare-and-swap, and reads
+// are one rev-list plus one long-lived `git cat-file --batch`. So any repository git can open works, SHA-256 and
+// reftable included.
+import {
+	type ChildProcessWithoutNullStreams,
+	execFile,
+	spawn,
+} from "node:child_process";
 import { createHash } from "node:crypto";
-import { constants, promises as fs } from "node:fs";
+import { promises as fs } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { deflateSync, inflateSync } from "node:zlib";
+import { deflateSync } from "node:zlib";
 
-export type ObjectType = "blob" | "tree" | "commit";
-export interface GitObject {
+interface GitObject {
 	readonly type: string;
 	readonly content: Buffer;
 }
@@ -15,17 +21,14 @@ export interface Signature {
 	readonly name: string;
 	readonly email: string;
 }
-export interface Commit {
-	readonly tree: string;
+export interface ChainCommit {
+	readonly id: string;
 	readonly parents: readonly string[];
-	readonly message: string;
 }
 
-const GITDIR_PATTERN = /^gitdir: (.+)$/mu;
-const REFTABLE_PATTERN = /^\s*refStorage\s*=\s*reftable/imu;
-const SHA256_PATTERN = /^\s*objectFormat\s*=\s*sha256/imu;
-const SHA = /^[0-9a-f]{40}$/u;
-const ZERO = "0".repeat(40);
+const OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
+const BAD_TREE_NAME = /[/\0]/u;
+const IDENT_CRUD = /[<>\n\0]/gu;
 
 export class RefConflictError extends Error {
 	readonly ref: string;
@@ -35,9 +38,11 @@ export class RefConflictError extends Error {
 		ref: string,
 		expected: string | undefined,
 		actual: string | undefined,
+		options?: { cause?: unknown },
 	) {
 		super(
 			`Ref ${ref} moved: expected ${expected ?? "(none)"}, found ${actual ?? "(none)"}`,
+			options,
 		);
 		this.name = "RefConflictError";
 		this.ref = ref;
@@ -77,98 +82,88 @@ export function assertRefName(ref: string): void {
 	}
 }
 
+class GitError extends Error {
+	constructor(args: readonly string[], stderr: string) {
+		super(`git ${args.join(" ")} failed: ${stderr.trim()}`);
+		this.name = "GitError";
+	}
+}
+
+/** Run git in `dir`; resolves with stdout, rejects with a GitError on a nonzero exit. */
+function git(dir: string, args: readonly string[]): Promise<string> {
+	return new Promise((onOutput, onError) => {
+		execFile("git", ["-C", dir, ...args], (error, stdout, stderr) => {
+			if (error) {
+				onError(new GitError(args, stderr || error.message));
+			} else {
+				onOutput(stdout);
+			}
+		});
+	});
+}
+
+function assertObjectId(id: string): void {
+	if (!OBJECT_ID.test(id)) {
+		throw new Error(`Bad object id ${id}`);
+	}
+}
+
 export class GitRepo {
-	/** Where objects and shared refs live (the common dir for linked worktrees). */
-	readonly commonDir: string;
-	readonly fsync: boolean;
+	/** The path git runs in (`git -C`): a work tree, a git dir, a bare repo, or a linked worktree. */
+	readonly dir: string;
+	private readonly objects: string;
+	private readonly hash: "sha1" | "sha256";
 	private catFile: CatFile | undefined;
 
-	private constructor(commonDir: string, fsync: boolean) {
-		this.commonDir = commonDir;
-		this.fsync = fsync;
+	private constructor(dir: string, objects: string, hash: "sha1" | "sha256") {
+		this.dir = dir;
+		this.objects = objects;
+		this.hash = hash;
 	}
 
-	/** Open a repository: a work tree, a `.git` dir, a bare repo, or a linked worktree's `.git` file. */
-	static async open(
-		path: string,
-		options: { fsync?: boolean } = {},
-	): Promise<GitRepo> {
-		let gitDir = resolve(path);
-		const dotGit = join(gitDir, ".git");
-		const stat = await fs.stat(dotGit).catch(() => undefined);
-		if (stat?.isDirectory()) {
-			gitDir = dotGit;
-		} else if (stat?.isFile()) {
-			const text = await fs.readFile(dotGit, "utf8");
-			const linked = GITDIR_PATTERN.exec(text)?.[1];
-			if (!linked) {
-				throw new Error(`Malformed .git file in ${path}`);
-			}
-			gitDir = resolve(gitDir, linked.trim());
-		}
-		if (!(await exists(join(gitDir, "HEAD")))) {
-			throw new Error(`Not a git repository: ${path}`);
-		}
-		let commonDir = gitDir;
-		const common = await fs
-			.readFile(join(gitDir, "commondir"), "utf8")
-			.catch(() => undefined);
-		if (common !== undefined) {
-			commonDir = resolve(gitDir, common.trim());
-		}
-		const config = await fs
-			.readFile(join(commonDir, "config"), "utf8")
-			.catch(() => "");
-		if (REFTABLE_PATTERN.test(config)) {
-			throw new Error("reftable repositories are not supported");
-		}
-		if (SHA256_PATTERN.test(config)) {
-			throw new Error("sha256 repositories are not supported");
-		}
-		return new GitRepo(commonDir, options.fsync ?? false);
+	static async open(path: string): Promise<GitRepo> {
+		const out = await git(path, [
+			"rev-parse",
+			"--show-object-format",
+			"--git-path",
+			"objects",
+		]).catch((error: unknown) => {
+			throw new Error(`Not a git repository: ${path}`, { cause: error });
+		});
+		const [format = "", objects = ""] = out.trim().split("\n");
+		return new GitRepo(
+			path,
+			resolve(path, objects),
+			format === "sha256" ? "sha256" : "sha1",
+		);
 	}
 
-	// ---- objects ----
-
-	static hash(type: ObjectType, content: Buffer): { sha: string; raw: Buffer } {
+	/** Write a loose object (unless it exists) and return its id. */
+	private async writeObject(
+		type: "blob" | "tree" | "commit",
+		content: Buffer,
+	): Promise<string> {
 		const raw = Buffer.concat([
 			Buffer.from(`${type} ${content.length}\0`),
 			content,
 		]);
-		return { sha: createHash("sha1").update(raw).digest("hex"), raw };
-	}
-
-	async writeObject(type: ObjectType, content: Buffer): Promise<string> {
-		const { sha, raw } = GitRepo.hash(type, content);
-		const path = this.objectPath(sha);
-		if (await exists(path)) {
-			return sha;
-		}
-		await fs.mkdir(dirname(path), { recursive: true });
-		const tmp = `${path}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
-		const handle = await fs.open(tmp, "wx", 0o444);
-		try {
-			await handle.writeFile(deflateSync(raw));
-			if (this.fsync) {
-				await handle.sync();
-			}
-		} finally {
-			await handle.close();
-		}
-		await fs.rename(tmp, path).catch(async (error) => {
-			await fs.rm(tmp, { force: true });
-			if (!(await exists(path))) {
-				throw error;
-			}
-		});
-		return sha;
-	}
-
-	writeBlob(content: Buffer | string): Promise<string> {
-		return this.writeObject(
-			"blob",
-			Buffer.isBuffer(content) ? content : Buffer.from(content),
+		const id = createHash(this.hash).update(raw).digest("hex");
+		const path = join(this.objects, id.slice(0, 2), id.slice(2));
+		const present = await fs.access(path).then(
+			() => true,
+			() => false,
 		);
+		if (!present) {
+			await fs.mkdir(dirname(path), { recursive: true });
+			const tmp = `${path}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+			await fs.writeFile(tmp, deflateSync(raw), { mode: 0o444 });
+			await fs.rename(tmp, path);
+		}
+		return id;
+	}
+
+	writeBlob(content: string): Promise<string> {
+		return this.writeObject("blob", Buffer.from(content));
 	}
 
 	/** A tree of regular files; names are sorted as git requires. */
@@ -178,15 +173,11 @@ export class GitRepo {
 		);
 		const parts: Buffer[] = [];
 		for (const name of names) {
-			const sha = files[name];
-			if (
-				!(sha && SHA.test(sha)) ||
-				name.includes("/") ||
-				name.includes("\0")
-			) {
+			const id = files[name] ?? "";
+			if (!OBJECT_ID.test(id) || BAD_TREE_NAME.test(name)) {
 				return Promise.reject(new Error(`Bad tree entry ${name}`));
 			}
-			parts.push(Buffer.from(`100644 ${name}\0`), Buffer.from(sha, "hex"));
+			parts.push(Buffer.from(`100644 ${name}\0`), Buffer.from(id, "hex"));
 		}
 		return this.writeObject("tree", Buffer.concat(parts));
 	}
@@ -199,6 +190,7 @@ export class GitRepo {
 		time?: Date;
 	}): Promise<string> {
 		const seconds = Math.floor((input.time ?? new Date()).getTime() / 1000);
+		const clean = (text: string) => text.replace(IDENT_CRUD, "");
 		const who = `${clean(input.author.name)} <${clean(input.author.email)}> ${seconds} +0000`;
 		const lines = [
 			`tree ${input.tree}`,
@@ -212,95 +204,54 @@ export class GitRepo {
 		);
 	}
 
-	async readObject(sha: string): Promise<GitObject> {
-		if (!SHA.test(sha)) {
-			throw new Error(`Bad object id ${sha}`);
-		}
-		const loose = await fs
-			.readFile(this.objectPath(sha))
-			.catch(() => undefined);
-		if (loose !== undefined) {
-			const raw = inflateSync(loose);
-			const nul = raw.indexOf(0);
-			const [type, size] = raw.subarray(0, nul).toString().split(" ");
-			const content = raw.subarray(nul + 1);
-			if (!type || content.length !== Number(size)) {
-				throw new Error(`Corrupt loose object ${sha}`);
-			}
-			return { type, content };
-		}
-		this.catFile ??= new CatFile(this.commonDir);
-		return this.catFile.read(sha);
+	/** Every commit reachable from `tip`, oldest first, with its parents. */
+	async commits(tip: string): Promise<ChainCommit[]> {
+		assertObjectId(tip);
+		const out = await git(this.dir, [
+			"rev-list",
+			"--reverse",
+			"--parents",
+			tip,
+		]);
+		return out
+			.split("\n")
+			.filter(Boolean)
+			.map((line) => {
+				const [id = "", ...parents] = line.split(" ");
+				return { id, parents };
+			});
 	}
 
-	async readCommit(sha: string): Promise<Commit> {
-		const object = await this.readObject(sha);
-		if (object.type !== "commit") {
-			throw new Error(`${sha} is a ${object.type}, not a commit`);
+	/** A file in a commit's tree (`<commit>:<path>`); rejects when it is missing. */
+	async readFile(commit: string, path: string): Promise<Buffer> {
+		assertObjectId(commit);
+		this.catFile ??= new CatFile(this.dir);
+		const object = await this.catFile.read(`${commit}:${path}`);
+		if (object.type !== "blob") {
+			throw new Error(`${commit}:${path} is a ${object.type}, not a file`);
 		}
-		const text = object.content.toString("utf8");
-		const split = text.indexOf("\n\n");
-		const headers = text
-			.slice(0, split === -1 ? text.length : split)
-			.split("\n");
-		const tree = headers.find((h) => h.startsWith("tree "))?.slice(5);
-		if (tree === undefined) {
-			throw new Error(`Commit ${sha} has no tree`);
-		}
-		const parents = headers
-			.filter((h) => h.startsWith("parent "))
-			.map((h) => h.slice(7));
-		return {
-			tree,
-			parents,
-			message: split === -1 ? "" : text.slice(split + 2),
-		};
+		return object.content;
 	}
 
-	async readTree(sha: string): Promise<Record<string, string>> {
-		const object = await this.readObject(sha);
-		if (object.type !== "tree") {
-			throw new Error(`${sha} is a ${object.type}, not a tree`);
-		}
-		const entries: Record<string, string> = {};
-		const buf = object.content;
-		for (let i = 0; i < buf.length; ) {
-			const nul = buf.indexOf(0, i);
-			const name = buf.subarray(buf.indexOf(32, i) + 1, nul).toString("utf8");
-			entries[name] = buf.subarray(nul + 1, nul + 21).toString("hex");
-			i = nul + 21;
-		}
-		return entries;
-	}
-
-	// ---- refs ----
-
+	/** The commit `ref` points at; undefined when it doesn't exist. */
 	async readRef(ref: string): Promise<string | undefined> {
 		assertRefName(ref);
-		const loose = await fs
-			.readFile(join(this.commonDir, ref), "utf8")
-			.catch(() => undefined);
-		if (loose !== undefined) {
-			const value = loose.trim();
-			if (!SHA.test(value)) {
-				throw new Error(`Ref ${ref} is not a direct ref`);
-			}
-			return value;
+		const symbolic = await git(this.dir, ["symbolic-ref", "-q", ref]).then(
+			() => true,
+			() => false,
+		);
+		if (symbolic) {
+			throw new Error(`Ref ${ref} is not a direct ref`);
 		}
-		const packed = await fs
-			.readFile(join(this.commonDir, "packed-refs"), "utf8")
-			.catch(() => "");
-		for (const line of packed.split("\n")) {
-			if (line.length > 41 && line[40] === " " && line.slice(41) === ref) {
-				return line.slice(0, 40);
-			}
-		}
-		return undefined;
+		const id = await git(this.dir, ["rev-parse", "-q", "--verify", ref]).catch(
+			() => undefined,
+		);
+		return id?.trim() || undefined;
 	}
 
 	/**
-	 * Compare-and-swap `ref` from `expected` (undefined: must not exist) to `value`, with git's own lock-file
-	 * protocol, so a concurrent `git update-ref`, fetch, or another GitStorage sees one winner.
+	 * Compare-and-swap `ref` from `expected` (undefined: must not exist) to `value`. git update-ref takes the ref's
+	 * lock, so a concurrent fetch, update-ref, or another GitStorage sees one winner; losing throws RefConflictError.
 	 */
 	async updateRef(
 		ref: string,
@@ -309,73 +260,32 @@ export class GitRepo {
 		reflogMessage?: string,
 	): Promise<void> {
 		assertRefName(ref);
-		if (!SHA.test(value)) {
-			throw new Error(`Bad object id ${value}`);
+		assertObjectId(value);
+		const args = ["update-ref"];
+		if (reflogMessage !== undefined) {
+			args.push("--create-reflog", "-m", reflogMessage);
 		}
-		const path = join(this.commonDir, ref);
-		const lock = `${path}.lock`;
-		await fs.mkdir(dirname(path), { recursive: true });
-		let handle: fs.FileHandle;
 		try {
-			handle = await fs.open(
-				lock,
-				// biome-ignore lint/suspicious/noBitwiseOperators: open(2) flags
-				constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL,
-				0o644,
-			);
+			// An empty old value means "must not exist yet".
+			await git(this.dir, [...args, ref, value, expected ?? ""]);
 		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-				// biome-ignore lint/style/useErrorCause: the lock file says it all
-				throw new RefConflictError(ref, expected, "(locked)");
+			if (!(error instanceof GitError)) {
+				throw error;
 			}
-			throw error;
+			const actual = await this.readRef(ref).catch(() => undefined);
+			// biome-ignore lint/style/useErrorCause: the cause is passed in the options argument
+			throw new RefConflictError(
+				ref,
+				expected,
+				actual === expected ? "(locked)" : actual,
+				{ cause: error },
+			);
 		}
-		let renamed = false;
-		try {
-			const actual = await this.readRef(ref);
-			if (actual !== expected) {
-				throw new RefConflictError(ref, expected, actual);
-			}
-			await handle.writeFile(`${value}\n`);
-			if (this.fsync) {
-				await handle.sync();
-			}
-			await handle.close();
-			await fs.rename(lock, path);
-			renamed = true;
-			if (reflogMessage !== undefined) {
-				await this.appendReflog(ref, expected ?? ZERO, value, reflogMessage);
-			}
-		} finally {
-			if (!renamed) {
-				await handle.close().catch(() => undefined);
-				await fs.rm(lock, { force: true });
-			}
-		}
-	}
-
-	private async appendReflog(
-		ref: string,
-		from: string,
-		to: string,
-		message: string,
-	): Promise<void> {
-		const path = join(this.commonDir, "logs", ref);
-		await fs.mkdir(dirname(path), { recursive: true });
-		const seconds = Math.floor(Date.now() / 1000);
-		await fs.appendFile(
-			path,
-			`${from} ${to} pi-durable <pi-durable@localhost> ${seconds} +0000\t${clean(message)}\n`,
-		);
 	}
 
 	async close(): Promise<void> {
 		await this.catFile?.close();
 		this.catFile = undefined;
-	}
-
-	private objectPath(sha: string): string {
-		return join(this.commonDir, "objects", sha.slice(0, 2), sha.slice(2));
 	}
 }
 
@@ -392,8 +302,8 @@ class CatFile {
 	private readonly waiting: Waiting[] = [];
 	private failure: Error | undefined;
 
-	constructor(gitDir: string) {
-		this.child = spawn("git", ["--git-dir", gitDir, "cat-file", "--batch"], {
+	constructor(dir: string) {
+		this.child = spawn("git", ["-C", dir, "cat-file", "--batch"], {
 			stdio: ["pipe", "pipe", "pipe"],
 		});
 		this.child.stdout.on("data", (chunk: Buffer) => {
@@ -437,7 +347,7 @@ class CatFile {
 			if (header.endsWith(" missing")) {
 				this.buffer = this.buffer.subarray(eol + 1);
 				this.waiting.shift();
-				current.reject(new Error(`Object ${current.sha} is missing`));
+				current.reject(new Error(`${current.sha} is missing`));
 			} else if (!this.take(header, eol, current)) {
 				return;
 			}
@@ -466,15 +376,4 @@ class CatFile {
 		this.child.stdin.end();
 		await exited;
 	}
-}
-
-function exists(path: string): Promise<boolean> {
-	return fs.access(path).then(
-		() => true,
-		() => false,
-	);
-}
-
-function clean(text: string): string {
-	return text.replace(/[<>\n\0]/gu, "");
 }
