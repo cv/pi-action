@@ -1,1 +1,1 @@
-{"format":1,"seq":225,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":226,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead\n\nadded 277 packages in 8s\n"]]}}]}
