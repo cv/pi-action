@@ -118,7 +118,7 @@ runs:
   steps:
     - name: Install action dependencies
       shell: bash
-      run: npm ci --prefix ${{ github.action_path }}
+      run: npm ci --ignore-scripts --no-audit --no-fund --prefix ${{ github.action_path }}
     
     - name: Install pi-agent git hooks
       shell: bash
