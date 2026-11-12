@@ -78,4 +78,4 @@ jobs:
           model_context_window: 1050000
           model_max_tokens: 128000 # Bedrock's maximum for Opus 5.5
           compat_force_adaptive_thinking: true
-          extensions: github:cv/pit#v0.35.0
+          extensions: github:cv/pit#v0.35.1
