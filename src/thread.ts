@@ -385,11 +385,12 @@ export class Thread {
 			return;
 		}
 		this.closed = true;
+		const worktree = this.persistence?.worktree;
 		if (this.restored.kind === "ready") {
-			await this.persistence?.worktree?.checkpoint(
-				this.persistence.storage.tip,
-			);
+			await worktree?.checkpoint(this.persistence?.storage.tip);
 		}
+		// Turn boundaries the closing harness still commits must not save into a closed conversation.
+		worktree?.detach();
 		await this.harness.close(context);
 		await this.push();
 	}

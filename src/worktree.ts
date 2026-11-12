@@ -43,6 +43,8 @@ export const WORKTREE_ENTRY_KIND = "pi-action.worktree";
 /** The entry that tells the model how the restore went. */
 export const RESTORE_ENTRY_KIND = "pi-action.worktree-restore";
 const LISTED = 20;
+/** The question's title lists at most this many files (and commits). */
+const TITLE_LISTED = 5;
 
 /** The snapshot a conversation points at: its stash commit W and its wrapper commit on the ref. Empty: none. */
 export const WorktreeDoc = defineDoc<{ stash: string; wrapper: string }>({
@@ -143,13 +145,20 @@ function questionKey(
 		.slice(0, 32);
 }
 
+/** At most TITLE_LISTED items, comma-separated. */
+function few(items: readonly string[]): string {
+	return items.length > TITLE_LISTED
+		? `${items.slice(0, TITLE_LISTED).join(", ")} and ${items.length - TITLE_LISTED} more`
+		: items.join(", ");
+}
+
 function guardQuestion(
 	key: string,
 	latest: SnapshotRecord,
 	work: UniqueWork,
 ): UiQuestion {
-	const files = work.files.map((path) => `\`${path}\``).join(", ");
-	const commits = work.commits.map(short).join(", ");
+	const files = few(work.files.map((path) => `\`${path}\``));
+	const commits = few(work.commits.map(short));
 	const lost = [
 		...(work.files.length > 0 ? [`files ${files}`] : []),
 		...(work.commits.length > 0 ? [`unpushed commits ${commits}`] : []),
@@ -183,6 +192,11 @@ export class WorktreeContinuity {
 	/** Attach the conversation whose document points at the snapshots. */
 	attach(harness: Harness, root: Conversation): void {
 		this.conversation = { harness, root };
+	}
+
+	/** Stop saving: the conversation is closing (later checkpoints do nothing). */
+	detach(): void {
+		this.conversation = undefined;
 	}
 
 	private attached(): { harness: Harness; root: Conversation } {
