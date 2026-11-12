@@ -76,4 +76,4 @@ An extension that you load with `extensions` runs inside pi-action, with the per
 
 ## Thread contents are visible
 
-pi-action stores the full conversation in `refs/pi/threads/<number>`, also the output of tools. All people who can read the repository can read these refs. Keep secrets away from the agent, as for all CI jobs. See [Durable threads](threads.md#read-a-thread).
+pi-action stores the full conversation in `refs/pi/threads/<number>`, also the output of tools. It stores the files that pi leaves uncommitted in `refs/pi/worktrees/<number>`, also untracked files that git does not ignore. All people who can read the repository can read these refs. Keep secrets away from the agent, as for all CI jobs. Make git ignore files with secrets, or list them in `worktree_snapshot_exclude`. See [Durable threads](threads.md#read-a-thread) and [Working-tree continuity](threads.md#working-tree-continuity).

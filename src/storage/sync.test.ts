@@ -143,6 +143,18 @@ function flakyGit(
 	return { run, pushes };
 }
 
+/** Real git that records the arguments of each push. */
+function recordingGit() {
+	const pushes: (readonly string[])[] = [];
+	const run: GitRunner = async (dir, args) => {
+		if (args[0] === "push") {
+			pushes.push(args);
+		}
+		return git(dir, args);
+	};
+	return { run, pushes };
+}
+
 /** A clone of a fresh remote and two commits on top of main to push to REF. */
 function twoTips() {
 	const w = tempRemote();
@@ -268,5 +280,82 @@ describe("GitSync push failures", () => {
 		});
 		await sync.schedule(first);
 		expect(remoteTip()).toBe(first);
+	});
+});
+
+describe("GitSync with a companion ref", () => {
+	const COMPANION = "refs/pi/worktrees/7";
+
+	it("pushes both refs in one atomic push, and the companion alone when only it moved", async () => {
+		const { dir, first, second, remoteTip } = twoTips();
+		const recorder = recordingGit();
+		const { pushes } = recorder;
+		const sync = new GitSync({
+			repo: dir,
+			ref: REF,
+			companionRef: COMPANION,
+			git: recorder.run,
+		});
+		await sync.schedule(first, second);
+		expect(pushes.at(-1)).toContain("--atomic");
+		expect(remoteTip()).toBe(first);
+		const [remote] = sh(dir, "ls-remote", "origin", COMPANION).split("\t");
+		expect(remote).toBe(second);
+		// The thread is up to date but the companion is not: it is pushed (with the thread, atomically).
+		const third = sh(
+			dir,
+			"commit-tree",
+			"-p",
+			second,
+			"-m",
+			"3",
+			"HEAD^{tree}",
+		).trim();
+		await sync.flush(first, third);
+		expect(sh(dir, "ls-remote", "origin", COMPANION).split("\t")[0]).toBe(
+			third,
+		);
+		// Nothing new: no push.
+		const count = pushes.length;
+		await sync.flush(first, third);
+		await sync.flush(first);
+		expect(pushes).toHaveLength(count);
+	});
+
+	it("rejects both refs when the companion conflicts", async () => {
+		const { dir, first, second, remoteTip } = twoTips();
+		// Another writer put an unrelated history on the companion ref.
+		const other = sh(dir, "commit-tree", "-m", "other", "HEAD^{tree}").trim();
+		sh(dir, "push", "-q", "origin", `${other}:${COMPANION}`);
+		const sync = new GitSync({ repo: dir, ref: REF, companionRef: COMPANION });
+		await expect(sync.schedule(first, second)).rejects.toBeInstanceOf(
+			GitSyncConflictError,
+		);
+		expect(() => remoteTip()).toThrow("Command failed");
+	});
+
+	it("fetches the companion with the ref, and clears it when the remote has none", async () => {
+		const { dir, first, second } = twoTips();
+		const pusher = new GitSync({
+			repo: dir,
+			ref: REF,
+			companionRef: COMPANION,
+		});
+		await pusher.schedule(first, second);
+		const w = sh(dir, "rev-parse", "HEAD").trim();
+		sh(dir, "update-ref", COMPANION, w);
+		sh(dir, "update-ref", "-d", REF);
+		await expect(pusher.fetch()).resolves.toBe(first);
+		expect(sh(dir, "rev-parse", REF).trim()).toBe(first);
+		expect(sh(dir, "rev-parse", COMPANION).trim()).toBe(second);
+		await expect(pusher.remoteHeads()).resolves.toStrictEqual({
+			tip: first,
+			companion: second,
+		});
+		sh(dir, "push", "-q", "origin", `:${COMPANION}`);
+		await pusher.fetch();
+		expect(() => sh(dir, "rev-parse", "--verify", "-q", COMPANION)).toThrow(
+			"Command failed",
+		);
 	});
 });

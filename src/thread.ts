@@ -22,8 +22,10 @@ import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { GitStorage } from "./storage/git-storage.ts";
 import { git } from "./storage/git.ts";
 import { GitSync, isTurnBoundary } from "./storage/sync.ts";
+import { type SnapshotLimits, worktreeRef } from "./storage/worktree.ts";
 import type { Log } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
+import { RESTORE_ENTRY_KIND, WorktreeContinuity } from "./worktree.ts";
 
 const context: Context = BACKGROUND_CONTEXT;
 
@@ -47,6 +49,8 @@ export interface ThreadOptions {
 	extensions?: readonly Extension[];
 	/** Variables the tools' shell gets on top of the process environment (see `toolEnv()`). */
 	toolEnv?: Readonly<Record<string, string>> | undefined;
+	/** Save and restore the working tree with the thread (stored threads only), with these limits; undefined: don't. */
+	worktree?: SnapshotLimits | undefined;
 }
 
 /** What `Thread.answerText()` reports about a run's answer. */
@@ -71,9 +75,55 @@ export interface ThreadInput {
 interface Persistence {
 	ref: string;
 	storage: GitStorage;
-	sync: GitSync;
+	saver: ThreadSaver;
+	worktree: WorktreeContinuity | undefined;
 	startedAt: Date | undefined;
 	isNew: boolean;
+}
+
+/** The local tip of `ref`, undefined when it doesn't exist. */
+async function localTip(cwd: string, ref: string): Promise<string | undefined> {
+	const out = await git(cwd, ["rev-parse", "-q", "--verify", ref]).catch(
+		() => "",
+	);
+	return out.trim() || undefined;
+}
+
+/** Pushes the thread, and the working-tree snapshots with it. */
+class ThreadSaver {
+	private readonly cwd: string;
+	private readonly sync: GitSync;
+	private readonly worktree: WorktreeContinuity | undefined;
+	/** Set once the storage is open. */
+	storage: GitStorage | undefined;
+
+	constructor(
+		cwd: string,
+		sync: GitSync,
+		worktree: WorktreeContinuity | undefined,
+	) {
+		this.cwd = cwd;
+		this.sync = sync;
+		this.worktree = worktree;
+	}
+
+	/** Push now (`flush`) or soon (`schedule`), saving the working tree first when `save`. */
+	async push(how: "schedule" | "flush", save: boolean): Promise<void> {
+		const tip = () => this.storage?.tip;
+		if (this.worktree !== undefined && save) {
+			await this.worktree.checkpoint();
+		}
+		const companion =
+			this.worktree === undefined
+				? undefined
+				: await localTip(this.cwd, this.worktree.ref);
+		const current = tip();
+		if (how === "flush") {
+			await this.sync.flush(current, companion);
+		} else if (current !== undefined) {
+			await this.sync.schedule(current, companion);
+		}
+	}
 }
 
 async function openPersistence(
@@ -82,13 +132,25 @@ async function openPersistence(
 ): Promise<Persistence> {
 	const { cwd, log } = options;
 	const ref = threadRef(issueNumber);
+	const worktree =
+		options.worktree === undefined
+			? undefined
+			: new WorktreeContinuity({
+					cwd,
+					ref: worktreeRef(issueNumber),
+					limits: options.worktree,
+					log,
+					remote: options.remote,
+				});
 	const sync = new GitSync({
 		repo: cwd,
 		ref,
+		companionRef: worktree?.ref,
 		log: log.info,
 		remote: options.remote,
 	});
 	const remoteTip = await sync.fetch();
+	const saver = new ThreadSaver(cwd, sync, worktree);
 	const storage = await GitStorage.open({
 		repo: cwd,
 		ref,
@@ -96,18 +158,20 @@ async function openPersistence(
 			name: "pi-action",
 			email: "pi-action@users.noreply.github.com",
 		},
-		onCommit: ({ tip, batches }) => {
+		onCommit: ({ batches }) => {
 			if (isTurnBoundary(batches)) {
-				sync.schedule(tip).catch((error: unknown) => {
+				saver.push("schedule", true).catch((error: unknown) => {
 					log.warning(getErrorMessage(error));
 				});
 			}
 		},
 	});
+	saver.storage = storage;
 	return {
 		ref,
 		storage,
-		sync,
+		saver,
+		worktree,
 		isNew: remoteTip === undefined,
 		startedAt: remoteTip ? await rootCommitTime(cwd, ref) : undefined,
 	};
@@ -165,6 +229,7 @@ export class Thread {
 		};
 		const root = await harness.root(context, { agent });
 		await root.configure(agent, context); // the model may differ from the last run's
+		await restoreWorktree(persistence?.worktree, harness, root);
 		harness.resume(); // finish whatever a previous, interrupted run left
 		return new Thread(harness, root, persistence);
 	}
@@ -287,9 +352,9 @@ export class Thread {
 		await this.root.abort(context);
 	}
 
-	/** Push what is committed so far; throws if the remote moved under us. */
+	/** Push what is committed so far (with the working-tree snapshots); throws if the remote moved under us. */
 	async push(): Promise<void> {
-		await this.persistence?.sync.flush(this.persistence.storage.tip);
+		await this.persistence?.saver.push("flush", false);
 	}
 
 	async close(): Promise<void> {
@@ -297,8 +362,41 @@ export class Thread {
 			return;
 		}
 		this.closed = true;
+		const worktree = this.persistence?.worktree;
+		await worktree?.checkpoint();
+		// Turn boundaries the closing harness still commits must not save into a closed conversation.
+		worktree?.detach();
 		await this.harness.close(context);
 		await this.push();
+	}
+}
+
+/**
+ * Restore the working tree the conversation points at, before any work resumes, and tell the model how it went
+ * (one entry with a user message).
+ */
+async function restoreWorktree(
+	worktree: WorktreeContinuity | undefined,
+	harness: Harness,
+	root: Conversation,
+): Promise<void> {
+	if (worktree === undefined) {
+		return;
+	}
+	worktree.attach(harness, root);
+	const message = await worktree.restore();
+	if (message !== undefined) {
+		await root.submit(
+			{
+				type: "write",
+				entry: {
+					kind: RESTORE_ENTRY_KIND,
+					data: { message },
+					model: [{ role: "user", content: message, timestamp: Date.now() }],
+				},
+			},
+			context,
+		);
 	}
 }
 

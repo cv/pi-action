@@ -23,6 +23,11 @@ export interface GitSyncOptions {
 	/** The work tree (or git dir) to run git in. */
 	readonly repo: string;
 	readonly ref: string;
+	/**
+	 * A second ref that moves with `ref` (a thread's working-tree snapshots): fetched with it, and pushed with it in
+	 * one `git push --atomic`, so the remote never has one without the other.
+	 */
+	readonly companionRef?: string | undefined;
 	/** Default "origin". */
 	readonly remote?: string | undefined;
 	readonly log?: (message: string) => void;
@@ -62,12 +67,15 @@ export function isTurnBoundary(batches: readonly Batch[]): boolean {
  */
 export class GitSync {
 	readonly ref: string;
+	readonly companionRef: string | undefined;
 	readonly remote: string;
 	private readonly repo: string;
 	private readonly log: (message: string) => void;
 	/** What the remote ref is known to point at. */
 	private remoteTip: string | undefined;
+	private remoteCompanion: string | undefined;
 	private wanted: string | undefined;
+	private wantedCompanion: string | undefined;
 	private running: Promise<void> | undefined;
 	/** Why pushing stopped for good: another writer moved the remote ref. */
 	private failure: GitSyncConflictError | undefined;
@@ -76,8 +84,12 @@ export class GitSync {
 
 	constructor(options: GitSyncOptions) {
 		assertRefName(options.ref);
+		if (options.companionRef !== undefined) {
+			assertRefName(options.companionRef);
+		}
 		this.repo = options.repo;
 		this.ref = options.ref;
+		this.companionRef = options.companionRef;
 		this.remote = options.remote ?? "origin";
 		this.log = options.log ?? (() => undefined);
 		this.retryDelaysMs = options.retryDelaysMs ?? RETRY_DELAYS_MS;
@@ -85,78 +97,136 @@ export class GitSync {
 	}
 
 	/**
-	 * Make the local ref equal the remote one (creating, moving, or deleting it). Returns the remote tip, undefined
-	 * when the remote has no such ref yet.
+	 * Make the local ref (and the companion ref) equal the remote one (creating, moving, or deleting it). Returns the
+	 * remote tip of `ref`, undefined when the remote has no such ref yet.
 	 */
 	async fetch(): Promise<string | undefined> {
-		const tip = await this.remoteHead();
-		if (tip === undefined) {
-			await this.git(this.repo, ["update-ref", "-d", this.ref]).catch(
-				() => undefined,
-			);
-			this.log(`${this.ref}: new on ${this.remote}`);
-		} else {
+		const tips = await this.remoteHeads();
+		const present: string[] = [];
+		for (const [ref, tip] of [
+			[this.ref, tips.tip],
+			...(this.companionRef === undefined
+				? []
+				: [[this.companionRef, tips.companion] as const]),
+		] as const) {
+			if (tip === undefined) {
+				// oxlint-disable-next-line eslint/no-await-in-loop -- at most two refs
+				await this.git(this.repo, ["update-ref", "-d", ref]).catch(
+					() => undefined,
+				);
+				this.log(`${ref}: new on ${this.remote}`);
+			} else {
+				present.push(ref);
+				this.log(`${ref}: fetched ${tip.slice(0, 7)}`);
+			}
+		}
+		if (present.length > 0) {
 			await this.git(this.repo, [
 				"fetch",
 				"--quiet",
 				"--no-tags",
 				"--no-write-fetch-head",
 				this.remote,
-				`+${this.ref}:${this.ref}`,
+				...present.map((ref) => `+${ref}:${ref}`),
 			]);
-			this.log(`${this.ref}: fetched ${tip.slice(0, 7)}`);
 		}
-		return tip;
+		return tips.tip;
 	}
 
 	/** Look up the remote tip without touching the local ref; undefined when the remote has no such ref. */
 	async remoteHead(): Promise<string | undefined> {
+		return (await this.remoteHeads()).tip;
+	}
+
+	/** The remote tips of `ref` and of the companion ref, without touching the local refs. */
+	async remoteHeads(): Promise<{
+		tip: string | undefined;
+		companion: string | undefined;
+	}> {
+		const refs = [this.ref, ...(this.companionRef ? [this.companionRef] : [])];
 		const stdout = await this.git(this.repo, [
 			"ls-remote",
 			"--refs",
 			this.remote,
-			this.ref,
+			...refs,
 		]);
-		const line = stdout.split("\n").find((l) => l.endsWith(`\t${this.ref}`));
-		this.remoteTip = line?.split("\t")[0];
-		return this.remoteTip;
+		const lines = stdout.split("\n");
+		const tipOf = (ref: string | undefined) =>
+			ref === undefined
+				? undefined
+				: lines.find((l) => l.endsWith(`\t${ref}`))?.split("\t")[0];
+		this.remoteTip = tipOf(this.ref);
+		this.remoteCompanion = tipOf(this.companionRef);
+		return { tip: this.remoteTip, companion: this.remoteCompanion };
 	}
 
-	/** Push `tip` soon; resolves when it (or a newer scheduled tip) is pushed. */
-	async schedule(tip: string): Promise<void> {
+	/**
+	 * Push `tip` (and `companion` to the companion ref) soon; resolves when it (or a newer scheduled tip) is pushed.
+	 * An undefined `companion` keeps the one scheduled before.
+	 */
+	async schedule(tip: string, companion?: string): Promise<void> {
 		if (this.failure) {
 			throw this.failure;
 		}
 		this.wanted = tip;
+		if (companion !== undefined && this.companionRef !== undefined) {
+			this.wantedCompanion = companion;
+		}
 		this.running ??= this.drain().finally(() => {
 			this.running = undefined;
 		});
 		return this.running;
 	}
 
-	/** Push `tip` now (after any push in flight); throws why pushing stopped, if it did. */
-	async flush(tip: string | undefined): Promise<void> {
+	/** Push `tip` (and `companion`) now, after any push in flight; throws why pushing stopped, if it did. */
+	async flush(tip: string | undefined, companion?: string): Promise<void> {
 		if (this.running !== undefined) {
 			await this.running.catch(() => undefined);
 		}
 		if (this.failure) {
 			throw this.failure;
 		}
-		if (tip !== undefined && tip !== this.remoteTip) {
-			await this.schedule(tip);
+		if (
+			tip !== undefined &&
+			(tip !== this.remoteTip || this.companionPending(companion))
+		) {
+			await this.schedule(tip, companion);
 		}
+	}
+
+	/** Whether the companion ref has (or would have, with `next`) a tip the remote lacks. */
+	private companionPending(next?: string): boolean {
+		const wanted = next ?? this.wantedCompanion;
+		return (
+			this.companionRef !== undefined &&
+			wanted !== undefined &&
+			wanted !== this.remoteCompanion
+		);
 	}
 
 	private async drain(): Promise<void> {
 		let failures = 0;
-		while (this.wanted !== undefined && this.wanted !== this.remoteTip) {
+		while (
+			this.wanted !== undefined &&
+			(this.wanted !== this.remoteTip || this.companionPending())
+		) {
 			const tip = this.wanted;
+			const companion = this.companionPending()
+				? this.wantedCompanion
+				: undefined;
 			// oxlint-disable-next-line eslint/no-await-in-loop -- pushes go one at a time, newest tip next
-			const detail = await this.push(tip);
+			const detail = await this.push(tip, companion);
 			if (detail === undefined) {
 				failures = 0;
 				this.remoteTip = tip;
-				this.log(`${this.ref}: pushed ${tip.slice(0, 7)}`);
+				if (companion === undefined) {
+					this.log(`${this.ref}: pushed ${tip.slice(0, 7)}`);
+				} else {
+					this.remoteCompanion = companion;
+					this.log(
+						`${this.ref}: pushed ${tip.slice(0, 7)} with ${this.companionRef ?? ""} at ${companion.slice(0, 7)}`,
+					);
+				}
 			} else if (CONFLICT_PATTERN.test(detail)) {
 				// The remote has history this one lacks: every later push would be refused the same way.
 				this.failure = new GitSyncConflictError(this.ref, detail);
@@ -178,15 +248,24 @@ export class GitSync {
 		}
 	}
 
-	/** Push `tip` to the ref; resolves with why it failed (git's stderr), undefined when it was pushed. */
-	private async push(tip: string): Promise<string | undefined> {
+	/**
+	 * Push `tip` to the ref, and `companion` to the companion ref in the same atomic push; resolves with why it failed
+	 * (git's stderr), undefined when it was pushed.
+	 */
+	private async push(
+		tip: string,
+		companion: string | undefined,
+	): Promise<string | undefined> {
+		const both = companion !== undefined && this.companionRef !== undefined;
 		try {
 			await this.git(this.repo, [
 				"push",
 				"--quiet",
 				"--no-verify",
+				...(both ? ["--atomic"] : []),
 				this.remote,
 				`${tip}:${this.ref}`,
+				...(both ? [`${companion}:${this.companionRef}`] : []),
 			]);
 			return undefined;
 		} catch (error) {

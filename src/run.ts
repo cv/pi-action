@@ -17,11 +17,16 @@ import {
 	formatThreadSummary,
 } from "./formatting.ts";
 import { createGitHubUi, type GitHubUi } from "./github-ui.ts";
-import type { GitHubClient, ReactionTarget } from "./github.ts";
+import {
+	type GitHubClient,
+	isForkPullRequest,
+	type ReactionTarget,
+} from "./github.ts";
 import type { ActionInputs } from "./inputs.ts";
 import { createActionModels, findModel } from "./models.ts";
 import { getRunContext } from "./run-context.ts";
 import { GitSyncConflictError } from "./storage/sync.ts";
+import type { SnapshotLimits } from "./storage/worktree.ts";
 import { Thread } from "./thread.ts";
 import { toolEnv } from "./tool-env.ts";
 import { collectTriggers, type Trigger, triggerFromInfo } from "./triggers.ts";
@@ -171,6 +176,21 @@ async function initialTriggers(
 		: [current];
 }
 
+/** The working-tree snapshot limits of the thread; undefined (off) by input and on fork pull requests. */
+function worktreeLimits(deps: ActionDependencies): SnapshotLimits | undefined {
+	const { inputs, log } = deps;
+	if (!inputs.worktreeSnapshots) {
+		return undefined;
+	}
+	if (isForkPullRequest(deps.payload)) {
+		log.info(
+			"A pull request from a fork: its token can't push, so the working tree is not saved",
+		);
+		return undefined;
+	}
+	return inputs.worktreeLimits;
+}
+
 /** Close the thread, pushing it; a failure to save is a warning, not a failed run. */
 async function closeThread(thread: Thread, log: Log): Promise<void> {
 	try {
@@ -264,6 +284,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			remote: deps.remote,
 			extensions,
 			toolEnv: tools,
+			worktree: worktreeLimits(deps),
 		});
 		thread = opened;
 		stopSignals = pushOnSignals(opened, log);

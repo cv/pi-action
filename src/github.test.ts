@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createGitHubClient, extractTriggerInfo } from "./github.ts";
+import {
+	createGitHubClient,
+	extractTriggerInfo,
+	isForkPullRequest,
+} from "./github.ts";
 
 const user = (login: string, type = "User") => ({ login, type });
 
@@ -305,5 +309,22 @@ describe("createGitHubClient", () => {
 			per_page: 100,
 			page: 1,
 		});
+	});
+});
+
+describe("isForkPullRequest", () => {
+	const pr = (head: string) => ({
+		pull_request: {
+			head: { repo: { full_name: head } },
+			base: { repo: { full_name: "o/r" } },
+		},
+	});
+
+	it.each([
+		["a pull request from a fork", pr("fork/r"), true],
+		["a pull request from the same repository", pr("o/r"), false],
+		["an issue", { issue: { number: 1 } }, false],
+	])("%s: %s", (_name, payload, expected) => {
+		expect(isForkPullRequest(payload)).toBe(expected);
 	});
 });

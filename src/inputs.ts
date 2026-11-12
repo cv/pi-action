@@ -4,6 +4,10 @@ import type {
 	ModelInputMode,
 } from "./custom-provider.ts";
 import { DEFAULTS } from "./defaults.ts";
+import {
+	DEFAULT_SNAPSHOT_LIMITS,
+	type SnapshotLimits,
+} from "./storage/worktree.ts";
 
 export type InputReader = (name: string) => string;
 
@@ -32,6 +36,10 @@ export interface ActionInputs {
 	trustProject: boolean;
 	/** The agent directory for pi-durable extensions; a temp dir when unset. */
 	agentDir: string | undefined;
+	/** Whether a thread saves and restores the files pi left uncommitted (`worktree_snapshots`). */
+	worktreeSnapshots: boolean;
+	/** What a snapshot leaves out of the untracked files. */
+	worktreeLimits: SnapshotLimits;
 }
 
 const TRUE_VALUES = new Set(["true", "1", "yes", "y", "on"]);
@@ -165,5 +173,12 @@ export function readActionInputs(
 		trustProject:
 			parseBoolean(readInput("trust_project")) ?? DEFAULTS.trustProject,
 		agentDir: readInput("agent_dir").trim() || undefined,
+		worktreeSnapshots:
+			parseBoolean(readInput("worktree_snapshots")) ??
+			DEFAULTS.worktreeSnapshots,
+		worktreeLimits: {
+			...DEFAULT_SNAPSHOT_LIMITS,
+			exclude: parseExtensionSpecs(readInput("worktree_snapshot_exclude")),
+		},
 	};
 }

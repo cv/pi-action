@@ -940,3 +940,103 @@ describe("run with a pi-durable extension (installed from npm)", () => {
 		);
 	}, 120_000);
 });
+
+describe("run (durable) with working-tree continuity", () => {
+	const WORKTREES = "refs/pi/worktrees/42";
+
+	it("restores the files a run left uncommitted in the next run, on a fresh runner", async () => {
+		const w = world();
+		let seen: string[] = [];
+		w.faux.setResponses([
+			fauxAssistantMessage(
+				[
+					fauxToolCall("bash", {
+						command:
+							"echo draft > notes.md && echo staged > staged.txt && git add staged.txt",
+					}),
+				],
+				{ stopReason: "toolUse" },
+			),
+			fauxAssistantMessage("Started; I'll finish later."),
+			fauxAssistantMessage(
+				[
+					fauxToolCall("bash", {
+						command: "cat notes.md && git status --porcelain",
+					}),
+				],
+				{ stopReason: "toolUse" },
+			),
+			(context) => {
+				seen = userTexts(context.messages);
+				return fauxAssistantMessage(`Found: ${toolText(context.messages)}`);
+			},
+		]);
+		await run(w.deps(w.comment("@pi start")));
+		// Both refs are on the remote, together.
+		const wrapper = git(w.remote, "rev-parse", WORKTREES).trim();
+		const stash = git(
+			w.remote,
+			"log",
+			"-1",
+			"--format=%(trailers:key=Snapshot,valueonly)",
+			wrapper,
+		).trim();
+		expect(git(w.remote, "show", `${stash}^3:notes.md`)).toBe("draft\n");
+		expect(git(w.remote, "log", "-1", "--format=%B", WORKTREES)).toContain(
+			"Snapshot: ",
+		);
+
+		await run(w.deps(w.comment("@pi go on")));
+
+		expect(w.gh.posted[1]).toContain(
+			"Found: draft\nA  staged.txt\n?? notes.md",
+		);
+		expect(
+			seen.some((text) => text.includes("pi-action restored the files")),
+		).toBe(true);
+	});
+
+	it("pushes the snapshots the main step left unpushed, in the always() step", async () => {
+		const w = world();
+		w.faux.setResponses([
+			fauxAssistantMessage(
+				[fauxToolCall("bash", { command: "echo x > x.txt" })],
+				{ stopReason: "toolUse" },
+			),
+			fauxAssistantMessage("done"),
+		]);
+		const deps = w.deps(w.comment("@pi go"));
+		await run(deps);
+		// The main step was killed before its last push of the snapshots.
+		git(deps.cwd, "push", "-q", "origin", `:${WORKTREES}`);
+		const log = { info: vi.fn(), warning: vi.fn() };
+		await expect(pushThread(deps.payload, deps.cwd, log)).resolves.toBe(
+			"pushed",
+		);
+		expect(log.warning).not.toHaveBeenCalled();
+		expect(git(w.remote, "rev-parse", WORKTREES).trim()).toBe(
+			git(deps.cwd, "rev-parse", WORKTREES).trim(),
+		);
+		await expect(pushThread(deps.payload, deps.cwd, log)).resolves.toBe(
+			"up-to-date",
+		);
+	});
+
+	it("saves nothing with worktree_snapshots: false", async () => {
+		const w = world();
+		w.faux.setResponses([
+			fauxAssistantMessage(
+				[fauxToolCall("bash", { command: "echo x > x.txt" })],
+				{
+					stopReason: "toolUse",
+				},
+			),
+			fauxAssistantMessage("done"),
+		]);
+		await run(w.deps(w.comment("@pi go"), { worktreeSnapshots: false }));
+		expect(git(w.remote, "ls-remote", w.remote, "refs/pi/*")).not.toContain(
+			WORKTREES,
+		);
+		expect(git(w.remote, "ls-remote", w.remote, "refs/pi/*")).toContain(REF);
+	});
+});

@@ -1,11 +1,12 @@
-// The action's `if: always()` step: push the thread ref if the main step left commits unpushed (cancelled,
-// timed out, or crashed). Pushes are fast-forward only, so this never overwrites another run's history.
+// The action's `if: always()` step: push the thread ref (with its working-tree snapshots) if the main step left
+// commits unpushed (cancelled, timed out, or crashed). Pushes are fast-forward only, so this never overwrites another run's history.
 import { info, warning } from "@actions/core";
 import { context } from "@actions/github";
 
 import { parsePositiveInteger } from "./inputs.ts";
 import { git } from "./storage/git.ts";
 import { GitSync } from "./storage/sync.ts";
+import { worktreeRef } from "./storage/worktree.ts";
 import { threadRef } from "./thread.ts";
 import type { Log } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
@@ -42,13 +43,24 @@ export async function pushThread(
 		log.info(`${ref}: nothing to push`);
 		return "nothing";
 	}
+	// The working-tree snapshots, when the main step saved any.
+	const companionRef = worktreeRef(number);
+	const companion = (
+		await git(cwd, ["rev-parse", "--verify", "-q", companionRef]).catch(
+			() => "",
+		)
+	).trim();
 	try {
-		const sync = new GitSync({ repo: cwd, ref, log: log.info });
-		if ((await sync.remoteHead()) === tip) {
+		const sync = new GitSync({ repo: cwd, ref, companionRef, log: log.info });
+		const remote = await sync.remoteHeads();
+		if (
+			remote.tip === tip &&
+			(companion === "" || remote.companion === companion)
+		) {
 			log.info(`${ref} is already saved at ${tip.slice(0, 7)}`);
 			return "up-to-date";
 		}
-		await sync.flush(tip);
+		await sync.flush(tip, companion || undefined);
 		log.info(`${ref} is saved at ${tip.slice(0, 7)}`);
 		return "pushed";
 	} catch (error) {

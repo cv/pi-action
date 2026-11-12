@@ -8,7 +8,12 @@ import {
 	type PostedQuestion,
 	readAnswerReply,
 } from "./github-ui.ts";
-import { extractTriggerInfo, type GitHubClient, toUserType } from "./github.ts";
+import {
+	extractTriggerInfo,
+	fieldAt as field,
+	type GitHubClient,
+	toUserType,
+} from "./github.ts";
 import { type Allowlists, validatePermissions } from "./security.ts";
 import type { Trigger } from "./triggers.ts";
 import type {
@@ -34,17 +39,6 @@ export interface AnswerOptions {
 	gh: GitHubClient;
 	allow: Allowlists;
 	log: Log;
-}
-
-function field(value: unknown, ...path: string[]): unknown {
-	let current = value;
-	for (const key of path) {
-		current =
-			typeof current === "object" && current !== null
-				? Reflect.get(current, key)
-				: undefined;
-	}
-	return current;
 }
 
 const text = (value: unknown): string =>

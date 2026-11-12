@@ -25,6 +25,7 @@ const DEFAULT_CASES = [
 	["model_max_tokens", String(DEFAULTS.customModelMaxTokens)],
 	["output_mode", DEFAULTS.outputMode],
 	["trust_project", String(DEFAULTS.trustProject)],
+	["worktree_snapshots", String(DEFAULTS.worktreeSnapshots)],
 ] as const;
 
 function getActionInputDefault(inputName: string): string {

@@ -1,0 +1,256 @@
+// Working-tree continuity: a thread's conversation and the files pi left uncommitted move together.
+//
+// Each snapshot (src/storage/worktree.ts) is recorded on refs/pi/worktrees/<n>, and the conversation points at it
+// with the `pi-action.worktree` document (rewindable, fork "asOf"), written in the same commit as a marker entry. A
+// fork or rewind of the conversation thus sees the snapshot as of its fork entry. At the start of a run, the
+// snapshot the conversation points at is restored. No snapshot is ever deleted: a newer one stays on the ref.
+import {
+	BACKGROUND_CONTEXT,
+	type Context,
+} from "@earendil-works/chord/context";
+import {
+	type Conversation,
+	defineDoc,
+	type Harness,
+} from "@earendil-works/pi-durable";
+
+import {
+	captureState,
+	isCheckoutClean,
+	isClean,
+	latestSnapshot,
+	readSnapshot,
+	recordSnapshot,
+	type RestoreOutcome,
+	restoreSnapshot,
+	type SnapshotLimits,
+	type SnapshotRecord,
+	stateKey,
+	writeStash,
+} from "./storage/worktree.ts";
+import type { Log } from "./types.ts";
+import { getErrorMessage } from "./utils.ts";
+
+const context: Context = BACKGROUND_CONTEXT;
+
+/** The marker entry written with each change of the document; never shown to the model. */
+export const WORKTREE_ENTRY_KIND = "pi-action.worktree";
+/** The entry that tells the model how the restore went. */
+export const RESTORE_ENTRY_KIND = "pi-action.worktree-restore";
+const LISTED = 20;
+
+/** The snapshot a conversation points at: its stash commit W and its wrapper commit on the ref. Empty: none. */
+export const WorktreeDoc = defineDoc<{ stash: string; wrapper: string }>({
+	kind: "pi-action.worktree",
+	version: 1,
+	scope: "conversation",
+	history: "rewindable",
+	fork: "asOf",
+	initial: () => ({ stash: "", wrapper: "" }),
+	checkpointWhen: () => true,
+});
+
+export interface WorktreeOptions {
+	readonly cwd: string;
+	/** `refs/pi/worktrees/<n>`. */
+	readonly ref: string;
+	readonly limits: SnapshotLimits;
+	readonly log: Log;
+	readonly remote?: string | undefined;
+}
+
+const short = (sha: string): string => sha.slice(0, 7);
+
+/** A bulleted list of at most LISTED items. */
+function list(items: readonly string[]): string {
+	const shown = items.slice(0, LISTED).map((item) => `- ${item}`);
+	if (items.length > LISTED) {
+		shown.push(`- ...and ${items.length - LISTED} more`);
+	}
+	return shown.join("\n");
+}
+
+function skippedNote(record: SnapshotRecord): string {
+	return record.skipped.length === 0
+		? ""
+		: `\n\nThese untracked files were not saved in the snapshot, so they are missing:\n${list(record.skipped.map((skip) => `\`${skip.path}\` (${skip.reason})`))}`;
+}
+
+const applyHint = (record: SnapshotRecord): string =>
+	`The snapshot is saved at ${record.stash}: \`git stash show -p --include-untracked ${short(record.stash)}\` shows it, \`git stash apply --index ${short(record.stash)}\` applies it.`;
+
+/** The conversation points at an older snapshot than the newest one (it was rewound or forked). */
+const newerNote = (latest: SnapshotRecord): string =>
+	`\n\nThe conversation was rewound to an earlier point, and so were the files. A newer snapshot has the files as pi last left them: \`git stash show -p --include-untracked ${short(latest.stash)}\` shows it (${latest.stash}).`;
+
+/** The message that tells the model how the restore went. */
+export function restoreMessage(
+	outcome: RestoreOutcome,
+	record: SnapshotRecord,
+): string {
+	const intro = `[pi-action] This run started from a fresh checkout. pi-action restored the files the earlier run left uncommitted (working-tree snapshot ${short(record.stash)})`;
+	if (outcome.status === "diverged") {
+		return `[pi-action] This run started from a fresh checkout. pi-action did not restore the files the earlier run left uncommitted: branch \`${outcome.branch}\` on the remote (${short(outcome.remoteHead)}) diverged from the commit the earlier run worked on (${short(outcome.head)}). ${applyHint(record)}`;
+	}
+	if (outcome.status === "failed") {
+		return `[pi-action] Restoring the files the earlier run left uncommitted failed (${outcome.error}), so this run started from a clean checkout. ${applyHint(record)}`;
+	}
+	const where = `HEAD is ${outcome.branch === undefined ? "detached" : `on branch \`${outcome.branch}\``} at ${short(outcome.head)}`;
+	const moved = outcome.moved
+		? " The branch had moved on the remote since then, so the changes were merged onto it."
+		: "";
+	const staging = outcome.staged
+		? " Staged and unstaged changes are as they were."
+		: " The staging area could not be restored: all changes are unstaged now.";
+	const conflicts =
+		outcome.conflicts.length > 0
+			? `\n\nThese files have conflict markers; resolve them before you go on:\n${list(outcome.conflicts.map((path) => `\`${path}\``))}`
+			: "";
+	return `${intro}. ${where}.${moved}${staging}${conflicts}${skippedNote(record)}`;
+}
+
+/** Saves a thread's working tree at turn boundaries and restores it at the start of a run. */
+export class WorktreeContinuity {
+	private readonly options: WorktreeOptions;
+	private conversation: { harness: Harness; root: Conversation } | undefined;
+	/** The state last saved (or restored); a checkpoint of the same state saves nothing. */
+	private lastKey: string | undefined;
+	private queue: Promise<unknown> = Promise.resolve();
+
+	constructor(options: WorktreeOptions) {
+		this.options = options;
+	}
+
+	get ref(): string {
+		return this.options.ref;
+	}
+
+	/** Attach the conversation whose document points at the snapshots. */
+	attach(harness: Harness, root: Conversation): void {
+		this.conversation = { harness, root };
+	}
+
+	/** Stop saving: the conversation is closing (later checkpoints do nothing). */
+	detach(): void {
+		this.conversation = undefined;
+	}
+
+	private attached(): { harness: Harness; root: Conversation } {
+		if (this.conversation === undefined) {
+			throw new Error("WorktreeContinuity is not attached to a conversation");
+		}
+		return this.conversation;
+	}
+
+	/** The snapshot the conversation points at as of its head; undefined when none. */
+	async target(): Promise<SnapshotRecord | undefined> {
+		const { harness, root } = this.attached();
+		const doc = await harness.snapshot(WorktreeDoc, root.id, context);
+		if (doc === undefined || doc.wrapper === "") {
+			return undefined;
+		}
+		return readSnapshot(this.options.cwd, doc.wrapper);
+	}
+
+	/** Point the conversation at `record`: the document and a marker entry, in one commit. */
+	private async point(record: SnapshotRecord): Promise<void> {
+		const { root } = this.attached();
+		await root.commit(async (tx) => {
+			const doc = await tx.doc(WorktreeDoc, root.id);
+			doc.stash = record.stash;
+			doc.wrapper = record.wrapper;
+			await tx.appendEntry(root.id, {
+				kind: WORKTREE_ENTRY_KIND,
+				data: { stash: record.stash, wrapper: record.wrapper },
+			});
+		}, context);
+	}
+
+	/**
+	 * Save the working tree if it changed since the last save (or restore): a new snapshot on the ref, and the
+	 * conversation pointed at it. Resolves with the new wrapper, undefined when nothing changed. Calls run one at a
+	 * time. A failure is logged, never thrown.
+	 */
+	async checkpoint(): Promise<string | undefined> {
+		if (this.conversation === undefined) {
+			return undefined;
+		}
+		const next = this.queue.then(async () => this.save());
+		this.queue = next.catch(() => undefined);
+		try {
+			return await next;
+		} catch (error) {
+			this.options.log.warning(
+				`Could not save the working tree: ${getErrorMessage(error)}`,
+			);
+			return undefined;
+		}
+	}
+
+	private async save(): Promise<string | undefined> {
+		const { cwd, ref, limits } = this.options;
+		const state = await captureState(cwd, limits);
+		const key = stateKey(state);
+		if (key === this.lastKey) {
+			return undefined;
+		}
+		if (this.lastKey === undefined && isClean(state)) {
+			// Nothing to keep yet, and nothing was ever restored.
+			this.lastKey = key;
+			return undefined;
+		}
+		const stash = await writeStash(cwd, state);
+		const record = await recordSnapshot(cwd, ref, { ...state, stash });
+		await this.point(record);
+		this.lastKey = key;
+		this.options.log.info(
+			`Saved the working tree as ${short(stash)} on ${ref}${state.skipped.length > 0 ? ` (skipped ${state.skipped.length} untracked file(s))` : ""}`,
+		);
+		return record.wrapper;
+	}
+
+	/**
+	 * Restore the snapshot the conversation points at into the checkout, before any work runs. Returns the message
+	 * for the model, undefined when there was nothing to restore. A failed restore starts clean and says so; it never
+	 * throws.
+	 */
+	async restore(): Promise<string | undefined> {
+		const { cwd, ref, limits, log, remote } = this.options;
+		try {
+			const [target, latest] = await Promise.all([
+				this.target(),
+				latestSnapshot(cwd, ref),
+			]);
+			const note =
+				latest === undefined || latest.stash === target?.stash
+					? ""
+					: newerNote(latest);
+			if (target === undefined) {
+				this.lastKey = await captureState(cwd, limits)
+					.then(stateKey)
+					.catch(() => undefined);
+				return note === ""
+					? undefined
+					: `[pi-action] This run started from a clean checkout: the conversation has no working-tree snapshot as of this point.${note}`;
+			}
+			if (!(await isCheckoutClean(cwd))) {
+				log.warning(
+					`The checkout has uncommitted changes or untracked files; not restoring ${short(target.stash)}`,
+				);
+				this.lastKey = stateKey(await captureState(cwd, limits));
+				return `[pi-action] The checkout already had uncommitted changes or untracked files when this run started, so pi-action did not restore the files the earlier run left uncommitted. ${applyHint(target)}`;
+			}
+			const outcome = await restoreSnapshot(cwd, target, remote);
+			log.info(
+				`Restored working-tree snapshot ${short(target.stash)}: ${outcome.status}`,
+			);
+			this.lastKey = stateKey(await captureState(cwd, limits));
+			return `${restoreMessage(outcome, target)}${note}`;
+		} catch (error) {
+			log.warning(
+				`Could not restore the working tree: ${getErrorMessage(error)}`,
+			);
+			return `[pi-action] Restoring the files the earlier run left uncommitted failed (${getErrorMessage(error)}), so this run started from a clean checkout.`;
+		}
+	}
+}

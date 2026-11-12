@@ -9,6 +9,7 @@ import {
 	readActionInputs,
 	readCustomProviderConfig,
 } from "./inputs.ts";
+import { DEFAULT_SNAPSHOT_LIMITS } from "./storage/worktree.ts";
 import { createActionInputs } from "./test-helpers.ts";
 
 const reader =
@@ -68,6 +69,12 @@ describe("readActionInputs", () => {
 			extensions: ["@acme/pi-provider@1.2.3", "./ext.ts"],
 			trustProject: true,
 			agentDir: ".pi/agent",
+			worktreeSnapshots: true,
+			worktreeLimits: {
+				maxFileBytes: 10 * 1024 * 1024,
+				maxTotalBytes: 100 * 1024 * 1024,
+				exclude: [],
+			},
 		});
 	});
 });
@@ -176,5 +183,32 @@ describe("parsers", () => {
 		...["", "0", "-1", "1.5", "10s", "abc"].map((v) => [v, undefined] as const),
 	])("parses %o as the positive integer %s", (value, expected) => {
 		expect(parsePositiveInteger(value)).toBe(expected);
+	});
+});
+
+describe("working-tree snapshot inputs", () => {
+	it("reads the switch and the globs to exclude", () => {
+		const inputs = readActionInputs(
+			reader({
+				worktree_snapshots: "off",
+				worktree_snapshot_exclude: ".env*, *.pem\n# keys\nid_rsa*",
+			}),
+			{},
+		);
+		expect(inputs.worktreeSnapshots).toBe(false);
+		expect(inputs.worktreeLimits).toStrictEqual({
+			...DEFAULT_SNAPSHOT_LIMITS,
+			exclude: [".env*", "*.pem", "id_rsa*"],
+		});
+	});
+
+	it.each([
+		...["true", "on", "", "maybe"].map((v) => [v, true] as const),
+		...["false", "off", "0"].map((v) => [v, false] as const),
+	])("reads worktree_snapshots %o as %s", (value, expected) => {
+		expect(
+			readActionInputs(reader({ worktree_snapshots: value }), {})
+				.worktreeSnapshots,
+		).toBe(expected);
 	});
 });
