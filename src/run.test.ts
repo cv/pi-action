@@ -282,7 +282,7 @@ describe("run (durable)", () => {
 			"💬 Looking.",
 			"🔧 bash: echo hi",
 			expect.stringMatching(/^::group:: {2}↳ ✓ \d+\.\ds · 1 line$/u),
-			expect.stringContaining('"command": "echo hi"'),
+			"command: echo hi",
 			"──",
 			"hi",
 			"::endgroup::",
