@@ -87,7 +87,7 @@ A [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) extensi
 An extension can change the tools and prompt sections of pi-action and of other extensions:
 
 - **Replace a tool.** A tool with the name of an earlier tool replaces it, as `pi.registerTool` does in pi. For example, an extension with its own `bash` tool replaces the `bash` of pi-action. pi-action writes `pi-durable extension <name> replaces tool bash from coding-tools` to the log.
-- **Wrap a tool or a section.** `wrapTool(tool, wrapper)` and `wrapSection(key, wrapper)` of pi-durable change a tool or a section, for example its description or its text. `wrapTool("read", (t) => ({ ...t, callers: ["tools"] }))` hides `read` from the model, but other tools can still call it (see [Tools the model sees](#tools-the-model-sees)).
+- **Wrap a tool or a section.** `wrapTool(tool, wrapper)` and `wrapSection(key, wrapper)` of pi-durable change a tool or a section, for example its description or its text. `wrapTool("read", (t) => ({ ...t, callers: ["tools"] }))` hides `read` from the model, but other tools can still call it.
 
 The order is: the coding tools of pi-action (`coding-tools`) first, then the extensions in the order of the `extensions` input. pi-durable applies the wraps of all extensions in this order. Thus, the last wrap wins.
 
