@@ -36,10 +36,10 @@ npm install        # also installs the git hooks of this repository
 |------|--------------|
 | `pre-commit` | Runs `npm test` and `npm run lint` |
 | `commit-msg` | Checks the message with commitlint ([`commitlint.config.js`](commitlint.config.js)) |
-| `prepare-commit-msg` | Adds `Refs #<number>` from the branch name, with [`scripts/prepare-commit-msg.js`](scripts/prepare-commit-msg.js). For example, `feat/123-description` gives `Refs #123`. Git skips this when you use `git commit -m` or `-F` (see [the agent's hooks](docs/how-it-works.md#git-hooks-for-the-agent), which work the same way) |
+| `prepare-commit-msg` | Adds `Refs #<number>` from the branch name, with [`scripts/prepare-commit-msg.js`](scripts/prepare-commit-msg.js). For example, `feat/123-description` gives `Refs #123`. Git skips this when you use `git commit -m` or `-F` |
 | `pre-push` | Runs `npm run coverage` |
 
-These hooks are for development of pi-action. The action installs different hooks for the agent in the repositories of users. See [How it works](docs/how-it-works.md#git-hooks-for-the-agent).
+These hooks are for development of pi-action only. The action installs no hooks in the repositories of users. See [Commit conventions](docs/how-it-works.md#commit-conventions).
 
 ### Commit messages
 
@@ -109,7 +109,6 @@ pi-action is TypeScript on [pi-durable](https://www.npmjs.com/package/@earendil-
 | [`src/utils.ts`](src/utils.ts) | Small helpers |
 | [`src/test-helpers.ts`](src/test-helpers.ts) | Test fixtures: inputs, a fake GitHub client, faux models, and scratch git repositories |
 | [`src/test-setup.ts`](src/test-setup.ts) | Removes `GIT_*` variables (for example from a git hook) and sets a git identity for the tests |
-| [`scripts/install-agent-hooks.js`](scripts/install-agent-hooks.js) | Installs the git hooks for the agent |
 | [`scripts/prepare-commit-msg.js`](scripts/prepare-commit-msg.js) | The `prepare-commit-msg` hook of this repository |
 | [`scripts/lint-actions.mjs`](scripts/lint-actions.mjs) | Runs actionlint on `.github/workflows` |
 
@@ -144,7 +143,7 @@ The tests use [Vitest](https://vitest.dev/). They are next to the code (`src/**/
 
 | Workflow | What it does |
 |----------|--------------|
-| [`ci.yml`](.github/workflows/ci.yml) | Runs `npm run check` on pushes and pull requests to `main` |
+| [`ci.yml`](.github/workflows/ci.yml) | Runs `npm run check` on pushes and pull requests to `main`. On pull requests, the `commitlint` job checks the message of each commit with [`commitlint.config.js`](commitlint.config.js) |
 | [`pi-assistant.yml`](.github/workflows/pi-assistant.yml) | Uses the action of this checkout to answer `@pi` requests in this repository. It acts as the `pi-action-agent` GitHub App (secrets `PI_APP_CLIENT_ID` and `PI_APP_PRIVATE_KEY`), so that pi can open pull requests and its pushes run CI |
 | [`pi-direct-dogfood.yml`](.github/workflows/pi-direct-dogfood.yml) | `workflow_dispatch`: runs a direct prompt in `output` mode |
 | [`pi-pr-review-dogfood.yml`](.github/workflows/pi-pr-review-dogfood.yml) | `workflow_dispatch`: reviews a pull request with `pr_number` in `output` mode |
