@@ -1,1 +1,1 @@
-{"format":1,"seq":150,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"],["s",["tools",0,"output"],"chore: release 2.2.1\n\n"]]}}]}
+{"format":1,"seq":151,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"npm run coverage.........................................................Passed\nTo https://github.com/cv/pi-action\n   440b5eb..c5ae856  main -> main\n"]]}}]}
