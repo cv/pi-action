@@ -34,6 +34,8 @@ import {
 import type { GitHubComment, GitHubReaction } from "./types.ts";
 
 const REF = "refs/pi/threads/42";
+/** Where a run keeps REF locally (liveRef()). */
+const LIVE = "refs/pi-action/threads/42";
 const FIRST_COMMIT = /pi-durable: seq 1 /u;
 const COMMIT_ID = /^[0-9a-f]{40}$/u;
 const CONTINUE = "Your last response hit the output token limit (max_tokens)";
@@ -251,7 +253,7 @@ describe("run (durable)", () => {
 			),
 		);
 		expect(deps.log.endGroup).toHaveBeenCalledExactlyOnceWith();
-		expect(tipWhenShown).toBe(git(deps.cwd, "rev-parse", REF).trim());
+		expect(tipWhenShown).toBe(git(deps.cwd, "rev-parse", LIVE).trim());
 		expect(deps.summary).toHaveBeenCalledExactlyOnceWith(
 			expect.stringContaining(`git log --oneline ${REF}`),
 		);
@@ -435,8 +437,8 @@ describe("pushThread (the always() step)", () => {
 		const { payload } = deps;
 
 		// Simulate a step killed before its final push: rewind the remote ref.
-		const tip = git(deps.cwd, "rev-parse", REF).trim();
-		const parent = git(deps.cwd, "rev-parse", `${REF}~3`).trim();
+		const tip = git(deps.cwd, "rev-parse", LIVE).trim();
+		const parent = git(deps.cwd, "rev-parse", `${LIVE}~3`).trim();
 		git(w.remote, "update-ref", REF, parent);
 
 		await expect(pushThread(payload, deps.cwd, log)).resolves.toBe("pushed");
@@ -1015,7 +1017,7 @@ describe("run (durable) with working-tree continuity", () => {
 		);
 		expect(log.warning).not.toHaveBeenCalled();
 		expect(git(w.remote, "rev-parse", WORKTREES).trim()).toBe(
-			git(deps.cwd, "rev-parse", WORKTREES).trim(),
+			git(deps.cwd, "rev-parse", WORKTREES.replace("refs/pi/", "refs/pi-action/")).trim(),
 		);
 		await expect(pushThread(deps.payload, deps.cwd, log)).resolves.toBe(
 			"up-to-date",
