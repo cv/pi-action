@@ -69,7 +69,8 @@ export function describeCall(
 	}
 	// A script (a heredoc, a program) reads best as its first line and its length: the group shows the rest.
 	const lines = main.trim().split("\n");
-	const more = lines.length > 1 ? ` (+${lines.length - 1} lines)` : "";
+	const more =
+		lines.length > 1 ? ` (+${plural(lines.length - 1, "line")})` : "";
 	const detail = edits > 0 ? ` (${edits} edit${edits === 1 ? "" : "s"})` : "";
 	return `${name}: ${oneLine(lines[0] ?? "")}${more}${detail}`;
 }

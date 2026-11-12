@@ -129,7 +129,7 @@ describe("describeCall", () => {
 		);
 		expect(
 			describeCall("typescript", { code: "\n  async () => 1\nmore" }),
-		).toBe("typescript: async () => 1 (+1 lines)");
+		).toBe("typescript: async () => 1 (+1 line)");
 		expect(describeCall("other", { a: 1 })).toBe('other {"a":1}');
 		expect(describeCall("other", {})).toBe("other");
 	});
