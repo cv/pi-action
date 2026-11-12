@@ -1,1 +1,1 @@
-{"format":1,"seq":1448,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":1449,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"> pi-action@2.2.2 lint:actions\n> node scripts/lint-actions.mjs\n\n"]]}}]}
