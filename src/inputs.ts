@@ -36,6 +36,10 @@ export interface ActionInputs {
 	trustProject: boolean;
 	/** The agent directory for pi-durable extensions; a temp dir when unset. */
 	agentDir: string | undefined;
+	/** `context_files`: whether AGENTS.md (or CLAUDE.md) goes into the system prompt. */
+	contextFiles: boolean;
+	/** `context_files_max_bytes`: the limit of all context files together. */
+	contextFilesMaxBytes: number;
 	/** Whether a thread saves and restores the files pi left uncommitted (`worktree_snapshots`). */
 	worktreeSnapshots: boolean;
 	/** What a snapshot leaves out of the untracked files. */
@@ -177,6 +181,11 @@ export function readActionInputs(
 		trustProject:
 			parseBoolean(readInput("trust_project")) ?? DEFAULTS.trustProject,
 		agentDir: readInput("agent_dir").trim() || undefined,
+		contextFiles:
+			parseBoolean(readInput("context_files")) ?? DEFAULTS.contextFiles,
+		contextFilesMaxBytes:
+			parsePositiveInteger(readInput("context_files_max_bytes")) ??
+			DEFAULTS.contextFilesMaxBytes,
 		worktreeSnapshots:
 			parseBoolean(readInput("worktree_snapshots")) ??
 			DEFAULTS.worktreeSnapshots,
