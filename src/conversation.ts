@@ -121,6 +121,8 @@ function withCause(error: unknown): string {
  */
 export class ThreadConversation {
 	private readonly handled = new Set<string>();
+	/** How many triggers were submitted to the thread (rejected ones are not). */
+	private submitted = 0;
 	private readonly pending = new Set<Promise<void>>();
 	private delivering: Promise<void> = Promise.resolve();
 	private posted = new Map<string, string>();
@@ -182,13 +184,33 @@ export class ThreadConversation {
 	private async submitAll(triggers: Trigger[]): Promise<void> {
 		for (const trigger of triggers) {
 			if (!this.handled.has(trigger.key)) {
-				const first = this.options.thread.isNew && this.handled.size === 0;
 				this.handled.add(trigger.key);
 				// oxlint-disable-next-line eslint/no-await-in-loop -- triggers are submitted in order
-				const content = await this.options.message(trigger, first);
-				this.track(trigger, this.answer(trigger, content));
+				await this.submitOne(trigger);
 			}
 		}
+	}
+
+	/** Submit a trigger, or reply with its error when it is rejected. */
+	private async submitOne(trigger: Trigger): Promise<void> {
+		if (trigger.rejected !== undefined) {
+			this.reject(trigger, trigger.rejected);
+			return;
+		}
+		const first = this.options.thread.isNew && this.submitted === 0;
+		this.submitted += 1;
+		const content = await this.options.message(trigger, first);
+		this.track(trigger, this.answer(trigger, content));
+	}
+
+	/** A trigger pi does not get (an unknown skill, say): its error is the reply, posted once. */
+	private reject(trigger: Trigger, error: string): void {
+		this.options.started?.(trigger);
+		this.enqueueDelivery(trigger, {
+			key: `rejected-${trigger.key}`,
+			empty: false,
+			result: { success: false, error },
+		});
 	}
 
 	/** The errors of triggers that got no answer, not even a failed one; empty when every trigger was answered. */
@@ -332,6 +354,9 @@ export class ThreadConversation {
 				...(trigger.template
 					? { template: trigger.template.name, typed: trigger.template.typed }
 					: {}),
+				...(trigger.skill
+					? { skill: trigger.skill.name, typed: trigger.skill.typed }
+					: {}),
 			},
 			...(answer
 				? {
@@ -443,7 +468,7 @@ export class ThreadConversation {
 }
 
 interface SettledResult {
-	/** `answer-<entryId>`, `error-<submissionId>`, or `failed-<trigger key>`: what is delivered once. */
+	/** `answer-<entryId>`, `error-<submissionId>`, `failed-<trigger key>`, or `rejected-<trigger key>`: what is delivered once. */
 	key: string;
 	empty: boolean;
 	result: ThreadResult;
