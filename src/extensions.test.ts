@@ -348,6 +348,12 @@ describe("loadExtensions: pi-durable extension packages", () => {
 		expect(loaded.durable.map((d) => d.source)).toStrictEqual([
 			"test/fixtures/extensions/durable-ask/durable.ts",
 		]);
+		expect(loaded.prompts).toStrictEqual([
+			{
+				source: "pi-action-durable-ask",
+				paths: [resolve(DURABLE_FIXTURE, "prompts")],
+			},
+		]);
 		expect(log.info).toHaveBeenCalledWith(
 			`${resolve(DURABLE_FIXTURE)} has a pi-durable extension (pi.durable) and pi extensions (pi.extensions); loading only the pi-durable one, as the others need pi's coding agent`,
 		);
@@ -429,5 +435,42 @@ describe("loadExtensions: pi-durable extension packages", () => {
 		expect(aliases["@earendil-works/pi-durable"]).toBe(
 			fileURLToPath(import.meta.resolve("@earendil-works/pi-durable")),
 		);
+	});
+});
+
+describe("loadExtensions: prompt templates", () => {
+	it("takes pi.prompts paths and globs from any package, under its name or directory", async () => {
+		const cwd = tempDir();
+		write(
+			join(cwd, "named/package.json"),
+			JSON.stringify({
+				name: "@acme/prompts",
+				pi: { prompts: ["./a.md", "./more/*.md", "!./more/skip.md", 3] },
+			}),
+		);
+		write(join(cwd, "named/a.md"), "A");
+		write(join(cwd, "named/more/b.md"), "B");
+		write(join(cwd, "named/more/skip.md"), "skip");
+		write(
+			join(cwd, "plain/package.json"),
+			JSON.stringify({ pi: { prompts: ["./prompts"] } }),
+		);
+		const log = createLogger();
+
+		const loaded = await loadExtensions({
+			specs: ["./named", "./plain"],
+			cwd,
+			log,
+		});
+
+		expect(loaded.prompts).toStrictEqual([
+			{
+				source: "@acme/prompts",
+				paths: [join(cwd, "named/a.md"), join(cwd, "named/more/b.md")],
+			},
+			{ source: "plain", paths: [] },
+		]);
+		expect(loaded.durable).toStrictEqual([]);
+		expect(warnings(log)).toStrictEqual([]);
 	});
 });
