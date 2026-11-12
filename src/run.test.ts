@@ -20,7 +20,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { withReplyReminder } from "./context.ts";
 import type { ActionInputs } from "./inputs.ts";
 import { pushThread } from "./push.ts";
-import { type ActionDependencies, run } from "./run.ts";
+import { type ActionDependencies, type Logger, run } from "./run.ts";
 import {
 	createActionInputs,
 	createComment,
