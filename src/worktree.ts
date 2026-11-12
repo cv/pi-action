@@ -25,7 +25,6 @@ import {
 	restoreSnapshot,
 	type SnapshotLimits,
 	type SnapshotRecord,
-	stashState,
 	stateKey,
 	writeStash,
 } from "./storage/worktree.ts";
@@ -151,20 +150,6 @@ export class WorktreeContinuity {
 			return undefined;
 		}
 		return readSnapshot(this.options.cwd, doc.wrapper);
-	}
-
-	/**
-	 * Take the snapshot the conversation points at as the last saved state, without restoring it (the `always()`
-	 * step, which saves what the main step left): a checkpoint then saves only what differs from it.
-	 */
-	async resumeFrom(): Promise<void> {
-		const target = await this.target();
-		this.lastKey =
-			target === undefined
-				? undefined
-				: stateKey(
-						await stashState(this.options.cwd, target.stash, target.branch),
-					);
 	}
 
 	/** Point the conversation at `record`: the document and a marker entry, in one commit. */

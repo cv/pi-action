@@ -144,7 +144,7 @@ export function readCustomProviderConfig(
 const MB = 1024 * 1024;
 
 /** The `worktree_snapshot_*` inputs. */
-export function readWorktreeLimits(readInput: InputReader): SnapshotLimits {
+function readWorktreeLimits(readInput: InputReader): SnapshotLimits {
 	return {
 		maxFileBytes:
 			(parsePositiveInteger(readInput("worktree_snapshot_max_file_mb")) ??
@@ -154,13 +154,6 @@ export function readWorktreeLimits(readInput: InputReader): SnapshotLimits {
 				DEFAULTS.worktreeSnapshotMaxTotalMb) * MB,
 		exclude: parseExtensionSpecs(readInput("worktree_snapshot_exclude")),
 	};
-}
-
-/** `worktree_snapshots`: on unless set to false. */
-export function readWorktreeSnapshots(readInput: InputReader): boolean {
-	return (
-		parseBoolean(readInput("worktree_snapshots")) ?? DEFAULTS.worktreeSnapshots
-	);
 }
 
 export function readActionInputs(
@@ -192,7 +185,9 @@ export function readActionInputs(
 		trustProject:
 			parseBoolean(readInput("trust_project")) ?? DEFAULTS.trustProject,
 		agentDir: readInput("agent_dir").trim() || undefined,
-		worktreeSnapshots: readWorktreeSnapshots(readInput),
+		worktreeSnapshots:
+			parseBoolean(readInput("worktree_snapshots")) ??
+			DEFAULTS.worktreeSnapshots,
 		worktreeLimits: readWorktreeLimits(readInput),
 	};
 }

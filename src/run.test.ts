@@ -21,7 +21,6 @@ import { withReplyReminder } from "./context.ts";
 import type { ActionInputs } from "./inputs.ts";
 import { pushThread } from "./push.ts";
 import { type ActionDependencies, run } from "./run.ts";
-import { DEFAULT_SNAPSHOT_LIMITS } from "./storage/worktree.ts";
 import {
 	createActionInputs,
 	createComment,
@@ -997,50 +996,30 @@ describe("run (durable) with working-tree continuity", () => {
 		).toBe(true);
 	});
 
-	it("saves what a killed main step left, in the always() step, for the next run", async () => {
+	it("pushes the snapshots the main step left unpushed, in the always() step", async () => {
 		const w = world();
 		w.faux.setResponses([
-			fauxAssistantMessage("ok"),
 			fauxAssistantMessage(
-				[fauxToolCall("bash", { command: "cat late.txt" })],
+				[fauxToolCall("bash", { command: "echo x > x.txt" })],
 				{ stopReason: "toolUse" },
 			),
-			(context) => fauxAssistantMessage(`Found: ${toolText(context.messages)}`),
+			fauxAssistantMessage("done"),
 		]);
 		const deps = w.deps(w.comment("@pi go"));
 		await run(deps);
-		// The main step was killed after pi wrote a file, before the next turn boundary.
-		writeFileSync(join(deps.cwd, "late.txt"), "written late\n");
+		// The main step was killed before its last push of the snapshots.
+		git(deps.cwd, "push", "-q", "origin", `:${WORKTREES}`);
 		const log = { info: vi.fn(), warning: vi.fn() };
-		await expect(
-			pushThread(
-				deps.payload,
-				deps.cwd,
-				log,
-				undefined,
-				DEFAULT_SNAPSHOT_LIMITS,
-			),
-		).resolves.toBe("pushed");
-		expect(log.warning).not.toHaveBeenCalled();
-		expect(git(w.remote, "rev-parse", REF).trim()).toBe(
-			git(deps.cwd, "rev-parse", REF).trim(),
+		await expect(pushThread(deps.payload, deps.cwd, log)).resolves.toBe(
+			"pushed",
 		);
+		expect(log.warning).not.toHaveBeenCalled();
 		expect(git(w.remote, "rev-parse", WORKTREES).trim()).toBe(
 			git(deps.cwd, "rev-parse", WORKTREES).trim(),
 		);
-		// Nothing changed since: nothing to save or push.
-		await expect(
-			pushThread(
-				deps.payload,
-				deps.cwd,
-				log,
-				undefined,
-				DEFAULT_SNAPSHOT_LIMITS,
-			),
-		).resolves.toBe("up-to-date");
-
-		await run(w.deps(w.comment("@pi go on")));
-		expect(w.gh.posted[1]).toContain("Found: written late");
+		await expect(pushThread(deps.payload, deps.cwd, log)).resolves.toBe(
+			"up-to-date",
+		);
 	});
 
 	it("saves nothing with worktree_snapshots: false", async () => {

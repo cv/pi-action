@@ -194,16 +194,11 @@ runs:
         INPUT_PROMPT: ${{ inputs.prompt }}
         INPUT_PR_NUMBER: ${{ inputs.pr_number }}
 
-    # Pushes the thread's refs/pi/threads/<number> (and refs/pi/worktrees/<number>, after saving the working tree
-    # once more) if the step above was cancelled, timed out, or crashed before its own final push. Fast-forward
-    # only: it never overwrites another run's history.
+    # Pushes the thread's refs/pi/threads/<number> (and refs/pi/worktrees/<number>) if the step above was cancelled,
+    # timed out, or crashed before its own final push. Fast-forward only: it never overwrites another run's history.
     - name: Save pi thread state
       if: always()
       shell: bash
       run: node --disable-warning=ExperimentalWarning ${{ github.action_path }}/src/push.ts
       env:
         INPUT_PR_NUMBER: ${{ inputs.pr_number }}
-        INPUT_WORKTREE_SNAPSHOTS: ${{ inputs.worktree_snapshots }}
-        INPUT_WORKTREE_SNAPSHOT_MAX_FILE_MB: ${{ inputs.worktree_snapshot_max_file_mb }}
-        INPUT_WORKTREE_SNAPSHOT_MAX_TOTAL_MB: ${{ inputs.worktree_snapshot_max_total_mb }}
-        INPUT_WORKTREE_SNAPSHOT_EXCLUDE: ${{ inputs.worktree_snapshot_exclude }}

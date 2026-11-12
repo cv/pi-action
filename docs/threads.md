@@ -20,7 +20,7 @@ pi-action pushes the thread ref at these times:
 - After each model response and each tool result.
 - When the run is cancelled (SIGINT or SIGTERM).
 - At the end of the run.
-- In the `Save pi thread state` step of the action, which has `if: always()`. This step pushes commits that the main step did not push, for example after a crash or a timeout. It also saves the working tree one more time (see [Working-tree continuity](#working-tree-continuity)).
+- In the `Save pi thread state` step of the action, which has `if: always()`. This step pushes commits that the main step did not push, for example after a crash or a timeout.
 
 When a run stops before its work is complete, the next run on the thread continues the work.
 
@@ -47,7 +47,7 @@ A thread also keeps the files that pi leaves uncommitted. Each run starts from a
 
 ### What pi-action saves
 
-pi-action saves a **snapshot** of the working tree after each model response and tool result, at the end of the run, and in the `Save pi thread state` step. It saves a snapshot only when the files changed since the last snapshot. A snapshot contains:
+pi-action saves a **snapshot** of the working tree after each model response and tool result, and at the end of the run. It saves a snapshot only when the files changed since the last snapshot. A snapshot contains:
 
 - Changes to tracked files: modified, deleted, staged, and partially staged files, file modes (such as the executable bit), and symbolic links.
 - Untracked files that git does not ignore.

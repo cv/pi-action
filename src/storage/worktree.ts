@@ -309,28 +309,6 @@ export async function writeStash(
 	);
 }
 
-/** The state a stash commit holds (the branch comes from its wrapper). */
-export async function stashState(
-	cwd: string,
-	stash: string,
-	branch: string | undefined,
-): Promise<Omit<WorktreeState, "skipped" | "headTree">> {
-	const parents = (await git(cwd, ["rev-list", "--parents", "-n", "1", stash]))
-		.trim()
-		.split(" ")
-		.slice(1);
-	const [head = "", index = "", untracked] = parents;
-	const tree = async (commit: string) =>
-		trim(git(cwd, ["rev-parse", `${commit}^{tree}`]));
-	return {
-		head,
-		branch,
-		indexTree: await tree(index),
-		worktreeTree: await tree(stash),
-		untrackedTree: untracked === undefined ? undefined : await tree(untracked),
-	};
-}
-
 export interface RecordInput {
 	readonly stash: string;
 	readonly head: string;

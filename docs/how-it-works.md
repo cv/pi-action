@@ -9,7 +9,7 @@ The action is a composite action ([`action.yml`](../action.yml)). Its steps are:
 1. **Node.js.** If the Node.js of the job is older than version 24, the action installs Node.js 24.
 2. **Dependencies.** The action installs its runtime npm dependencies (`npm ci --omit=dev --ignore-scripts`) in its own directory.
 3. **The run** ([`src/index.ts`](../src/index.ts)). See [The run](#the-run).
-4. **Save pi thread state** ([`src/push.ts`](../src/push.ts)). This step has `if: always()`. It saves the working tree one more time, and pushes the thread if the run did not push all of it, for example after a cancellation, a timeout, or a crash.
+4. **Save pi thread state** ([`src/push.ts`](../src/push.ts)). This step has `if: always()`. It pushes the thread (and its working-tree snapshots) if the run did not push all of it, for example after a cancellation, a timeout, or a crash.
 
 The action does not change your checkout before the run. In particular, it installs no git hooks: pi follows the conventions of your repository. See [Commit conventions](#commit-conventions).
 
