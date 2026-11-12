@@ -137,16 +137,17 @@ function pushOnSignals(thread: Thread, log: Log): () => void {
 	};
 }
 
-/** One line for the model and the pi-durable extensions, after the setup group. */
+/** One line for the model, the tools it gets, and the pi-durable extensions, after the setup group. */
 function describeSetup(
 	inputs: ActionInputs,
 	extensions: readonly Extension[],
+	modelTools: readonly string[],
 ): string {
 	const loaded = extensions.map(
 		(extension) =>
 			`${extension.name} (${(extension.tools ?? []).map((tool) => tool.name).join(", ") || "no tools"})`,
 	);
-	return `🤖 ${inputs.provider}/${inputs.model}${loaded.length > 0 ? ` · extensions: ${loaded.join(", ")}` : ""}`;
+	return `🤖 ${inputs.provider}/${inputs.model} · tools: ${modelTools.join(", ")}${loaded.length > 0 ? ` · extensions: ${loaded.join(", ")}` : ""}`;
 }
 
 /** One line for a request as pi gets it: who, where, and its first line. */
@@ -324,7 +325,6 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			log.endGroup();
 		}
 		const { models, extensions, tools, ui } = setup;
-		log.info(describeSetup(inputs, extensions));
 		const opened = await Thread.open({
 			cwd: deps.cwd,
 			issueNumber,
@@ -333,6 +333,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			log,
 			remote: deps.remote,
 			extensions,
+			tools: { exclude: inputs.excludeTools, hidden: inputs.modelToolsHidden },
 			toolEnv: tools,
 			worktree: worktreeLimits(deps),
 			onEntries: (entries) => {
@@ -340,6 +341,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			},
 		});
 		thread = opened;
+		log.info(describeSetup(inputs, extensions, opened.modelTools));
 		stopSignals = pushOnSignals(opened, log);
 		announceThread(deps, opened);
 		// New comments: on a new thread, from the time of the trigger; on an existing one, since it began.
