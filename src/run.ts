@@ -5,6 +5,7 @@ import type { Models } from "@earendil-works/pi-ai/models";
 import type { Extension } from "@earendil-works/pi-durable";
 
 import { Activity, formatStats, oneLine } from "./activity.ts";
+import { loadProjectContext } from "./context-files.ts";
 import {
 	buildPrompt,
 	formatFollowUp,
@@ -22,6 +23,7 @@ import {
 } from "./formatting.ts";
 import { createGitHubUi, type GitHubUi } from "./github-ui.ts";
 import {
+	fieldAt,
 	type GitHubClient,
 	isForkPullRequest,
 	type ReactionTarget,
@@ -126,6 +128,7 @@ async function setUp(
 	tools: Record<string, string>;
 	ui: GitHubUi | undefined;
 	templates: PromptTemplates;
+	context: string | undefined;
 }> {
 	const { inputs, log, cwd } = deps;
 	const env = deps.env ?? process.env;
@@ -167,7 +170,43 @@ async function setUp(
 		tools,
 		ui,
 		templates: promptTemplates(deps, loaded.prompts),
+		context: await projectContext(deps, env),
 	};
+}
+
+/** On a pull request from a fork, the base commit to read the context files from (its author controls the checkout). */
+function forkBase(
+	deps: ActionDependencies,
+): { sha: string; remote: string } | undefined {
+	if (!isForkPullRequest(deps.payload)) {
+		return undefined;
+	}
+	const sha = fieldAt(deps.payload, "pull_request", "base", "sha");
+	return {
+		sha: typeof sha === "string" ? sha : "",
+		remote: deps.remote ?? "origin",
+	};
+}
+
+/** The `project_context` section of the run (the `context_files` input), read once. */
+async function projectContext(
+	deps: ActionDependencies,
+	env: Env,
+): Promise<string | undefined> {
+	const { inputs, log, cwd } = deps;
+	if (!inputs.contextFiles) {
+		log.info("Context files: off (context_files)");
+		return undefined;
+	}
+	const loaded = await loadProjectContext({
+		cwd,
+		workspace: env["GITHUB_WORKSPACE"] || undefined,
+		agentDir: inputs.agentDir ? resolve(cwd, inputs.agentDir) : undefined,
+		maxBytes: inputs.contextFilesMaxBytes,
+		base: forkBase(deps),
+		log,
+	});
+	return loaded.text;
 }
 
 /** On cancellation (SIGINT, then SIGTERM), push what the thread has so far before the runner kills us. */
@@ -384,7 +423,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		} finally {
 			log.endGroup();
 		}
-		const { models, extensions, tools, ui, templates } = setup;
+		const { models, extensions, tools, ui, templates, context } = setup;
 		const expand = (triggers: Trigger[]) =>
 			triggers.map((trigger) => expandTrigger(trigger, templates));
 		const opened = await Thread.open({
@@ -394,6 +433,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			model: findModel(models, inputs.provider, inputs.model),
 			log,
 			remote: deps.remote,
+			projectContext: context,
 			extensions,
 			tools: { exclude: inputs.excludeTools, hidden: inputs.modelToolsHidden },
 			toolEnv: tools,
