@@ -1,4 +1,5 @@
 import {
+	debug,
 	getInput,
 	endGroup,
 	info,
@@ -26,6 +27,7 @@ run({
 		}),
 	log: {
 		info,
+		debug,
 		warning,
 		error: logError,
 		setFailed,
