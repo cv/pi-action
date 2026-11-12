@@ -57,8 +57,8 @@ pi-action saves a **snapshot** of the working tree after each model response and
 A snapshot does not contain:
 
 - Files that git ignores (`.gitignore`, `.git/info/exclude`), for example `node_modules`, build output, or an ignored `.env`.
-- Untracked files larger than `worktree_snapshot_max_file_mb` (default 10 MB).
-- Untracked files past `worktree_snapshot_max_total_mb` for all untracked files of the snapshot (default 100 MB).
+- Untracked files larger than 10 MB.
+- Untracked files past 100 MB for all untracked files of the snapshot.
 - Untracked files that match a glob in `worktree_snapshot_exclude` (default empty). The globs work as in `.gitignore`: `.env*` matches `config/.env.local`, and `docs/**/a.txt` matches `docs/secrets/a.txt`.
 
 These limits apply to untracked files only. Changes to tracked files are always saved. When pi-action does not save a file because of its size, the message to pi in the next run lists the file and the reason.

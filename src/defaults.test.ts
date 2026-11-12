@@ -26,11 +26,6 @@ const DEFAULT_CASES = [
 	["output_mode", DEFAULTS.outputMode],
 	["trust_project", String(DEFAULTS.trustProject)],
 	["worktree_snapshots", String(DEFAULTS.worktreeSnapshots)],
-	["worktree_snapshot_max_file_mb", String(DEFAULTS.worktreeSnapshotMaxFileMb)],
-	[
-		"worktree_snapshot_max_total_mb",
-		String(DEFAULTS.worktreeSnapshotMaxTotalMb),
-	],
 ] as const;
 
 function getActionInputDefault(inputName: string): string {

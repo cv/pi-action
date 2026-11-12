@@ -4,7 +4,10 @@ import type {
 	ModelInputMode,
 } from "./custom-provider.ts";
 import { DEFAULTS } from "./defaults.ts";
-import type { SnapshotLimits } from "./storage/worktree.ts";
+import {
+	DEFAULT_SNAPSHOT_LIMITS,
+	type SnapshotLimits,
+} from "./storage/worktree.ts";
 
 export type InputReader = (name: string) => string;
 
@@ -141,21 +144,6 @@ export function readCustomProviderConfig(
 	};
 }
 
-const MB = 1024 * 1024;
-
-/** The `worktree_snapshot_*` inputs. */
-function readWorktreeLimits(readInput: InputReader): SnapshotLimits {
-	return {
-		maxFileBytes:
-			(parsePositiveInteger(readInput("worktree_snapshot_max_file_mb")) ??
-				DEFAULTS.worktreeSnapshotMaxFileMb) * MB,
-		maxTotalBytes:
-			(parsePositiveInteger(readInput("worktree_snapshot_max_total_mb")) ??
-				DEFAULTS.worktreeSnapshotMaxTotalMb) * MB,
-		exclude: parseExtensionSpecs(readInput("worktree_snapshot_exclude")),
-	};
-}
-
 export function readActionInputs(
 	readInput: InputReader,
 	env: Record<string, string | undefined> = process.env,
@@ -188,6 +176,9 @@ export function readActionInputs(
 		worktreeSnapshots:
 			parseBoolean(readInput("worktree_snapshots")) ??
 			DEFAULTS.worktreeSnapshots,
-		worktreeLimits: readWorktreeLimits(readInput),
+		worktreeLimits: {
+			...DEFAULT_SNAPSHOT_LIMITS,
+			exclude: parseExtensionSpecs(readInput("worktree_snapshot_exclude")),
+		},
 	};
 }

@@ -99,8 +99,6 @@ Only `github_token` is necessary. All other inputs have a default or are optiona
 | `trust_project` | Let pi-durable extensions load and run the configuration of the repository (see [Extensions](docs/extensions.md#trust_project)) | No | `false` |
 | `agent_dir` | Agent directory (user-level state) for pi-durable extensions, relative to the workspace | No | (a new temporary directory in `RUNNER_TEMP`) |
 | `worktree_snapshots` | Save the files pi leaves uncommitted with the thread, and restore them at the start of the next run (see [Working-tree continuity](docs/threads.md#working-tree-continuity)) | No | `true` |
-| `worktree_snapshot_max_file_mb` | Untracked files larger than this (in MB) are not saved in a snapshot | No | `10` |
-| `worktree_snapshot_max_total_mb` | Untracked files past this total (in MB) are not saved in a snapshot | No | `100` |
 | `worktree_snapshot_exclude` | Globs (as in `.gitignore`) of untracked files never to save in a snapshot, one per line or comma-separated, for example `.env*, *.pem, *.key, id_rsa*`. Ignored files are never saved | No | - |
 | `prompt_template` | Template for the first message of a new thread (see [Prompts](docs/prompts.md#custom-templates)) | No | (built-in prompt) |
 | `output_mode` | `comment`: post to the issue or pull request. `output`: set the step outputs only | No | `comment` |

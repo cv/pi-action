@@ -9,6 +9,7 @@ import {
 	readActionInputs,
 	readCustomProviderConfig,
 } from "./inputs.ts";
+import { DEFAULT_SNAPSHOT_LIMITS } from "./storage/worktree.ts";
 import { createActionInputs } from "./test-helpers.ts";
 
 const reader =
@@ -186,20 +187,17 @@ describe("parsers", () => {
 });
 
 describe("working-tree snapshot inputs", () => {
-	it("reads the switch and the limits, in MB, with the globs to exclude", () => {
+	it("reads the switch and the globs to exclude", () => {
 		const inputs = readActionInputs(
 			reader({
 				worktree_snapshots: "off",
-				worktree_snapshot_max_file_mb: "2",
-				worktree_snapshot_max_total_mb: "20",
 				worktree_snapshot_exclude: ".env*, *.pem\n# keys\nid_rsa*",
 			}),
 			{},
 		);
 		expect(inputs.worktreeSnapshots).toBe(false);
 		expect(inputs.worktreeLimits).toStrictEqual({
-			maxFileBytes: 2 * 1024 * 1024,
-			maxTotalBytes: 20 * 1024 * 1024,
+			...DEFAULT_SNAPSHOT_LIMITS,
 			exclude: [".env*", "*.pem", "id_rsa*"],
 		});
 	});
@@ -212,30 +210,5 @@ describe("working-tree snapshot inputs", () => {
 			readActionInputs(reader({ worktree_snapshots: value }), {})
 				.worktreeSnapshots,
 		).toBe(expected);
-	});
-
-	it.each(
-		(
-			[
-				[
-					"worktree_snapshot_max_file_mb",
-					"maxFileBytes",
-					DEFAULTS.worktreeSnapshotMaxFileMb,
-				],
-				[
-					"worktree_snapshot_max_total_mb",
-					"maxTotalBytes",
-					DEFAULTS.worktreeSnapshotMaxTotalMb,
-				],
-			] as const
-		).flatMap(([name, key, mb]) =>
-			["", "0", "-1", "1.5", "abc"].map(
-				(value) => [name, value, key, mb] as const,
-			),
-		),
-	)("falls back to the default of %s for %o", (name, value, key, mb) => {
-		const { worktreeLimits } = readActionInputs(reader({ [name]: value }), {});
-		expect(worktreeLimits[key]).toBe(mb * 1024 * 1024);
-		expect(worktreeLimits.exclude).toStrictEqual([]);
 	});
 });
