@@ -295,7 +295,7 @@ describe("Activity", () => {
 			expect(r.lines[at + 2]).toBe(`::${token}::`);
 			expect(r.lines[at + 3]).toBe("::endgroup::");
 		}
-		expect(r.lines[r.lines.indexOf(stops[1] ?? "") + 1]).toContain(
+		expect(r.lines[r.lines.indexOf(String(stops[1])) + 1]).toContain(
 			"::error file=",
 		);
 		// Arguments without commands are logged as they are.
