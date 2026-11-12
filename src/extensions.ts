@@ -548,8 +548,8 @@ async function loadEntry(
 }
 
 /**
- * Loads one installed package or path: its pi-durable extension when it declares one (`pi.durable`), else its pi
- * extensions, for their providers.
+ * Loads one installed package or path: its prompt templates (`pi.prompts`), and its pi-durable extension when it
+ * declares one (`pi.durable`), else its pi extensions, for their providers.
  */
 async function loadRoot(
 	root: { name: string; path: string },
@@ -575,7 +575,7 @@ async function loadRoot(
 		return;
 	}
 	const entries = findExtensionEntries(root.path);
-	if (entries.length === 0) {
+	if (entries.length === 0 && prompts === undefined) {
 		log.warning(
 			`${root.name} has no pi extensions; it is installed for other extensions to import`,
 		);
