@@ -27,6 +27,7 @@ import {
 	restoreSnapshot,
 	type SnapshotLimits,
 	type SnapshotRecord,
+	stashState,
 	stateKey,
 	uniqueWork,
 	type UniqueWork,
@@ -201,6 +202,20 @@ export class WorktreeContinuity {
 		return readSnapshot(this.options.cwd, doc.wrapper);
 	}
 
+	/**
+	 * Take the snapshot the conversation points at as the last saved state, without restoring it (the `always()`
+	 * step, which saves what the main step left): a checkpoint then saves only what differs from it.
+	 */
+	async resumeFrom(): Promise<void> {
+		const target = await this.target();
+		this.lastKey =
+			target === undefined
+				? undefined
+				: stateKey(
+						await stashState(this.options.cwd, target.stash, target.branch),
+					);
+	}
+
 	/** Point the conversation at `record`: the document and a marker entry, in one commit. */
 	private async point(record: SnapshotRecord): Promise<void> {
 		const { root } = this.attached();
@@ -343,11 +358,13 @@ export class WorktreeContinuity {
 				return choice;
 			}
 			const { record, note } = choice;
-			const before = await captureState(cwd, limits);
 			if (record === undefined) {
-				this.lastKey = stateKey(before);
+				this.lastKey = await captureState(cwd, limits)
+					.then(stateKey)
+					.catch(() => undefined);
 				return { kind: "ready", message: undefined };
 			}
+			const before = await captureState(cwd, limits);
 			if (
 				before.indexTree !== before.headTree ||
 				before.worktreeTree !== before.headTree

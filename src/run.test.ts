@@ -22,6 +22,12 @@ import type { ActionInputs } from "./inputs.ts";
 import { pushThread } from "./push.ts";
 import { type ActionDependencies, run } from "./run.ts";
 import {
+	captureState,
+	DEFAULT_SNAPSHOT_LIMITS,
+	recordSnapshot,
+	writeStash,
+} from "./storage/worktree.ts";
+import {
 	createActionInputs,
 	createComment,
 	createLogger,
@@ -32,6 +38,7 @@ import {
 	tempRemote,
 } from "./test-helpers.ts";
 import type { GitHubComment, GitHubReaction } from "./types.ts";
+import { REWIND_OPTION } from "./worktree.ts";
 
 const REF = "refs/pi/threads/42";
 const FIRST_COMMIT = /pi-durable: seq 1 /u;
@@ -117,6 +124,38 @@ const toolText = (messages: { role: string; content: unknown }[]): string => {
 		? (result.content as { text?: string }[]).map((b) => b.text ?? "").join("")
 		: "";
 };
+
+/** Someone with write access ticks `label` on question comment `id`: the `issue_comment` `edited` event. */
+function tickEvent(
+	gh: ReturnType<typeof createMockGitHubClient>,
+	id: number,
+	label: string,
+	sender = "ada",
+) {
+	const before = gh.bodies.get(id) ?? "";
+	const after = before.replace(`- [ ] ${label}`, `- [x] ${label}`);
+	gh.bodies.set(id, after);
+	return {
+		action: "edited",
+		issue: {
+			number: 42,
+			title: "Fix the thing",
+			body: "It is broken",
+			user: { login: "o", type: "User" },
+		},
+		comment: {
+			id,
+			body: after,
+			user: { login: "github-actions[bot]", type: "Bot" },
+			author_association: "NONE",
+			created_at: new Date().toISOString(),
+			updated_at: new Date().toISOString(),
+			html_url: `https://github.com/o/r/issues/42#issuecomment-${id}`,
+		},
+		changes: { body: { from: before } },
+		sender: { login: sender, type: "User" },
+	};
+}
 
 /** Git as on a runner: no global or system config, so no identity. */
 function runnerGitEnv(): Record<string, string> {
@@ -809,32 +848,8 @@ describe("run with a pi-durable extension (installed from npm)", () => {
 			deps.env = { ...process.env, ...deps.env, RUNNER_TEMP: runnerTemp };
 			return deps;
 		};
-		/** Someone with write access ticks `label` on question comment `id`: the `issue_comment` `edited` event. */
-		const tick = (id: number, label: string, sender = "ada") => {
-			const before = w.gh.bodies.get(id) ?? "";
-			const after = before.replace(`- [ ] ${label}`, `- [x] ${label}`);
-			w.gh.bodies.set(id, after);
-			return {
-				action: "edited",
-				issue: {
-					number: 42,
-					title: "Fix the thing",
-					body: "It is broken",
-					user: { login: "o", type: "User" },
-				},
-				comment: {
-					id,
-					body: after,
-					user: { login: "github-actions[bot]", type: "Bot" },
-					author_association: "NONE",
-					created_at: new Date().toISOString(),
-					updated_at: new Date().toISOString(),
-					html_url: `https://github.com/o/r/issues/42#issuecomment-${id}`,
-				},
-				changes: { body: { from: before } },
-				sender: { login: sender, type: "User" },
-			};
-		};
+		const tick = (id: number, label: string, sender = "ada") =>
+			tickEvent(w.gh, id, label, sender);
 		return { ...w, durableDeps, tick, runnerTemp, deps: durableDeps() };
 	}
 
@@ -939,4 +954,163 @@ describe("run with a pi-durable extension (installed from npm)", () => {
 			"durable-ask: trustProject=true",
 		);
 	}, 120_000);
+});
+
+describe("run (durable) with working-tree continuity", () => {
+	const WORKTREES = "refs/pi/worktrees/42";
+
+	it("restores the files a run left uncommitted in the next run, on a fresh runner", async () => {
+		const w = world();
+		let seen: string[] = [];
+		w.faux.setResponses([
+			fauxAssistantMessage(
+				[
+					fauxToolCall("bash", {
+						command:
+							"echo draft > notes.md && echo staged > staged.txt && git add staged.txt",
+					}),
+				],
+				{ stopReason: "toolUse" },
+			),
+			fauxAssistantMessage("Started; I'll finish later."),
+			fauxAssistantMessage(
+				[
+					fauxToolCall("bash", {
+						command: "cat notes.md && git status --porcelain",
+					}),
+				],
+				{ stopReason: "toolUse" },
+			),
+			(context) => {
+				seen = userTexts(context.messages);
+				return fauxAssistantMessage(`Found: ${toolText(context.messages)}`);
+			},
+		]);
+		await run(w.deps(w.comment("@pi start")));
+		// Both refs are on the remote, together.
+		const wrapper = git(w.remote, "rev-parse", WORKTREES).trim();
+		const stash = git(
+			w.remote,
+			"log",
+			"-1",
+			"--format=%(trailers:key=Snapshot,valueonly)",
+			wrapper,
+		).trim();
+		expect(git(w.remote, "show", `${stash}^3:notes.md`)).toBe("draft\n");
+		expect(git(w.remote, "log", "-1", "--format=%B", WORKTREES)).toContain(
+			"Thread-Tip: ",
+		);
+
+		await run(w.deps(w.comment("@pi go on")));
+
+		expect(w.gh.posted[1]).toContain(
+			"Found: draft\nA  staged.txt\n?? notes.md",
+		);
+		expect(
+			seen.some((text) => text.includes("pi-action restored the files")),
+		).toBe(true);
+	});
+
+	it("saves what a killed main step left, in the always() step, for the next run", async () => {
+		const w = world();
+		w.faux.setResponses([
+			fauxAssistantMessage("ok"),
+			fauxAssistantMessage(
+				[fauxToolCall("bash", { command: "cat late.txt" })],
+				{ stopReason: "toolUse" },
+			),
+			(context) => fauxAssistantMessage(`Found: ${toolText(context.messages)}`),
+		]);
+		const deps = w.deps(w.comment("@pi go"));
+		await run(deps);
+		// The main step was killed after pi wrote a file, before the next turn boundary.
+		writeFileSync(join(deps.cwd, "late.txt"), "written late\n");
+		const log = { info: vi.fn(), warning: vi.fn() };
+		await expect(
+			pushThread(
+				deps.payload,
+				deps.cwd,
+				log,
+				undefined,
+				DEFAULT_SNAPSHOT_LIMITS,
+			),
+		).resolves.toBe("pushed");
+		expect(log.warning).not.toHaveBeenCalled();
+		expect(git(w.remote, "rev-parse", REF).trim()).toBe(
+			git(deps.cwd, "rev-parse", REF).trim(),
+		);
+		expect(git(w.remote, "rev-parse", WORKTREES).trim()).toBe(
+			git(deps.cwd, "rev-parse", WORKTREES).trim(),
+		);
+		// Nothing changed since: nothing to save or push.
+		await expect(
+			pushThread(
+				deps.payload,
+				deps.cwd,
+				log,
+				undefined,
+				DEFAULT_SNAPSHOT_LIMITS,
+			),
+		).resolves.toBe("up-to-date");
+
+		await run(w.deps(w.comment("@pi go on")));
+		expect(w.gh.posted[1]).toContain("Found: written late");
+	});
+
+	it("asks before a rewind drops work only the newest snapshot has, and rewinds when told to", async () => {
+		const w = world();
+		w.faux.setResponses([
+			fauxAssistantMessage(
+				[fauxToolCall("bash", { command: "echo older > notes.md" })],
+				{ stopReason: "toolUse" },
+			),
+			fauxAssistantMessage("one"),
+			fauxAssistantMessage(
+				[fauxToolCall("bash", { command: "cat notes.md" })],
+				{ stopReason: "toolUse" },
+			),
+			(context) => fauxAssistantMessage(`Found: ${toolText(context.messages)}`),
+		]);
+		const first = w.deps(w.comment("@pi one"));
+		await run(first);
+		// A newer snapshot the conversation doesn't point at (as after a rewind), with work found nowhere else.
+		writeFileSync(join(first.cwd, "notes.md"), "newer, unique\n");
+		const state = await captureState(first.cwd);
+		const stash = await writeStash(first.cwd, state);
+		await recordSnapshot(first.cwd, WORKTREES, { ...state, stash });
+		git(first.cwd, "push", "-q", "origin", WORKTREES);
+
+		const asking = w.deps(w.comment("@pi two"));
+		await run(asking);
+		expect(w.gh.posted).toHaveLength(2);
+		expect(w.gh.posted[1]).toContain("Rewind the files too?");
+		expect(w.gh.posted[1]).toContain(`- [ ] ${REWIND_OPTION}`);
+		expect(asking.log.info).toHaveBeenCalledWith(
+			expect.stringContaining("the run ends until someone answers"),
+		);
+
+		const rewind = w.deps(undefined, {}, tickEvent(w.gh, 1002, REWIND_OPTION));
+		await run(rewind);
+		// The answer was pi-action's: the waiting comment is answered, with the older files.
+		expect(w.gh.posted).toHaveLength(3);
+		expect(w.gh.posted[2]).toContain("Found: older");
+	});
+
+	it("saves nothing with worktree_snapshots: false", async () => {
+		const w = world();
+		w.faux.setResponses([
+			fauxAssistantMessage(
+				[fauxToolCall("bash", { command: "echo x > x.txt" })],
+				{
+					stopReason: "toolUse",
+				},
+			),
+			fauxAssistantMessage("done"),
+		]);
+		await run(w.deps(w.comment("@pi go"), { worktreeSnapshots: false }));
+		expect(git(w.remote, "ls-remote", w.remote, "refs/pi/*")).not.toContain(
+			WORKTREES,
+		);
+		expect(git(w.remote, "ls-remote", w.remote, "refs/pi/*")).toContain(REF);
+	});
 });

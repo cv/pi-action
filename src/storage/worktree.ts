@@ -42,7 +42,7 @@ export const DEFAULT_SNAPSHOT_LIMITS: SnapshotLimits = {
 };
 
 /** An untracked file a snapshot left out, and why. */
-export interface Skipped {
+interface Skipped {
 	readonly path: string;
 	readonly reason: string;
 }
@@ -260,7 +260,8 @@ export async function captureState(
 				return headTree;
 			},
 		);
-		await run(top, ["add", "--update", "--", ":/"], { env });
+		// Without a pathspec, --update covers the whole working tree (and works in a repository with no files).
+		await run(top, ["add", "--update"], { env });
 		const worktreeTree = await trim(run(top, ["write-tree"], { env }));
 		const { keep, skipped } = await untrackedFiles(top, limits);
 		let untrackedTree: string | undefined;
@@ -480,9 +481,14 @@ export async function readSnapshot(
 			trailers.set(key, value);
 		}
 	}
+	// The snapshot is the wrapper's last parent (its only one on the first wrapper).
 	const stash =
 		trailers.get("Snapshot") ??
-		(await trim(git(cwd, ["rev-parse", `${wrapper}^2`])));
+		(await git(cwd, ["rev-list", "--parents", "-n", "1", wrapper]))
+			.trim()
+			.split(" ")
+			.at(-1) ??
+		"";
 	const head =
 		trailers.get("Head") ?? (await trim(git(cwd, ["rev-parse", `${stash}^1`])));
 	const branch = trailers.get("Branch");
@@ -853,34 +859,39 @@ async function startClean(
 	);
 }
 
-/** `git stash apply --index`, else without `--index`; conflicts are left in place. */
+/**
+ * `git stash apply --index`, else without `--index` (when that failed without touching anything); conflicts are left
+ * in place.
+ */
 async function applyStash(
 	cwd: string,
 	stash: string,
 ): Promise<{ staged: boolean; conflicts: string[] }> {
-	try {
-		await git(cwd, ["stash", "apply", "--quiet", "--index", stash]);
-		return { staged: true, conflicts: [] };
-	} catch (error) {
-		const conflicts = await unmergedFiles(cwd);
-		if (conflicts.length > 0) {
-			return { staged: false, conflicts };
-		}
-		const dirty = await git(cwd, ["status", "--porcelain"]);
-		if (dirty.trim() !== "") {
-			throw error;
+	for (const staged of [true, false]) {
+		try {
+			// oxlint-disable-next-line eslint/no-await-in-loop -- the second try only follows a failed first one
+			await git(cwd, [
+				"stash",
+				"apply",
+				"--quiet",
+				...(staged ? ["--index"] : []),
+				stash,
+			]);
+			return { staged, conflicts: [] };
+		} catch (error) {
+			// oxlint-disable-next-line eslint/no-await-in-loop -- see above
+			const conflicts = await unmergedFiles(cwd);
+			if (conflicts.length > 0) {
+				return { staged: false, conflicts };
+			}
+			// oxlint-disable-next-line eslint/no-await-in-loop -- see above
+			const dirty = (await git(cwd, ["status", "--porcelain"])).trim();
+			if (!staged || dirty !== "") {
+				throw error;
+			}
 		}
 	}
-	try {
-		await git(cwd, ["stash", "apply", "--quiet", stash]);
-		return { staged: false, conflicts: [] };
-	} catch (error) {
-		const conflicts = await unmergedFiles(cwd);
-		if (conflicts.length > 0) {
-			return { staged: false, conflicts };
-		}
-		throw error;
-	}
+	throw new Error(`Could not apply ${stash}`);
 }
 
 /**

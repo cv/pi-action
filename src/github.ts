@@ -249,3 +249,22 @@ export function createGitHubClient(
 		},
 	};
 }
+
+/** The value at `path` in a JSON-like value; undefined when it is missing. */
+export function fieldAt(value: unknown, ...path: string[]): unknown {
+	let current = value;
+	for (const key of path) {
+		current =
+			typeof current === "object" && current !== null
+				? Reflect.get(current, key)
+				: undefined;
+	}
+	return current;
+}
+
+/** A `pull_request` event from a fork: its token is read-only, so nothing can be pushed. */
+export function isForkPullRequest(payload: Record<string, unknown>): boolean {
+	const head = fieldAt(payload, "pull_request", "head", "repo", "full_name");
+	const base = fieldAt(payload, "pull_request", "base", "repo", "full_name");
+	return typeof head === "string" && typeof base === "string" && head !== base;
+}
