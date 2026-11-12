@@ -30,6 +30,7 @@ import {
 	git,
 	tempDir,
 	tempRemote,
+	toolsOf,
 } from "./test-helpers.ts";
 import type { GitHubComment, GitHubReaction } from "./types.ts";
 
@@ -246,6 +247,28 @@ describe("run (durable)", () => {
 		expect(w.reacted("rocket")).toStrictEqual([trigger.id]);
 		const log = git(w.remote, "log", "--format=%s", REF);
 		expect(log).toMatch(FIRST_COMMIT);
+	});
+
+	it("applies model_tools_hidden on each run, and clears it when the input is empty", async () => {
+		const w = world();
+		const seen: string[][] = [];
+		const record: FauxResponseStep = (context) => {
+			seen.push(toolsOf(context).map((tool) => tool.name));
+			return fauxAssistantMessage("ok");
+		};
+		w.faux.setResponses([record, record]);
+
+		const hidden = w.deps(w.comment("@pi one"), { modelToolsHidden: ["bash"] });
+		await run(hidden);
+		await run(w.deps(w.comment("@pi two")));
+
+		expect(seen).toStrictEqual([
+			["read", "write", "edit"],
+			["read", "write", "edit", "bash"],
+		]);
+		expect(hidden.log.info).toHaveBeenCalledWith(
+			expect.stringMatching(/ · tools: read, write, edit$/u),
+		);
 	});
 
 	it("logs the thread first, then what pi does, the reply, and where the thread ends up", async () => {
