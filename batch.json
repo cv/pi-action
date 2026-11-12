@@ -1,1 +1,1 @@
-{"format":1,"seq":497,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":498,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"\n> pi-action@2.3.0 typecheck\n> tsc -p tsconfig.build.json && tsc\n\n"]]}}]}
