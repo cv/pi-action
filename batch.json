@@ -1,1 +1,1 @@
-{"format":1,"seq":238,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"],["s",["tools",0,"output"]," M action.yml\n M src/defaults.ts\n M src/durable-extensions.ts\n M src/inputs.ts\n M src/run.ts\n M src/security.ts\n M src/test-helpers.ts\n M src/thread.ts\n?? src/context-files.ts\n"]]}}]}
+{"format":1,"seq":239,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"\n> pi-action@2.3.0 typecheck\n> tsc -p tsconfig.build.json && tsc\n\n"]]}}]}
