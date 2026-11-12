@@ -19,7 +19,7 @@ import {
 	type NpmRunner,
 } from "./extensions.ts";
 import type { Logger } from "./run.ts";
-import { createLogger, tempDir } from "./test-helpers.ts";
+import { createLogger, tempDir, write } from "./test-helpers.ts";
 
 const FIXTURE = resolve("test/fixtures/extensions/echo-provider");
 const NOT_SPEC = /not an npm package spec/u;
@@ -40,12 +40,6 @@ const HOST = {
 	trustProject: false,
 	log: createLogger(),
 };
-
-function write(path: string, content: string): string {
-	mkdirSync(dirname(path), { recursive: true });
-	writeFileSync(path, content);
-	return path;
-}
 
 type Fn = (...args: unknown[]) => unknown;
 
@@ -187,7 +181,7 @@ describe("loadExtensions", () => {
 				log: createLogger(),
 				runNpm,
 			}),
-		).resolves.toStrictEqual({ providers: [], durable: [] });
+		).resolves.toStrictEqual({ providers: [], durable: [], prompts: [] });
 		expect(runNpm).not.toHaveBeenCalled();
 	});
 
@@ -267,7 +261,7 @@ describe("loadExtensions", () => {
 				env: { RUNNER_TEMP: tempDir(), INPUT_API_KEY: "secret", PATH: "/bin" },
 				runNpm,
 			}),
-		).resolves.toStrictEqual({ providers: [], durable: [] });
+		).resolves.toStrictEqual({ providers: [], durable: [], prompts: [] });
 		const [call] = runNpm.mock.calls;
 		expect(call?.[0]).toStrictEqual(
 			expect.arrayContaining([
