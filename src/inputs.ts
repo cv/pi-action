@@ -32,6 +32,8 @@ export interface ActionInputs {
 	pollInterval: number;
 	/** pi extensions to load (npm specs or workspace paths) for the providers they register. */
 	extensions: string[];
+	/** `skills`: packages (npm specs or workspace paths) loaded for their skills only. */
+	skills: string[];
 	/** Whether pi-durable extensions may load and run the repository's own configuration (`trust_project`). */
 	trustProject: boolean;
 	/** The agent directory for pi-durable extensions; a temp dir when unset. */
@@ -178,6 +180,7 @@ export function readActionInputs(
 		pollInterval:
 			parsePositiveInteger(readInput("poll_interval")) ?? DEFAULTS.pollInterval,
 		extensions: parseExtensionSpecs(readInput("extensions")),
+		skills: parseExtensionSpecs(readInput("skills")),
 		trustProject:
 			parseBoolean(readInput("trust_project")) ?? DEFAULTS.trustProject,
 		agentDir: readInput("agent_dir").trim() || undefined,
