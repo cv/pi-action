@@ -212,3 +212,22 @@ describe("working-tree snapshot inputs", () => {
 		).toBe(expected);
 	});
 });
+
+describe("tool inputs", () => {
+	it("reads exclude_tools and model_tools_hidden as lists of globs", () => {
+		const inputs = readActionInputs(
+			reader({
+				exclude_tools: "bash",
+				model_tools_hidden: "read, write\nedit # pit's tools.* calls them\nmcp_*",
+			}),
+			{},
+		);
+		expect(inputs.excludeTools).toStrictEqual(["bash"]);
+		expect(inputs.modelToolsHidden).toStrictEqual([
+			"read",
+			"write",
+			"edit",
+			"mcp_*",
+		]);
+	});
+});
