@@ -1,6 +1,6 @@
 {
 	"name": "pi-action",
-	"version": "2.2.1",
+	"version": "2.2.2",
 	"description": "GitHub Action to invoke the pi coding agent on issues and PRs",
 	"keywords": [
 		"ai",
