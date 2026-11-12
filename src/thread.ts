@@ -6,13 +6,16 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import type { Models } from "@earendil-works/pi-ai/models";
 import {
 	AssistantEntry,
+	type CommitResult,
 	type Conversation,
 	createRegistry,
 	type EntryId,
+	type EntryRecord,
 	type Extension,
 	Harness,
 	MemoryStorage,
 	type Storage,
+	type StorageWrite,
 	type Submission,
 	ToolResultEntry,
 } from "@earendil-works/pi-durable";
@@ -51,6 +54,35 @@ export interface ThreadOptions {
 	toolEnv?: Readonly<Record<string, string>> | undefined;
 	/** Save and restore the working tree with the thread (stored threads only), with these limits; undefined: don't. */
 	worktree?: SnapshotLimits | undefined;
+	/** Called with the entries of each stored commit, in order (see activity.ts); must not throw. */
+	onEntries?: ((entries: readonly EntryRecord[]) => void) | undefined;
+}
+
+/** The entries among `writes`. */
+function entriesOf(writes: readonly StorageWrite[]): EntryRecord[] {
+	return writes.flatMap((write) =>
+		write.type === "entry" ? [write.value] : [],
+	);
+}
+
+/** A one-off conversation's storage, which reports the entries it stores as GitStorage's `onCommit` does. */
+class ObservedMemoryStorage extends MemoryStorage {
+	private readonly onEntries: (entries: readonly EntryRecord[]) => void;
+
+	constructor(onEntries: (entries: readonly EntryRecord[]) => void) {
+		super();
+		this.onEntries = onEntries;
+	}
+
+	override async commit(
+		...args: Parameters<MemoryStorage["commit"]>
+	): Promise<CommitResult> {
+		const result = await super.commit(...args);
+		this.onEntries(
+			args[0].slice(0, result.stored).flatMap((writes) => entriesOf(writes)),
+		);
+		return result;
+	}
 }
 
 /** What `Thread.answerText()` reports about a run's answer. */
@@ -151,7 +183,7 @@ async function openPersistence(
 		localRef: local,
 		companionRef: worktree === undefined ? undefined : worktreeRef(issueNumber),
 		localCompanionRef: worktree?.ref,
-		log: log.info,
+		log: log.debug ?? log.info,
 		remote: options.remote,
 	});
 	const remoteTip = await sync.fetch();
@@ -164,6 +196,7 @@ async function openPersistence(
 			email: "pi-action@users.noreply.github.com",
 		},
 		onCommit: ({ batches }) => {
+			options.onEntries?.(batches.flatMap((batch) => entriesOf(batch.writes)));
 			if (isTurnBoundary(batches)) {
 				saver.push("schedule", true).catch((error: unknown) => {
 					log.warning(getErrorMessage(error));
@@ -208,7 +241,12 @@ export class Thread {
 			options.issueNumber === undefined
 				? undefined
 				: await openPersistence(options, options.issueNumber);
-		const storage: Storage = persistence?.storage ?? new MemoryStorage();
+		const { onEntries } = options;
+		const storage: Storage =
+			persistence?.storage ??
+			(onEntries === undefined
+				? new MemoryStorage()
+				: new ObservedMemoryStorage(onEntries));
 		const registry = createRegistry();
 		registry.install(CodingTools);
 		for (const extension of options.extensions ?? []) {
@@ -237,6 +275,11 @@ export class Thread {
 		await restoreWorktree(persistence?.worktree, harness, root);
 		harness.resume(); // finish whatever a previous, interrupted run left
 		return new Thread(harness, root, persistence);
+	}
+
+	/** The commit the thread's ref points at, undefined before its first commit or when it is not stored. */
+	get tip(): string | undefined {
+		return this.persistence?.storage.tip;
 	}
 
 	/** The thread's ref, when it is stored in git. */

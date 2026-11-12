@@ -20,6 +20,7 @@ import type { GitHubComment, TriggerInfo } from "./types.ts";
 export function createLogger(): Logger {
 	return {
 		info: vi.fn<Logger["info"]>(),
+		debug: vi.fn<Logger["debug"]>(),
 		warning: vi.fn<Logger["warning"]>(),
 		error: vi.fn<Logger["error"]>(),
 		setFailed: vi.fn<Logger["setFailed"]>(),
