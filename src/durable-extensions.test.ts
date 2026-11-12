@@ -100,6 +100,12 @@ describe("createDurableExtensions", () => {
 		).rejects.toThrow(TAKEN);
 		await expect(
 			createDurableExtensions(
+				[factory("a.ts", async () => ({ name: "pi-action-context" }))],
+				options(),
+			),
+		).rejects.toThrow('named "pi-action-context", which is already taken');
+		await expect(
+			createDurableExtensions(
 				[
 					factory("b.ts", async () => {
 						throw new Error("boom");
