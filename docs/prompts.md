@@ -10,6 +10,45 @@ pi receives three kinds of messages. `prompt_template` changes only the first ki
 
 A follow-up does not repeat the issue or the diff, because the thread already has them. Thus, when a pull request gets new commits, pi does not get a new diff automatically. Ask pi to look at the changes (for example, `@pi review the new commits`): its tools can run `git` and `gh`. See [Durable threads](threads.md).
 
+## The system prompt
+
+The system prompt has these sections, in this sequence:
+
+1. `project_context`: the context files of the repository, from the built-in `pi-action-context` extension. Set `context_files: false` to remove it.
+2. The sections of the pi-durable extensions, in the order of `extensions` (for example pit's guidelines). See [Extensions](extensions.md#pi-durable-extensions).
+
+Without context files and extensions, the system prompt is empty.
+
+### Context files
+
+pi-action loads context files as pi's coding agent does:
+
+1. **Global:** `<agent_dir>/AGENTS.md`, or else `<agent_dir>/CLAUDE.md`. Only when `agent_dir` is set.
+2. **Workspace:** for each directory from the workspace root (`GITHUB_WORKSPACE`) down to the working directory of the agent: `AGENTS.md`, or else `CLAUDE.md`. Today, the working directory is the workspace root. pi-action never reads files above the workspace.
+3. **Nested files** below the working directory (for example `packages/api/AGENTS.md`) are not loaded. The section lists their paths (up to 20) and tells pi to read the one for the directory where it works. pi-action finds them with `git ls-files`, so it ignores the files that git ignores.
+
+The section looks like this:
+
+```text
+<project_context>
+# Project Context
+
+Project-specific instructions and guidelines:
+
+## /home/runner/work/xyz/xyz/AGENTS.md
+
+<file contents>
+
+More context files: packages/api/AGENTS.md. Read the one for the directory you work in.
+</project_context>
+```
+
+- **Size.** `context_files_max_bytes` (default 64 KiB) limits all files together. pi-action cuts the file at the limit, adds a note for pi, leaves out later files, and writes a warning to the log.
+- **Text.** pi-action removes invisible characters, as for the issue body (see [Security](security.md#what-pi-action-removes-from-text)). It keeps HTML comments.
+- **One read for each run.** pi-action reads the files when the run starts. If pi changes `AGENTS.md` during the run, the system prompt stays the same, and the prompt cache of the provider stays valid. The next run on the thread sends the new content as an update of the section.
+- **Pull requests from forks.** pi-action reads the files from the base commit of the pull request, not from the checkout. See [Security](security.md#context-files-from-the-repository).
+- **The log.** The setup group shows the files, for example `Context files: AGENTS.md (2.1 KiB)`.
+
 ## The task
 
 The **task** is the text after the first occurrence of the trigger phrase, without spaces at the start and end. The match ignores case. For `@pi please review this`, the task is `please review this`.
