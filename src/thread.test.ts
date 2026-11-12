@@ -1,6 +1,12 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Context as ModelContext } from "@earendil-works/pi-ai";
-import { fauxAssistantMessage } from "@earendil-works/pi-ai/providers/faux";
+import {
+	fauxAssistantMessage,
+	fauxToolCall,
+} from "@earendil-works/pi-ai/providers/faux";
 import {
 	defineExtension,
 	defineTool,
@@ -13,6 +19,7 @@ import {
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { describe, expect, it } from "vitest";
 
+import { loadProjectContext } from "./context-files.ts";
 import { createLogger, fauxModels, tempDir, toolsOf } from "./test-helpers.ts";
 import { Thread, type ThreadOptions } from "./thread.ts";
 
@@ -80,6 +87,85 @@ const descriptionOf = (context: ModelContext, name: string) =>
 /** The system prompt and its sections, as JSON. */
 const systemText = (context: ModelContext) =>
 	JSON.stringify(context.messages.filter((m) => m.role === "system"));
+
+/** The section keys of each system message the model saw, in order. */
+const sectionKeys = (context: ModelContext) =>
+	context.messages.flatMap((m) =>
+		m.role === "system" ? [Object.keys(m.sections ?? {})] : [],
+	);
+
+describe("Thread: the project_context section (pi-action-context)", () => {
+	it("comes before the extensions' sections", async () => {
+		const context = await firstRequest([pit], {
+			projectContext: "# Project Context\n\nRepo rules.",
+		});
+		expect(sectionKeys(context)[0]).toStrictEqual(["project_context", "pit"]);
+		expect(context.messages[0]).toMatchObject({
+			role: "system",
+			sections: {
+				project_context:
+					"<project_context>\n# Project Context\n\nRepo rules.\n</project_context>",
+			},
+		});
+	});
+
+	it("is left out without context files", async () => {
+		const context = await firstRequest([pit]);
+		expect(sectionKeys(context)[0]).toStrictEqual(["pit"]);
+	});
+
+	it("does not change when the agent edits AGENTS.md during the run", async () => {
+		const cwd = tempDir();
+		writeFileSync(join(cwd, "AGENTS.md"), "Old rules.");
+		const { text } = await loadProjectContext({
+			cwd,
+			workspace: undefined,
+			agentDir: undefined,
+			maxBytes: 65_536,
+			log: createLogger(),
+		});
+		const { faux, models, model } = fauxModels();
+		const seen: ModelContext[] = [];
+		faux.setResponses([
+			(context) => {
+				seen.push(context);
+				return fauxAssistantMessage(
+					[fauxToolCall("write", { path: "AGENTS.md", content: "New rules." })],
+					{ stopReason: "toolUse" },
+				);
+			},
+			(context) => {
+				seen.push(context);
+				return fauxAssistantMessage("ok");
+			},
+		]);
+		const thread = await Thread.open({
+			cwd,
+			models,
+			model,
+			log: createLogger(),
+			projectContext: text,
+		});
+		try {
+			const submission = await thread.submit({
+				key: "k",
+				content: "hi",
+				data: {},
+			});
+			await submission.wait(BACKGROUND_CONTEXT);
+		} finally {
+			await thread.close();
+		}
+		// One system message in both requests: no "Updated system prompt section" after the edit.
+		expect(seen.map((context) => sectionKeys(context))).toStrictEqual([
+			[["project_context"]],
+			[["project_context"]],
+		]);
+		const second = seen.map((context) => systemText(context)).at(-1);
+		expect(second).toContain("Old rules.");
+		expect(second).not.toContain("New rules.");
+	});
+});
 
 describe("Thread: extension overrides", () => {
 	it("offers the coding tools, then each extension's tools", async () => {

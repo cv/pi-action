@@ -78,6 +78,15 @@ An extension that you load with `extensions` runs inside pi-action, with the per
 
 A [prompt template](prompts.md#prompt-templates) becomes the request of the user. Anyone who can push a branch can change the files in `.pi/prompts`. Thus, pi-action loads them only with `trust_project: true`. Without it, pi-action writes `Not loading the prompt templates in .pi/prompts: trust_project is off` to the log. Templates from `extensions` and from `agent_dir` load in all cases.
 
+## Context files from the repository
+
+`AGENTS.md` and `CLAUDE.md` go into the system prompt (see [Context files](prompts.md#context-files)). The system prompt has more weight for the model than a file that it reads. pi-action reads these files from the checkout, so their content is the content of the checked-out ref:
+
+- **Pull requests from forks** (`pull_request` events whose head is in another repository): pi-action reads the files from the base commit of the pull request (`pull_request.base.sha`), and fetches it if the clone does not have it. If it cannot read the base commit, it loads no workspace files and writes a warning. The author of the fork cannot change the system prompt.
+- **Pull requests from branches of the same repository:** pi-action uses the `AGENTS.md` of the branch. People who can push a branch can already change the code that your workflow runs.
+- pi-action removes invisible characters from the files, but keeps HTML comments, because `AGENTS.md` files use them.
+- Set `context_files: false` to load no files.
+
 ## Thread contents are visible
 
 pi-action stores the full conversation in `refs/pi/threads/<number>`, also the output of tools. It stores the files that pi leaves uncommitted in `refs/pi/worktrees/<number>`, also untracked files that git does not ignore. All people who can read the repository can read these refs. The workflow log shows the arguments of each tool call and the last 30 lines of its output (see [The workflow log](how-it-works.md#the-workflow-log)); GitHub masks registered secrets in the log, but not in the refs. pi-action stops the runner from running workflow commands (such as `::error::` or `::add-mask::`) in the text of pi and in the output of tools. Keep secrets away from the agent, as for all CI jobs. Make git ignore files with secrets, or list them in `worktree_snapshot_exclude`. See [Durable threads](threads.md#read-a-thread) and [Working-tree continuity](threads.md#working-tree-continuity).
