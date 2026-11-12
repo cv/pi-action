@@ -100,9 +100,11 @@ describe("Thread: the project_context section (pi-action-context)", () => {
 			projectContext: "# Project Context\n\nRepo rules.",
 		});
 		expect(sectionKeys(context)[0]).toStrictEqual(["project_context", "pit"]);
-		expect(systemText(context)).toContain(
-			"<project_context>\n# Project Context\n\nRepo rules.\n</project_context>",
-		);
+		const [system] = context.messages;
+		expect(system?.role === "system" ? system.sections : {}).toMatchObject({
+			project_context:
+				"<project_context>\n# Project Context\n\nRepo rules.\n</project_context>",
+		});
 	});
 
 	it("is left out without context files", async () => {
