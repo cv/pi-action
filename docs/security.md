@@ -78,6 +78,10 @@ An extension that you load with `extensions` runs inside pi-action, with the per
 
 A [prompt template](prompts.md#prompt-templates) becomes the request of the user. Anyone who can push a branch can change the files in `.pi/prompts`. Thus, pi-action loads them only with `trust_project: true`. Without it, pi-action writes `Not loading the prompt templates in .pi/prompts: trust_project is off` to the log. Templates from `extensions` and from `agent_dir` load in all cases.
 
+## Skills from the repository
+
+A [skill](skills.md) is instructions that pi follows, and it can tell pi to run its scripts. Anyone who can push a branch can change the files in `.pi/skills` and `.agents/skills`. Thus, pi-action loads them only with `trust_project: true`. Without it, pi-action writes `Not loading the skills in .pi/skills: trust_project is off` to the log (with the directories that exist). Skills from `extensions`, `skills`, and `agent_dir` load in all cases. Pin the packages, as for [extensions](#extensions).
+
 ## Thread contents are visible
 
 pi-action stores the full conversation in `refs/pi/threads/<number>`, also the output of tools. It stores the files that pi leaves uncommitted in `refs/pi/worktrees/<number>`, also untracked files that git does not ignore. All people who can read the repository can read these refs. The workflow log shows the arguments of each tool call and the last 30 lines of its output (see [The workflow log](how-it-works.md#the-workflow-log)); GitHub masks registered secrets in the log, but not in the refs. pi-action stops the runner from running workflow commands (such as `::error::` or `::add-mask::`) in the text of pi and in the output of tools. Keep secrets away from the agent, as for all CI jobs. Make git ignore files with secrets, or list them in `worktree_snapshot_exclude`. See [Durable threads](threads.md#read-a-thread) and [Working-tree continuity](threads.md#working-tree-continuity).

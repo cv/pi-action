@@ -96,7 +96,8 @@ Only `github_token` is necessary. All other inputs have a default or are optiona
 | `compat_supports_reasoning_effort` | The OpenAI-compatible custom provider supports `reasoning_effort` | No | - |
 | `compat_force_adaptive_thinking` | Use adaptive thinking for an Anthropic-compatible custom model (`provider_api: anthropic-messages`). Claude Opus 4.6+ and Sonnet 4.6+ need it | No | - |
 | `extensions` | pi extensions and pi-durable extensions to load: npm package specs or workspace paths, one per line or comma-separated (see [Extensions](docs/extensions.md)) | No | - |
-| `trust_project` | Let pi-durable extensions load and run the configuration of the repository (see [Extensions](docs/extensions.md#trust_project)) | No | `false` |
+| `skills` | Packages to load for their skills only, with the syntax of `extensions` (see [Skills](docs/skills.md#the-skills-input)) | No | - |
+| `trust_project` | Let pi-durable extensions load and run the configuration of the repository, and load its prompt templates and skills (see [Extensions](docs/extensions.md#trust_project)) | No | `false` |
 | `agent_dir` | Agent directory (user-level state) for pi-durable extensions, relative to the workspace | No | (a new temporary directory in `RUNNER_TEMP`) |
 | `exclude_tools` | Tools to disable completely, one per line or comma-separated. `*` matches any characters. Neither the model nor other tools can call them (see [Tools the model sees](docs/extensions.md#tools-the-model-sees)) | No | - |
 | `model_tools_hidden` | Tools not to offer the model, one per line or comma-separated. `*` matches any characters. Other tools (such as pit's `tools.*`) can still call them (see [Tools the model sees](docs/extensions.md#tools-the-model-sees)) | No | - |
@@ -110,7 +111,7 @@ Only `github_token` is necessary. All other inputs have a default or are optiona
 ### How pi-action reads input values
 
 - Lists (`allowed_*`) are comma-separated. pi-action removes spaces around each item. Logins ignore case and a leading `@`. Associations ignore case.
-- `extensions`, `exclude_tools`, `model_tools_hidden`, and `worktree_snapshot_exclude` accept commas and new lines. pi-action ignores empty lines and `#` comments: a full line, or the rest of a line after a spec and a space.
+- `extensions`, `skills`, `exclude_tools`, `model_tools_hidden`, and `worktree_snapshot_exclude` accept commas and new lines. pi-action ignores empty lines and `#` comments: a full line, or the rest of a line after a spec and a space.
 - Boolean inputs accept `true`, `1`, `yes`, `y`, `on` and `false`, `0`, `no`, `n`, `off`, in any case.
 - When a number or boolean input has a value that is not valid, pi-action uses the default.
 - Any `output_mode` value other than `output` means `comment`.
@@ -132,6 +133,7 @@ pi-action sets these outputs only when `output_mode` is `output`:
 | [Models and authentication](docs/models.md) | API keys, built-in providers, a custom provider, and providers from pi extensions |
 | [Extensions](docs/extensions.md) | How pi-action loads pi extensions and pi-durable extensions, and how extensions ask questions on GitHub |
 | [Prompts and templates](docs/prompts.md) | What pi receives, and how to change it with `prompt_template` |
+| [Skills](docs/skills.md) | Where pi-action finds skills (`SKILL.md`), how pi sees them, and `/skill:<name>` |
 | [Durable threads](docs/threads.md) | How pi-action stores, continues, reads, and deletes threads, and keeps the files pi leaves uncommitted |
 | [Security](docs/security.md) | Who can start pi, what the agent can access, and what to trust |
 | [How it works](docs/how-it-works.md) | The steps of a run, and the commit conventions that pi follows |
