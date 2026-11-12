@@ -109,6 +109,8 @@ async function run(
 				);
 			}
 		});
+		// git may exit without reading its input (a command that takes none, or a failure).
+		child.stdin.on("error", () => undefined);
 		child.stdin.end(options.input ?? "");
 	});
 }

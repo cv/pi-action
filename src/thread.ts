@@ -22,8 +22,14 @@ import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { GitStorage } from "./storage/git-storage.ts";
 import { git } from "./storage/git.ts";
 import { GitSync, isTurnBoundary } from "./storage/sync.ts";
-import type { Log } from "./types.ts";
+import { type SnapshotLimits, worktreeRef } from "./storage/worktree.ts";
+import type { Log, UiAnswer, UiQuestion } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
+import {
+	RESTORE_ENTRY_KIND,
+	type RestoreResult,
+	WorktreeContinuity,
+} from "./worktree.ts";
 
 const context: Context = BACKGROUND_CONTEXT;
 
@@ -47,6 +53,16 @@ export interface ThreadOptions {
 	extensions?: readonly Extension[];
 	/** Variables the tools' shell gets on top of the process environment (see `toolEnv()`). */
 	toolEnv?: Readonly<Record<string, string>> | undefined;
+	/** Save and restore the working tree with the thread (stored threads only); undefined: don't. */
+	worktree?: WorktreeSettings | undefined;
+}
+
+export interface WorktreeSettings {
+	limits: SnapshotLimits;
+	/** Asks whether to rewind the files with the conversation; undefined when nobody can answer. */
+	ask?: ((question: UiQuestion) => Promise<{ url?: string }>) | undefined;
+	/** The answer that started this run, if any. */
+	answer?: UiAnswer | undefined;
 }
 
 /** What `Thread.answerText()` reports about a run's answer. */
@@ -71,9 +87,55 @@ export interface ThreadInput {
 interface Persistence {
 	ref: string;
 	storage: GitStorage;
-	sync: GitSync;
+	saver: ThreadSaver;
+	worktree: WorktreeContinuity | undefined;
 	startedAt: Date | undefined;
 	isNew: boolean;
+}
+
+/** The local tip of `ref`, undefined when it doesn't exist. */
+async function localTip(cwd: string, ref: string): Promise<string | undefined> {
+	const out = await git(cwd, ["rev-parse", "-q", "--verify", ref]).catch(
+		() => "",
+	);
+	return out.trim() || undefined;
+}
+
+/** Pushes the thread, and the working-tree snapshots with it. */
+class ThreadSaver {
+	private readonly cwd: string;
+	private readonly sync: GitSync;
+	private readonly worktree: WorktreeContinuity | undefined;
+	/** Set once the storage is open. */
+	storage: GitStorage | undefined;
+
+	constructor(
+		cwd: string,
+		sync: GitSync,
+		worktree: WorktreeContinuity | undefined,
+	) {
+		this.cwd = cwd;
+		this.sync = sync;
+		this.worktree = worktree;
+	}
+
+	/** Push now (`flush`) or soon (`schedule`), saving the working tree first when `save`. */
+	async push(how: "schedule" | "flush", save: boolean): Promise<void> {
+		const tip = () => this.storage?.tip;
+		if (this.worktree !== undefined && save) {
+			await this.worktree.checkpoint(tip());
+		}
+		const companion =
+			this.worktree === undefined
+				? undefined
+				: await localTip(this.cwd, this.worktree.ref);
+		const current = tip();
+		if (how === "flush") {
+			await this.sync.flush(current, companion);
+		} else if (current !== undefined) {
+			await this.sync.schedule(current, companion);
+		}
+	}
 }
 
 async function openPersistence(
@@ -82,13 +144,25 @@ async function openPersistence(
 ): Promise<Persistence> {
 	const { cwd, log } = options;
 	const ref = threadRef(issueNumber);
+	const worktree =
+		options.worktree === undefined
+			? undefined
+			: new WorktreeContinuity({
+					cwd,
+					ref: worktreeRef(issueNumber),
+					limits: options.worktree.limits,
+					log,
+					remote: options.remote,
+				});
 	const sync = new GitSync({
 		repo: cwd,
 		ref,
+		companionRef: worktree?.ref,
 		log: log.info,
 		remote: options.remote,
 	});
 	const remoteTip = await sync.fetch();
+	const saver = new ThreadSaver(cwd, sync, worktree);
 	const storage = await GitStorage.open({
 		repo: cwd,
 		ref,
@@ -96,18 +170,20 @@ async function openPersistence(
 			name: "pi-action",
 			email: "pi-action@users.noreply.github.com",
 		},
-		onCommit: ({ tip, batches }) => {
+		onCommit: ({ batches }) => {
 			if (isTurnBoundary(batches)) {
-				sync.schedule(tip).catch((error: unknown) => {
+				saver.push("schedule", true).catch((error: unknown) => {
 					log.warning(getErrorMessage(error));
 				});
 			}
 		},
 	});
+	saver.storage = storage;
 	return {
 		ref,
 		storage,
-		sync,
+		saver,
+		worktree,
 		isNew: remoteTip === undefined,
 		startedAt: remoteTip ? await rootCommitTime(cwd, ref) : undefined,
 	};
@@ -122,15 +198,19 @@ export class Thread {
 	private readonly harness: Harness;
 	private readonly root: Conversation;
 	private readonly persistence: Persistence | undefined;
+	/** How the working tree was restored: `ready`, or why the run must end (a question, Cancel). */
+	readonly restored: RestoreResult;
 
 	private constructor(
 		harness: Harness,
 		root: Conversation,
 		persistence: Persistence | undefined,
+		restored: RestoreResult,
 	) {
 		this.harness = harness;
 		this.root = root;
 		this.persistence = persistence;
+		this.restored = restored;
 	}
 
 	static async open(options: ThreadOptions): Promise<Thread> {
@@ -165,8 +245,16 @@ export class Thread {
 		};
 		const root = await harness.root(context, { agent });
 		await root.configure(agent, context); // the model may differ from the last run's
-		harness.resume(); // finish whatever a previous, interrupted run left
-		return new Thread(harness, root, persistence);
+		const restored = await restoreWorktree(persistence, harness, root, options);
+		if (restored.kind === "ready") {
+			harness.resume(); // finish whatever a previous, interrupted run left
+		}
+		return new Thread(harness, root, persistence, restored);
+	}
+
+	/** Whether the answer that started the run answered pi-action's own working-tree question (not the model's). */
+	get answeredWorktreeQuestion(): boolean {
+		return this.persistence?.worktree?.answered ?? false;
 	}
 
 	/** The thread's ref, when it is stored in git. */
@@ -287,9 +375,9 @@ export class Thread {
 		await this.root.abort(context);
 	}
 
-	/** Push what is committed so far; throws if the remote moved under us. */
+	/** Push what is committed so far (with the working-tree snapshots); throws if the remote moved under us. */
 	async push(): Promise<void> {
-		await this.persistence?.sync.flush(this.persistence.storage.tip);
+		await this.persistence?.saver.push("flush", false);
 	}
 
 	async close(): Promise<void> {
@@ -297,9 +385,52 @@ export class Thread {
 			return;
 		}
 		this.closed = true;
+		if (this.restored.kind === "ready") {
+			await this.persistence?.worktree?.checkpoint(
+				this.persistence.storage.tip,
+			);
+		}
 		await this.harness.close(context);
 		await this.push();
 	}
+}
+
+/**
+ * Restore the working tree the conversation points at, before any work resumes, and tell the model how it went
+ * (one entry with a user message).
+ */
+async function restoreWorktree(
+	persistence: Persistence | undefined,
+	harness: Harness,
+	root: Conversation,
+	options: ThreadOptions,
+): Promise<RestoreResult> {
+	const worktree = persistence?.worktree;
+	if (worktree === undefined) {
+		return { kind: "ready", message: undefined };
+	}
+	worktree.attach(harness, root);
+	const restored = await worktree.restore({
+		ask: options.worktree?.ask,
+		answer: options.worktree?.answer,
+		threadTip: persistence?.storage.tip,
+	});
+	if (restored.kind === "ready" && restored.message !== undefined) {
+		await root.submit(
+			{
+				type: "write",
+				entry: {
+					kind: RESTORE_ENTRY_KIND,
+					data: { message: restored.message },
+					model: [
+						{ role: "user", content: restored.message, timestamp: Date.now() },
+					],
+				},
+			},
+			context,
+		);
+	}
+	return restored;
 }
 
 /** When the thread's root commit was made. */
