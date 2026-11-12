@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
 	Activity,
 	describeCall,
+	formatArguments,
 	formatDuration,
 	formatStats,
 	oneLine,
@@ -52,7 +53,7 @@ const usage = (input: number, output: number, cost = 0) => ({
 });
 
 let nextId = 1;
-const PADDING = "y".repeat(3000);
+const PADDING = "y".repeat(5000);
 
 function assistant(
 	content: unknown[],
@@ -195,7 +196,7 @@ describe("Activity", () => {
 		]);
 		expect(r.lines.slice(2)).toStrictEqual([
 			"::group::  ↳ ✓ 4.2s · 2 lines",
-			'{\n  "command": "npm test"\n}',
+			"command: npm test",
 			"──",
 			"ok\nTests 3 passed",
 			"::endgroup::",
@@ -226,12 +227,12 @@ describe("Activity", () => {
 			"🔧 read: a.ts",
 			"🔧 read: b.ts",
 			"::group::  ↳ ✗ failed read: b.ts · 0.0s · 1 line",
-			'{\n  "path": "b.ts"\n}',
+			"path: b.ts",
 			"──",
 			"no such file",
 			"::endgroup::",
 			"::group::  ↳ ✓ read: a.ts · 0 lines",
-			'{\n  "path": "a.ts"\n}',
+			"path: a.ts",
 			"──",
 			"(no output)",
 			"::endgroup::",
@@ -256,11 +257,49 @@ describe("Activity", () => {
 			"🔧 bash: seq 40",
 		]);
 		expect(r.lines[4]).toBe("::group::  ↳ ✓ 40 lines");
-		expect(r.lines[5]).toHaveLength(2000);
+		expect(r.lines[5]).toHaveLength(4000);
 		expect(r.lines[7]?.split("\n")).toStrictEqual([
 			"… 10 earlier lines",
 			...output.slice(10),
 		]);
+	});
+
+	it("shows multi-line arguments as they are", () => {
+		expect(
+			formatArguments({
+				command: "cat > x <<'EOF'\na \"b\"\nEOF\n",
+				timeout: 30,
+			}),
+		).toBe("command:\ncat > x <<'EOF'\na \"b\"\nEOF\ntimeout: 30");
+	});
+
+	it("keeps the runner from running workflow commands in what pi and its tools wrote", () => {
+		const r = recorder();
+		r.activity.entries([
+			assistant([
+				{ type: "text", text: "Done.\n::add-mask::x" },
+				call("c", "bash", { command: "npm run lint" }),
+			]),
+			toolResult(
+				"c",
+				"src/a.ts\n::error file=src/a.ts,line=1::bad\n##[error]old",
+			),
+		]);
+		const stops = r.lines.filter((line) =>
+			line.startsWith("::stop-commands::"),
+		);
+		expect(stops).toHaveLength(2);
+		for (const stop of stops) {
+			const token = stop.slice("::stop-commands::".length);
+			const at = r.lines.indexOf(stop);
+			expect(r.lines[at + 2]).toBe(`::${token}::`);
+			expect(r.lines[at + 3]).toBe("::endgroup::");
+		}
+		expect(r.lines[r.lines.indexOf(String(stops[1])) + 1]).toContain(
+			"::error file=",
+		);
+		// Arguments without commands are logged as they are.
+		expect(r.lines).toContain("command: npm run lint");
 	});
 
 	it("logs model errors, and a result whose call it never saw", () => {

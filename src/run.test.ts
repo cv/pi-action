@@ -282,7 +282,7 @@ describe("run (durable)", () => {
 			"💬 Looking.",
 			"🔧 bash: echo hi",
 			expect.stringMatching(/^::group:: {2}↳ ✓ \d+\.\ds · 1 line$/u),
-			expect.stringContaining('"command": "echo hi"'),
+			"command: echo hi",
 			"──",
 			"hi",
 			"::endgroup::",
@@ -344,10 +344,18 @@ describe("run (durable)", () => {
 		};
 		w.faux.setResponses([fauxAssistantMessage("First answer."), remember]);
 		await run(w.deps(w.comment("@pi first task")));
-		await run(w.deps(w.comment("@pi and now the second")));
+		const second = w.deps(w.comment("@pi and now the second"));
+		await run(second);
 
 		expect(w.gh.posted).toHaveLength(2);
 		expect(w.gh.posted[1]).toContain("I remember 2 requests.");
+		// The later run resubmits the answered request too, but logs only the new one.
+		const requests = vi
+			.mocked(second.log.info)
+			.mock.calls.filter(([line]) => line.startsWith("▶"));
+		expect(requests).toStrictEqual([
+			[expect.stringMatching(/: and now the second$/u)],
+		]);
 		expect(seen[0]).toContain("first task");
 		expect(seen[0]).toContain("Fix the thing"); // the first message carries the issue context
 		expect(seen[0]).toContain("## Your Reply"); // pi-action posts the reply, so pi must not (#42)
