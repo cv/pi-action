@@ -34,10 +34,12 @@ async function contains(
 		return false;
 	}
 	// A remote tip this clone doesn't have is not one it pushed: an error, so false.
-	return git(cwd, ["merge-base", "--is-ancestor", tip, remoteTip]).then(
-		() => true,
-		() => false,
-	);
+	try {
+		await git(cwd, ["merge-base", "--is-ancestor", tip, remoteTip]);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 export async function pushThread(

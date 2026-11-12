@@ -481,7 +481,7 @@ describe("run (durable) when the agent moves refs (#46)", () => {
 		const w = world();
 		w.faux.setResponses(
 			agentRuns(
-				"git fetch -q origin '+refs/pi/*:refs/pi/*'; git update-ref -d " + REF,
+				`git fetch -q origin '+refs/pi/*:refs/pi/*'; git update-ref -d ${REF}`,
 			),
 		);
 		const deps = w.deps(w.comment("@pi go"));
