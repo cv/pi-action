@@ -30,6 +30,7 @@ import {
 	git,
 	tempDir,
 	tempRemote,
+	toolsOf,
 } from "./test-helpers.ts";
 import type { GitHubComment, GitHubReaction } from "./types.ts";
 
@@ -248,6 +249,28 @@ describe("run (durable)", () => {
 		expect(log).toMatch(FIRST_COMMIT);
 	});
 
+	it("applies model_tools_hidden on each run, and clears it when the input is empty", async () => {
+		const w = world();
+		const seen: string[][] = [];
+		const record: FauxResponseStep = (context) => {
+			seen.push(toolsOf(context).map((tool) => tool.name));
+			return fauxAssistantMessage("ok");
+		};
+		w.faux.setResponses([record, record]);
+
+		const hidden = w.deps(w.comment("@pi one"), { modelToolsHidden: ["bash"] });
+		await run(hidden);
+		await run(w.deps(w.comment("@pi two")));
+
+		expect(seen).toStrictEqual([
+			["read", "write", "edit"],
+			["read", "write", "edit", "bash"],
+		]);
+		expect(hidden.log.info).toHaveBeenCalledWith(
+			expect.stringMatching(/ · tools: read, write, edit$/u),
+		);
+	});
+
 	it("logs the thread first, then what pi does, the reply, and where the thread ends up", async () => {
 		const w = world();
 		w.faux.setResponses([
@@ -272,7 +295,9 @@ describe("run (durable)", () => {
 		const setupEnd = lines.indexOf("::endgroup::");
 		expect(lines[0]).toBe("::group::Setup");
 		expect(lines.slice(setupEnd + 1)).toStrictEqual([
-			expect.stringMatching(/^🤖 faux\S*\/\S+$/u),
+			expect.stringMatching(
+				/^🤖 faux\S*\/\S+ · tools: read, write, edit, bash$/u,
+			),
 			`::group::🧵 Thread ${REF}: new`,
 			expect.stringContaining(
 				`This conversation is stored in git on ${REF}. To read it:\n  git fetch origin '${REF}:${REF}'\n`,
