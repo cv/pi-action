@@ -1,5 +1,7 @@
 // What pi does, in the workflow log as it happens: one line for each model response and tool call, with the
 // details (the full text, a tool's arguments and output) in a collapsed group, and totals for each reply (#46).
+import { randomUUID } from "node:crypto";
+
 import type {
 	AssistantMessage,
 	ToolResultMessage,
