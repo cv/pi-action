@@ -354,7 +354,6 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			timeoutSeconds: inputs.timeout,
 			pollIntervalMs: inputs.pollInterval * 1000,
 			message: async (trigger, first) => {
-				log.info(describeTrigger(trigger));
 				// As `report` does, pi-action posts the reply: say so, or pi may post it with `gh` too (#42).
 				const repliesAsComment =
 					inputs.outputMode === "comment" && issueNumber !== undefined;
@@ -367,6 +366,9 @@ export async function run(deps: ActionDependencies): Promise<void> {
 				}
 				const message = trigger.answer ? trigger.text : formatFollowUp(trigger);
 				return repliesAsComment ? withReplyReminder(message) : message;
+			},
+			started: (trigger) => {
+				log.info(describeTrigger(trigger));
 			},
 			deliver: async (trigger, result, alreadyPosted) =>
 				report(
