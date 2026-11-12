@@ -270,7 +270,7 @@ function findPromptSource(dir: string): PromptSource | undefined {
 }
 
 /** A package's skills, as pi finds them: `pi.skills`, else its `skills/` directory; undefined without either. */
-export function findSkillSource(dir: string): SkillSource | undefined {
+function findSkillSource(dir: string): SkillSource | undefined {
 	const conventional = join(dir, "skills");
 	const paths =
 		manifestList(dir, "skills") ??
