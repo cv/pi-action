@@ -1,1 +1,1 @@
-{"format":1,"seq":399,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":400,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"Found 0 warnings and 0 errors.\nFinished in 505ms on 7 files with 490 rules using 4 threads.\n"]]}}]}
