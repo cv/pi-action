@@ -17,6 +17,7 @@ import {
 } from "@earendil-works/pi-ai/providers/faux";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { withReplyReminder } from "./context.ts";
 import type { ActionInputs } from "./inputs.ts";
 import { pushThread } from "./push.ts";
 import { type ActionDependencies, run } from "./run.ts";
@@ -307,8 +308,11 @@ describe("run (durable)", () => {
 		expect(w.gh.posted[1]).toContain("I remember 2 requests.");
 		expect(seen[0]).toContain("first task");
 		expect(seen[0]).toContain("Fix the thing"); // the first message carries the issue context
+		expect(seen[0]).toContain("## Your Reply"); // pi-action posts the reply, so pi must not (#42)
 		expect(seen[1]).toBe(
-			`**@user** commented (https://github.com/o/r/issues/42#issuecomment-102):\n\nand now the second`,
+			withReplyReminder(
+				`**@user** commented (https://github.com/o/r/issues/42#issuecomment-102):\n\nand now the second`,
+			),
 		);
 	});
 
@@ -875,7 +879,9 @@ describe("run with a pi-durable extension (installed from npm)", () => {
 			`Tool said: confirm=true select=green agentDir=${join(d.runnerTemp, "pi-action-agent-")}`,
 		);
 		expect(seen.at(-1)).toBe(
-			"**@ada** answered pi's question *Color* (https://github.com/o/r/issues/42#issuecomment-1002): green",
+			withReplyReminder(
+				"**@ada** answered pi's question *Color* (https://github.com/o/r/issues/42#issuecomment-1002): green",
+			),
 		);
 		expect(d.reacted("rocket")).toStrictEqual([1002]);
 		expect(green.summary).toHaveBeenCalledWith(
