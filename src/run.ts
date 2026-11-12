@@ -5,13 +5,13 @@ import type { Models } from "@earendil-works/pi-ai/models";
 import type { Extension } from "@earendil-works/pi-durable";
 
 import { Activity, formatStats, oneLine } from "./activity.ts";
+import { loadProjectContext } from "./context-files.ts";
 import {
 	buildPrompt,
 	formatFollowUp,
 	type PIContext,
 	withReplyReminder,
 } from "./context.ts";
-import { loadProjectContext } from "./context-files.ts";
 import { ThreadConversation, type ThreadResult } from "./conversation.ts";
 import { createDurableExtensions } from "./durable-extensions.ts";
 import { loadExtensions } from "./extensions.ts";
