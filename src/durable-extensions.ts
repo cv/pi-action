@@ -5,7 +5,11 @@ import { join, resolve } from "node:path";
 import type { Extension } from "@earendil-works/pi-durable";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 
+<<<<<<< HEAD
 import { CONTEXT_EXTENSION } from "./context-files.ts";
+=======
+import { BUILTIN_EXTENSION } from "./builtin-extension.ts";
+>>>>>>> f81bd9e (feat: load skills (SKILL.md), list them in the system prompt, and expand /skill:<name>)
 import type { DurableExtensionFactory } from "./extensions.ts";
 import type { DurableUi, Log } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
@@ -39,7 +43,11 @@ async function agentDirectory(
 
 /**
  * Builds the pi-durable extensions the `extensions` input declared, with the run's host options, for the thread's
+<<<<<<< HEAD
  * registry. Their names must not collide with each other or with pi-action's coding tools and pi-action-context. Their tools may: a tool
+=======
+ * registry. Their names must not collide with each other, with pi-action's coding tools, or with its built-in extension. Their tools may: a tool
+>>>>>>> f81bd9e (feat: load skills (SKILL.md), list them in the system prompt, and expand /skill:<name>)
  * named like an earlier one replaces it (the last one wins, as with pi's `registerTool`), which the log says.
  */
 export async function createDurableExtensions(
@@ -54,7 +62,11 @@ export async function createDurableExtensions(
 	log.info(
 		`pi-durable extensions: agent directory ${agentDir}, project ${trustProject ? "trusted" : "not trusted"}, ${ui ? "questions answered on GitHub" : "no UI"}`,
 	);
+<<<<<<< HEAD
 	const names = new Set([CodingTools.name, CONTEXT_EXTENSION]);
+=======
+	const names = new Set([CodingTools.name, BUILTIN_EXTENSION]);
+>>>>>>> f81bd9e (feat: load skills (SKILL.md), list them in the system prompt, and expand /skill:<name>)
 	const owners = new Map(
 		(CodingTools.tools ?? []).map((tool) => [tool.name, CodingTools.name]),
 	);
