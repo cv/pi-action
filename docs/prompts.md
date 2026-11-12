@@ -5,8 +5,8 @@ pi receives three kinds of messages. `prompt_template` changes only the first ki
 | Message | When | Content |
 |---------|------|---------|
 | **First message** | The first request of a new thread. A direct prompt always has a new thread | The built-in prompt, or your `prompt_template` |
-| **Follow-up** | Each later request on the thread: an `@pi` comment, or a `pr_number` run | `**@login** commented (<url>):` and the task. For a review comment: `commented on the diff`. pi-action adds the URL when it has one |
-| **Answer** | An answer to a question from a pi-durable extension | `**@login** answered pi's question *<title>* (<url>): <answer>` (see [Extensions](extensions.md#questions-on-github)) |
+| **Follow-up** | Each later request on the thread: an `@pi` comment, or a `pr_number` run | `**@login** commented (<url>):` and the task. For a review comment: `commented on the diff`. pi-action adds the URL when it has one. Then the [reply reminder](#the-reply) |
+| **Answer** | An answer to a question from a pi-durable extension | `**@login** answered pi's question *<title>* (<url>): <answer>` (see [Extensions](extensions.md#questions-on-github)). Then the [reply reminder](#the-reply) |
 
 A follow-up does not repeat the issue or the diff, because the thread already has them. Thus, when a pull request gets new commits, pi does not get a new diff automatically. Ask pi to look at the changes (for example, `@pi review the new commits`): its tools can run `git` and `gh`. See [Durable threads](threads.md).
 
@@ -26,10 +26,20 @@ For an issue or a pull request, the built-in first message has these parts, in t
 2. `## Title` and `## Description`: the title and body of the issue or pull request.
 3. Pull requests only: `## Existing PR Review Comments`, when the pull request has review comments.
 4. `## Task`: the task.
-5. `## Important: Artifact and Script Requirements`: an instruction to commit and push all work, because the runner and its files are deleted after the run.
-6. Pull requests only: `## PR Diff`, the diff of the pull request.
+5. `output_mode: comment` only: `## Your Reply`, which tells pi not to post its reply itself (see [The reply](#the-reply)).
+6. `## Important: Artifact and Script Requirements`: an instruction to commit and push all work, because the runner and its files are deleted after the run.
+7. Pull requests only: `## PR Diff`, the diff of the pull request.
 
 For a direct prompt, the message has `# Direct pi Task`, the task, and the requirements block.
+
+## The reply
+
+In `output_mode: comment`, pi-action posts pi's final response as a comment. pi's tools have the token as `GH_TOKEN`, so pi can also post comments with `gh`. If pi posted its reply itself, the issue would get the same answer twice. Thus, pi-action tells pi not to do this:
+
+- The built-in first message has a `## Your Reply` section.
+- Each follow-up and each answer ends with this reminder: _(pi-action posts your final response as a comment here. Don't also post it with `gh`.)_ Threads that began before this reminder existed get it too.
+
+In `output_mode: output`, the reply goes to the `response` output, and the messages do not have this text. A [custom template](#custom-templates) replaces the `## Your Reply` section too, but follow-ups and answers still get the reminder.
 
 ## Custom templates
 

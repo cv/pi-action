@@ -4,7 +4,9 @@ import {
 	buildPrompt,
 	extractTask,
 	hasTrigger,
+	REPLY_REMINDER,
 	renderTemplate,
+	withReplyReminder,
 } from "./context.ts";
 
 describe("hasTrigger", () => {
@@ -222,5 +224,39 @@ describe("buildPrompt", () => {
 		);
 
 		expect(prompt).toContain("# GitHub Issue #42");
+	});
+
+	it("says that pi-action posts the reply, when it does (#42)", () => {
+		const issue = {
+			type: "issue",
+			title: "Bug Report",
+			body: "Something is broken",
+			number: 42,
+			triggerComment: "@pi help",
+			task: "help",
+		} as const;
+
+		const commented = buildPrompt(issue, undefined, { repliesAsComment: true });
+		expect(commented).toContain("## Your Reply");
+		expect(commented).toContain("**Do not post your reply yourself**");
+		expect(commented.indexOf("## Task")).toBeLessThan(
+			commented.indexOf("## Your Reply"),
+		);
+		expect(commented.indexOf("## Your Reply")).toBeLessThan(
+			commented.indexOf("## Important: Artifact and Script Requirements"),
+		);
+
+		expect(buildPrompt(issue)).not.toContain("## Your Reply"); // output mode: the reply goes to outputs
+		expect(buildPrompt(issue, "{{task}}", { repliesAsComment: true })).toBe(
+			"help",
+		); // a custom template is the complete message
+	});
+});
+
+describe("withReplyReminder", () => {
+	it("appends the reminder that pi-action posts the reply", () => {
+		expect(withReplyReminder("**@ada** commented:\n\nmore")).toBe(
+			`**@ada** commented:\n\nmore\n\n${REPLY_REMINDER}`,
+		);
 	});
 });

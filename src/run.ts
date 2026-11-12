@@ -1,7 +1,12 @@
 import type { Models } from "@earendil-works/pi-ai/models";
 import type { Extension } from "@earendil-works/pi-durable";
 
-import { buildPrompt, formatFollowUp, type PIContext } from "./context.ts";
+import {
+	buildPrompt,
+	formatFollowUp,
+	type PIContext,
+	withReplyReminder,
+} from "./context.ts";
 import { ThreadConversation, type ThreadResult } from "./conversation.ts";
 import { createDurableExtensions } from "./durable-extensions.ts";
 import { loadExtensions } from "./extensions.ts";
@@ -279,12 +284,18 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			timeoutSeconds: inputs.timeout,
 			pollIntervalMs: inputs.pollInterval * 1000,
 			message: async (trigger, first) => {
-				if (trigger.answer) {
-					return trigger.text;
+				// As `report` does, pi-action posts the reply: say so, or pi may post it with `gh` too (#42).
+				const repliesAsComment =
+					inputs.outputMode === "comment" && issueNumber !== undefined;
+				if (first && !trigger.answer) {
+					return buildPrompt(
+						contextFor(piContext, trigger),
+						inputs.promptTemplate,
+						{ repliesAsComment },
+					);
 				}
-				return first
-					? buildPrompt(contextFor(piContext, trigger), inputs.promptTemplate)
-					: formatFollowUp(trigger);
+				const message = trigger.answer ? trigger.text : formatFollowUp(trigger);
+				return repliesAsComment ? withReplyReminder(message) : message;
 			},
 			deliver: async (trigger, result, alreadyPosted) =>
 				report(

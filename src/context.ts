@@ -16,6 +16,24 @@ const RUNNER_REQUIREMENTS = `## Important: Artifact and Script Requirements
 3. **Commit and push all work** - Always end your work by committing and pushing changes to ensure they persist beyond the GitHub Action execution.
 `;
 
+/**
+ * In comment mode, pi-action posts the final response of each request as a comment. pi's tools have a token that
+ * can comment too, and without this it may post its reply with `gh` as well: two comments for one answer (#42).
+ */
+const REPLY_SECTION = `## Your Reply
+
+pi-action posts your final response as a comment on this issue or pull request. **Do not post your reply yourself**, for example with \`gh issue comment\`, \`gh pr comment\`, \`gh pr review\`, or \`gh api\`. That would post the same answer twice. Use \`gh\` to comment only where the task asks for it, such as on another issue.
+`;
+
+/** Appended to each later message (a follow-up or an answer) in comment mode, for threads of any age. */
+export const REPLY_REMINDER =
+	"_(pi-action posts your final response as a comment here. Don't also post it with `gh`.)_";
+
+/** A later message on the thread, with the reminder that pi-action posts the reply. */
+export function withReplyReminder(message: string): string {
+	return `${message}\n\n${REPLY_REMINDER}`;
+}
+
 export function extractTask(comment: string, trigger: string): string {
 	const idx = comment.toLowerCase().indexOf(trigger.toLowerCase());
 	if (idx === -1) {
@@ -84,9 +102,15 @@ export function renderTemplate(template: string, context: PIContext): string {
 	);
 }
 
+export interface PromptOptions {
+	/** pi-action posts the final response as a comment (comment mode, on an issue or PR). */
+	repliesAsComment?: boolean;
+}
+
 export function buildPrompt(
 	context: PIContext,
 	customTemplate?: string,
+	options: PromptOptions = {},
 ): string {
 	if (customTemplate?.trim()) {
 		return renderTemplate(customTemplate, context);
@@ -113,7 +137,7 @@ ${context.type === "pull_request" ? (context.reviewComments ?? "") : ""}
 ## Task
 ${context.task}
 
-${RUNNER_REQUIREMENTS}`;
+${options.repliesAsComment === true ? `${REPLY_SECTION}\n` : ""}${RUNNER_REQUIREMENTS}`;
 
 	if (context.type === "pull_request" && context.diff) {
 		prompt += `\n## PR Diff\n\`\`\`diff\n${context.diff}\n\`\`\`\n`;
