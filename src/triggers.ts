@@ -29,6 +29,8 @@ export interface Trigger {
 	url?: string;
 	/** Set when this is the answer to a question from a pi-durable extension; `text` is the message for the model. */
 	answer?: UiAnswer;
+	/** Set when `task` is a prompt template's expanded body; `typed` is the task as written (`/name args`). */
+	template?: { name: string; source: string; typed: string };
 }
 
 /** Who may run pi, and how they ask: the trigger_phrase and allowed_* inputs. */

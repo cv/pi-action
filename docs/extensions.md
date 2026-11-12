@@ -5,6 +5,8 @@ The `extensions` input loads two kinds of packages into pi-action:
 - **pi extensions** give model **providers**. pi-action uses only the providers that they register. See [Providers](#providers).
 - **pi-durable extensions** give **tools and prompt sections** to every conversation. Their tools can ask questions, which pi-action posts on the issue or pull request. See [pi-durable extensions](#pi-durable-extensions).
 
+Both kinds can also give **prompt templates** (`pi.prompts`). See [Prompts](prompts.md#prompt-templates).
+
 An extension is code that runs inside pi-action, with all the permissions of the job. Load only extensions that you trust. See [Security](security.md#extensions).
 
 ## Declare extensions

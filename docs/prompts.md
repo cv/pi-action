@@ -18,6 +18,36 @@ Before pi-action finds the task, it removes HTML comments and invisible characte
 
 For a `pr_number` run, the task is `prompt`, or `Please review this pull request` when `prompt` is empty. For a direct prompt, the task is `prompt`.
 
+A task that starts with `/<name>` can be a [prompt template](#prompt-templates).
+
+## Prompt templates
+
+When the task starts with `/<name>`, and a prompt template has that name, pi-action replaces the task with the template. This works as in pi's CLI. For example, `@pi /pit-reflect focus` gives pi the text of `pit-reflect.md`, with `focus` as its argument.
+
+pi-action loads templates from these places, in this sequence:
+
+1. The `pi.prompts` files and directories of each package in `extensions`, in the order of the input. This includes packages with a pi-durable extension.
+2. `.pi/prompts/*.md` in the repository, **only with `trust_project: true`**. See [Security](security.md#prompt-templates-from-the-repository).
+3. `<agent_dir>/prompts/*.md`, when `agent_dir` is set.
+
+The name of a template is its file name without `.md`. When two templates have the same name, the first one wins, and pi-action writes a warning. The log of the setup lists the templates.
+
+pi-action removes the frontmatter of the template (`description`, `argument-hint`), and replaces these variables with the arguments after `/<name>`:
+
+| Variable | Value |
+|----------|-------|
+| `$1` … `$9` | One argument. Empty when there is no such argument |
+| `$ARGUMENTS`, `$@` | All arguments, separated by spaces |
+| `${@:N}` | The arguments from argument N |
+| `${@:N:L}` | L arguments from argument N |
+| `${ARGUMENTS:-default}` | All arguments, or `default` when there are none |
+
+- Spaces separate the arguments. Quotes (`"..."`, `'...'`) keep spaces in one argument.
+- pi-action replaces all variables in one pass. A `$1` in an argument stays as it is.
+- pi-action expands templates in the [task](#the-task) of the first message (also `{{task}}` in `prompt_template`), of each follow-up, and in `prompt` (for `pr_number` runs and direct prompts). It does not expand answers to questions.
+- A `/<name>` that no template has stays as it is.
+- The log shows the request as it was typed, for example `▶ Request from @alice: /pit-reflect focus (prompt template from pit)`. The thread keeps the typed text in the `typed` field of the comment entry, and the name in `template`.
+
 ## The built-in prompt
 
 For an issue or a pull request, the built-in first message has these parts, in this sequence:
