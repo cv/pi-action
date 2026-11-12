@@ -272,7 +272,9 @@ describe("run (durable)", () => {
 		const setupEnd = lines.indexOf("::endgroup::");
 		expect(lines[0]).toBe("::group::Setup");
 		expect(lines.slice(setupEnd + 1)).toStrictEqual([
-			expect.stringMatching(/^🤖 faux\S*\/\S+$/u),
+			expect.stringMatching(
+				/^🤖 faux\S*\/\S+ · tools: read, write, edit, bash$/u,
+			),
 			`::group::🧵 Thread ${REF}: new`,
 			expect.stringContaining(
 				`This conversation is stored in git on ${REF}. To read it:\n  git fetch origin '${REF}:${REF}'\n`,
