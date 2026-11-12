@@ -713,6 +713,27 @@ describe("run (durable) with main's modes", () => {
 		expect(deps.summary).not.toHaveBeenCalled();
 	});
 
+	it("expands a prompt template in a direct prompt", async () => {
+		const w = world();
+		let seen: string[] = [];
+		w.faux.setResponses([
+			(context) => {
+				seen = userTexts(context.messages);
+				return fauxAssistantMessage("Notes.");
+			},
+		]);
+		const deps = w.deps(
+			undefined,
+			{ outputMode: "output", prompt: "/notes v2", agentDir: ".agent" },
+			{},
+		);
+		write(join(deps.cwd, ".agent/prompts/notes.md"), "Write notes for $1.");
+
+		await run(deps);
+
+		expect(seen[0]).toContain("## Task\nWrite notes for v2.\n");
+	});
+
 	it("pr_number reviews join that PR's thread and can post to it", async () => {
 		const w = world();
 		vi.mocked(w.gh.getPullRequest).mockResolvedValue({
