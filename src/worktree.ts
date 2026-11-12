@@ -3,10 +3,7 @@
 // Each snapshot (src/storage/worktree.ts) is recorded on refs/pi/worktrees/<n>, and the conversation points at it
 // with the `pi-action.worktree` document (rewindable, fork "asOf"), written in the same commit as a marker entry. A
 // fork or rewind of the conversation thus sees the snapshot as of its fork entry. At the start of a run, the
-// snapshot the conversation points at is restored, unless that would drop work that only the newest snapshot has:
-// then pi-action asks first.
-import { createHash } from "node:crypto";
-
+// snapshot the conversation points at is restored. No snapshot is ever deleted: a newer one stays on the ref.
 import {
 	BACKGROUND_CONTEXT,
 	type Context,
@@ -29,11 +26,9 @@ import {
 	type SnapshotRecord,
 	stashState,
 	stateKey,
-	uniqueWork,
-	type UniqueWork,
 	writeStash,
 } from "./storage/worktree.ts";
-import type { Log, UiAnswer, UiQuestion } from "./types.ts";
+import type { Log } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
 
 const context: Context = BACKGROUND_CONTEXT;
@@ -43,8 +38,6 @@ export const WORKTREE_ENTRY_KIND = "pi-action.worktree";
 /** The entry that tells the model how the restore went. */
 export const RESTORE_ENTRY_KIND = "pi-action.worktree-restore";
 const LISTED = 20;
-/** The question's title lists at most this many files (and commits). */
-const TITLE_LISTED = 5;
 
 /** The snapshot a conversation points at: its stash commit W and its wrapper commit on the ref. Empty: none. */
 export const WorktreeDoc = defineDoc<{ stash: string; wrapper: string }>({
@@ -57,11 +50,6 @@ export const WorktreeDoc = defineDoc<{ stash: string; wrapper: string }>({
 	checkpointWhen: () => true,
 });
 
-export const REWIND_OPTION = "Rewind files too";
-export const KEEP_OPTION =
-	"Keep the latest files, rewind only the conversation";
-export const CANCEL_OPTION = "Cancel";
-
 export interface WorktreeOptions {
 	readonly cwd: string;
 	/** `refs/pi/worktrees/<n>`. */
@@ -69,23 +57,6 @@ export interface WorktreeOptions {
 	readonly limits: SnapshotLimits;
 	readonly log: Log;
 	readonly remote?: string | undefined;
-}
-
-/** How the run may go on after `restore()`. */
-export type RestoreResult =
-	| { readonly kind: "ready"; readonly message: string | undefined }
-	| { readonly kind: "asked"; readonly url: string | undefined }
-	| { readonly kind: "cancelled" };
-
-export interface RestoreInput {
-	/** Posts the guard's question; undefined when nobody can answer (no questions, a fork PR). */
-	readonly ask?:
-		| ((question: UiQuestion) => Promise<{ url?: string }>)
-		| undefined;
-	/** The answer that started this run, if any; consumed when it answers the guard's question. */
-	readonly answer?: UiAnswer | undefined;
-	/** The thread's current tip, for the trailers of a snapshot recorded while restoring. */
-	readonly threadTip?: string | undefined;
 }
 
 const short = (sha: string): string => sha.slice(0, 7);
@@ -107,6 +78,10 @@ function skippedNote(record: SnapshotRecord): string {
 
 const applyHint = (record: SnapshotRecord): string =>
 	`The snapshot is saved at ${record.stash}: \`git stash show -p --include-untracked ${short(record.stash)}\` shows it, \`git stash apply --index ${short(record.stash)}\` applies it.`;
+
+/** The conversation points at an older snapshot than the newest one (it was rewound or forked). */
+const newerNote = (latest: SnapshotRecord): string =>
+	`\n\nThe conversation was rewound to an earlier point, and so were the files. A newer snapshot has the files as pi last left them: \`git stash show -p --include-untracked ${short(latest.stash)}\` shows it (${latest.stash}).`;
 
 /** The message that tells the model how the restore went. */
 export function restoreMessage(
@@ -134,43 +109,6 @@ export function restoreMessage(
 	return `${intro}. ${where}.${moved}${staging}${conflicts}${skippedNote(record)}`;
 }
 
-/** The guard's question key: one per pair of snapshots. */
-function questionKey(
-	target: SnapshotRecord | undefined,
-	latest: SnapshotRecord,
-): string {
-	return createHash("sha256")
-		.update(`pi-action.worktree ${target?.wrapper ?? "-"} ${latest.wrapper}`)
-		.digest("hex")
-		.slice(0, 32);
-}
-
-/** At most TITLE_LISTED items, comma-separated. */
-function few(items: readonly string[]): string {
-	return items.length > TITLE_LISTED
-		? `${items.slice(0, TITLE_LISTED).join(", ")} and ${items.length - TITLE_LISTED} more`
-		: items.join(", ");
-}
-
-function guardQuestion(
-	key: string,
-	latest: SnapshotRecord,
-	work: UniqueWork,
-): UiQuestion {
-	const files = few(work.files.map((path) => `\`${path}\``));
-	const commits = few(work.commits.map(short));
-	const lost = [
-		...(work.files.length > 0 ? [`files ${files}`] : []),
-		...(work.commits.length > 0 ? [`unpushed commits ${commits}`] : []),
-	].join(" and ");
-	return {
-		kind: "select",
-		key,
-		title: `The conversation was rewound. Rewind the files too? That drops ${lost} from the working tree; they stay saved in snapshot ${short(latest.stash)} (${latest.wrapper})`,
-		options: [REWIND_OPTION, KEEP_OPTION, CANCEL_OPTION],
-	};
-}
-
 /** Saves a thread's working tree at turn boundaries and restores it at the start of a run. */
 export class WorktreeContinuity {
 	private readonly options: WorktreeOptions;
@@ -178,8 +116,6 @@ export class WorktreeContinuity {
 	/** The state last saved (or restored); a checkpoint of the same state saves nothing. */
 	private lastKey: string | undefined;
 	private queue: Promise<unknown> = Promise.resolve();
-	/** Whether the answer given to restore() answered its question. */
-	answered = false;
 
 	constructor(options: WorktreeOptions) {
 		this.options = options;
@@ -303,80 +239,29 @@ export class WorktreeContinuity {
 		return record.wrapper;
 	}
 
-	/** What restore() chooses: the target, the latest snapshot, a question, or a cancellation. */
-	private async choose(
-		target: SnapshotRecord | undefined,
-		latest: SnapshotRecord | undefined,
-		input: RestoreInput,
-	): Promise<
-		| { kind: "record"; record: SnapshotRecord | undefined; note: string }
-		| { kind: "asked"; url: string | undefined }
-		| { kind: "cancelled" }
-	> {
-		const { cwd, log, remote } = this.options;
-		if (latest === undefined || latest.stash === target?.stash) {
-			return { kind: "record", record: target, note: "" };
-		}
-		const work = await uniqueWork(cwd, latest, target, remote);
-		if (work.files.length === 0 && work.commits.length === 0) {
-			return { kind: "record", record: target, note: "" };
-		}
-		const key = questionKey(target, latest);
-		if (input.answer?.key === key) {
-			this.answered = true;
-			log.info(
-				`@${input.answer.by} answered the working-tree question: ${String(input.answer.answer)}`,
-			);
-			if (input.answer.answer === CANCEL_OPTION) {
-				return { kind: "cancelled" };
-			}
-			return input.answer.answer === KEEP_OPTION
-				? { kind: "record", record: latest, note: "" }
-				: { kind: "record", record: target, note: "" };
-		}
-		if (input.ask === undefined) {
-			const lost = [
-				...work.files.map((path) => `\`${path}\``),
-				...work.commits.map((sha) => `commit ${short(sha)}`),
-			];
-			log.warning(
-				`The conversation points at an older working-tree snapshot than ${short(latest.stash)}, which has work that exists nowhere else, and nobody can be asked: the files were not rewound`,
-			);
-			return {
-				kind: "record",
-				record: latest,
-				note: `\n\nThe conversation was rewound to an earlier point, but the files were not: the newest snapshot (${short(latest.stash)}) has work that exists nowhere else, and nobody could be asked whether to drop it (questions are not available in this run). The files are those of the newest snapshot. Work only that snapshot has:\n${list(lost)}`,
-			};
-		}
-		const asked = await input.ask(guardQuestion(key, latest, work));
-		log.info(
-			`Asked whether to rewind the files too${asked.url ? ` (${asked.url})` : ""}; the run ends until someone answers`,
-		);
-		return { kind: "asked", url: asked.url };
-	}
-
 	/**
 	 * Restore the snapshot the conversation points at into the checkout, before any work runs. Returns the message
-	 * for the model (undefined when there was nothing to restore), or that the run must end: a question was asked,
-	 * or its answer was Cancel. A failed restore starts clean and says so; it never throws.
+	 * for the model, undefined when there was nothing to restore. A failed restore starts clean and says so; it never
+	 * throws.
 	 */
-	async restore(input: RestoreInput = {}): Promise<RestoreResult> {
+	async restore(): Promise<string | undefined> {
 		const { cwd, ref, limits, log, remote } = this.options;
 		try {
 			const [target, latest] = await Promise.all([
 				this.target(),
 				latestSnapshot(cwd, ref),
 			]);
-			const choice = await this.choose(target, latest, input);
-			if (choice.kind !== "record") {
-				return choice;
-			}
-			const { record, note } = choice;
-			if (record === undefined) {
+			const note =
+				latest === undefined || latest.stash === target?.stash
+					? ""
+					: newerNote(latest);
+			if (target === undefined) {
 				this.lastKey = await captureState(cwd, limits)
 					.then(stateKey)
 					.catch(() => undefined);
-				return { kind: "ready", message: undefined };
+				return note === ""
+					? undefined
+					: `[pi-action] This run started from a clean checkout: the conversation has no working-tree snapshot as of this point.${note}`;
 			}
 			const before = await captureState(cwd, limits);
 			if (
@@ -384,57 +269,22 @@ export class WorktreeContinuity {
 				before.worktreeTree !== before.headTree
 			) {
 				log.warning(
-					`The checkout has uncommitted changes; not restoring ${short(record.stash)}`,
+					`The checkout has uncommitted changes; not restoring ${short(target.stash)}`,
 				);
 				this.lastKey = stateKey(before);
-				return {
-					kind: "ready",
-					message: `[pi-action] The checkout already had uncommitted changes when this run started, so pi-action did not restore the files the earlier run left uncommitted. ${applyHint(record)}`,
-				};
+				return `[pi-action] The checkout already had uncommitted changes when this run started, so pi-action did not restore the files the earlier run left uncommitted. ${applyHint(target)}`;
 			}
-			const outcome = await restoreSnapshot(cwd, record, remote);
+			const outcome = await restoreSnapshot(cwd, target, remote);
 			log.info(
-				`Restored working-tree snapshot ${short(record.stash)}: ${outcome.status}`,
+				`Restored working-tree snapshot ${short(target.stash)}: ${outcome.status}`,
 			);
-			if (outcome.status === "restored" && latest !== undefined) {
-				await this.keepChosen(record, target, latest, input.threadTip);
-			}
 			this.lastKey = stateKey(await captureState(cwd, limits));
-			return {
-				kind: "ready",
-				message: `${restoreMessage(outcome, record)}${note}`,
-			};
+			return `${restoreMessage(outcome, target)}${note}`;
 		} catch (error) {
 			log.warning(
 				`Could not restore the working tree: ${getErrorMessage(error)}`,
 			);
-			return {
-				kind: "ready",
-				message: `[pi-action] Restoring the files the earlier run left uncommitted failed (${getErrorMessage(error)}), so this run started from a clean checkout.`,
-			};
-		}
-	}
-
-	/**
-	 * After restoring an older snapshot, record it again on top of the ref, so the newest snapshot is what the
-	 * files are now (the newer one stays reachable below it); and point the conversation at what was restored.
-	 */
-	private async keepChosen(
-		record: SnapshotRecord,
-		target: SnapshotRecord | undefined,
-		latest: SnapshotRecord,
-		threadTip: string | undefined,
-	): Promise<void> {
-		let pointed = record;
-		if (record.wrapper !== latest.wrapper) {
-			pointed = await recordSnapshot(this.options.cwd, this.options.ref, {
-				...record,
-				threadTip,
-				threadEntry: await this.latestEntry(),
-			});
-		}
-		if (pointed.wrapper !== target?.wrapper) {
-			await this.point(pointed);
+			return `[pi-action] Restoring the files the earlier run left uncommitted failed (${getErrorMessage(error)}), so this run started from a clean checkout.`;
 		}
 	}
 }

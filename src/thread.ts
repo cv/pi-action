@@ -23,13 +23,9 @@ import { GitStorage } from "./storage/git-storage.ts";
 import { git } from "./storage/git.ts";
 import { GitSync, isTurnBoundary } from "./storage/sync.ts";
 import { type SnapshotLimits, worktreeRef } from "./storage/worktree.ts";
-import type { Log, UiAnswer, UiQuestion } from "./types.ts";
+import type { Log } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
-import {
-	RESTORE_ENTRY_KIND,
-	type RestoreResult,
-	WorktreeContinuity,
-} from "./worktree.ts";
+import { RESTORE_ENTRY_KIND, WorktreeContinuity } from "./worktree.ts";
 
 const context: Context = BACKGROUND_CONTEXT;
 
@@ -53,16 +49,8 @@ export interface ThreadOptions {
 	extensions?: readonly Extension[];
 	/** Variables the tools' shell gets on top of the process environment (see `toolEnv()`). */
 	toolEnv?: Readonly<Record<string, string>> | undefined;
-	/** Save and restore the working tree with the thread (stored threads only); undefined: don't. */
-	worktree?: WorktreeSettings | undefined;
-}
-
-export interface WorktreeSettings {
-	limits: SnapshotLimits;
-	/** Asks whether to rewind the files with the conversation; undefined when nobody can answer. */
-	ask?: ((question: UiQuestion) => Promise<{ url?: string }>) | undefined;
-	/** The answer that started this run, if any. */
-	answer?: UiAnswer | undefined;
+	/** Save and restore the working tree with the thread (stored threads only), with these limits; undefined: don't. */
+	worktree?: SnapshotLimits | undefined;
 }
 
 /** What `Thread.answerText()` reports about a run's answer. */
@@ -150,7 +138,7 @@ async function openPersistence(
 			: new WorktreeContinuity({
 					cwd,
 					ref: worktreeRef(issueNumber),
-					limits: options.worktree.limits,
+					limits: options.worktree,
 					log,
 					remote: options.remote,
 				});
@@ -198,19 +186,15 @@ export class Thread {
 	private readonly harness: Harness;
 	private readonly root: Conversation;
 	private readonly persistence: Persistence | undefined;
-	/** How the working tree was restored: `ready`, or why the run must end (a question, Cancel). */
-	readonly restored: RestoreResult;
 
 	private constructor(
 		harness: Harness,
 		root: Conversation,
 		persistence: Persistence | undefined,
-		restored: RestoreResult,
 	) {
 		this.harness = harness;
 		this.root = root;
 		this.persistence = persistence;
-		this.restored = restored;
 	}
 
 	static async open(options: ThreadOptions): Promise<Thread> {
@@ -245,16 +229,9 @@ export class Thread {
 		};
 		const root = await harness.root(context, { agent });
 		await root.configure(agent, context); // the model may differ from the last run's
-		const restored = await restoreWorktree(persistence, harness, root, options);
-		if (restored.kind === "ready") {
-			harness.resume(); // finish whatever a previous, interrupted run left
-		}
-		return new Thread(harness, root, persistence, restored);
-	}
-
-	/** Whether the answer that started the run answered pi-action's own working-tree question (not the model's). */
-	get answeredWorktreeQuestion(): boolean {
-		return this.persistence?.worktree?.answered ?? false;
+		await restoreWorktree(persistence?.worktree, harness, root);
+		harness.resume(); // finish whatever a previous, interrupted run left
+		return new Thread(harness, root, persistence);
 	}
 
 	/** The thread's ref, when it is stored in git. */
@@ -386,9 +363,7 @@ export class Thread {
 		}
 		this.closed = true;
 		const worktree = this.persistence?.worktree;
-		if (this.restored.kind === "ready") {
-			await worktree?.checkpoint(this.persistence?.storage.tip);
-		}
+		await worktree?.checkpoint(this.persistence?.storage.tip);
 		// Turn boundaries the closing harness still commits must not save into a closed conversation.
 		worktree?.detach();
 		await this.harness.close(context);
@@ -401,37 +376,28 @@ export class Thread {
  * (one entry with a user message).
  */
 async function restoreWorktree(
-	persistence: Persistence | undefined,
+	worktree: WorktreeContinuity | undefined,
 	harness: Harness,
 	root: Conversation,
-	options: ThreadOptions,
-): Promise<RestoreResult> {
-	const worktree = persistence?.worktree;
+): Promise<void> {
 	if (worktree === undefined) {
-		return { kind: "ready", message: undefined };
+		return;
 	}
 	worktree.attach(harness, root);
-	const restored = await worktree.restore({
-		ask: options.worktree?.ask,
-		answer: options.worktree?.answer,
-		threadTip: persistence?.storage.tip,
-	});
-	if (restored.kind === "ready" && restored.message !== undefined) {
+	const message = await worktree.restore();
+	if (message !== undefined) {
 		await root.submit(
 			{
 				type: "write",
 				entry: {
 					kind: RESTORE_ENTRY_KIND,
-					data: { message: restored.message },
-					model: [
-						{ role: "user", content: restored.message, timestamp: Date.now() },
-					],
+					data: { message },
+					model: [{ role: "user", content: message, timestamp: Date.now() }],
 				},
 			},
 			context,
 		);
 	}
-	return restored;
 }
 
 /** When the thread's root commit was made. */

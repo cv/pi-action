@@ -9,7 +9,7 @@ import {
 	type EntryId,
 	Harness,
 } from "@earendil-works/pi-durable";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { GitStorage } from "./storage/git-storage.ts";
 import {
@@ -23,12 +23,8 @@ import {
 	git as sh,
 	tempRemote,
 } from "./test-helpers.ts";
-import type { UiQuestion } from "./types.ts";
 import {
-	CANCEL_OPTION,
-	KEEP_OPTION,
 	restoreMessage,
-	REWIND_OPTION,
 	WORKTREE_ENTRY_KIND,
 	WorktreeContinuity,
 	WorktreeDoc,
@@ -80,8 +76,6 @@ async function setup() {
 	};
 	const forkAt = async (at: EntryId) =>
 		root.fork(at, { ownership: { kind: "ownerless" } }, context);
-	/** The first parent of the newest wrapper on the ref: the snapshot recorded before it. */
-	const previousWrapper = () => sh(dir, "rev-parse", `${REF}^1`).trim();
 	const say = async (text: string) => {
 		faux.setResponses([fauxAssistantMessage(text)]);
 		await (
@@ -109,7 +103,6 @@ async function setup() {
 		latestEntry,
 		lastEntry,
 		forkAt,
-		previousWrapper,
 		say,
 		freshCheckout,
 		write,
@@ -118,28 +111,6 @@ async function setup() {
 }
 
 type World = Awaited<ReturnType<typeof setup>>;
-
-type Ask = (question: UiQuestion) => Promise<{ url?: string }>;
-
-/** The question the guard asked. */
-function askedQuestion(ask: {
-	mock: { calls: Parameters<Ask>[] };
-}): UiQuestion {
-	const [call] = ask.mock.calls;
-	if (call === undefined) {
-		throw new Error("nothing was asked");
-	}
-	return call[0];
-}
-
-const answerTo = (question: UiQuestion, choice: string) => ({
-	key: question.key,
-	kind: "select" as const,
-	answer: choice,
-	by: "octo",
-	url: "https://q",
-	title: question.title,
-});
 
 describe("WorktreeContinuity", () => {
 	it("saves only when the files changed, and points the conversation at each snapshot", async () => {
@@ -167,12 +138,9 @@ describe("WorktreeContinuity", () => {
 		s.freshCheckout();
 		expect(s.read()).toBe("base\n");
 		const c = s.continuity();
-		await expect(c.restore()).resolves.toMatchObject({
-			kind: "ready",
-			message: expect.stringContaining(
-				"Staged and unstaged changes are as they were",
-			),
-		});
+		await expect(c.restore()).resolves.toContain(
+			"Staged and unstaged changes are as they were",
+		);
 		expect(s.read()).toBe("pi's edit\n");
 		// The restored state is the saved one: nothing new to save.
 		await expect(c.checkpoint(s.storage.tip)).resolves.toBeUndefined();
@@ -180,10 +148,7 @@ describe("WorktreeContinuity", () => {
 
 	it("starts clean without a message when the conversation has no snapshot", async () => {
 		const s = await setup();
-		await expect(s.continuity().restore()).resolves.toStrictEqual({
-			kind: "ready",
-			message: undefined,
-		});
+		await expect(s.continuity().restore()).resolves.toBeUndefined();
 	});
 
 	it("gives a fork the snapshot as of its fork entry, not the newest one", async () => {
@@ -204,103 +169,20 @@ describe("WorktreeContinuity", () => {
 		});
 	});
 
-	describe("the guard, when the conversation points at an older snapshot", () => {
-		/** A snapshot, a fork at its marker entry, and (the caller adds) a newer snapshot on the root. */
-		async function rewound() {
-			const s = await setup();
-			const c = s.continuity();
-			s.write("older\n");
-			await c.checkpoint(s.storage.tip);
-			const fork = await s.forkAt(await s.latestEntry());
-			return { s, fork };
-		}
-
-		it("restores silently when the newer snapshot only has work that was pushed", async () => {
-			const s = await setup();
-			const c = s.continuity();
-			s.write("committed later\n");
-			await c.checkpoint(s.storage.tip);
-			const forkPoint = await s.latestEntry();
-			sh(s.dir, "commit", "-q", "-am", "pushed");
-			sh(s.dir, "push", "-q", "origin", "main");
-			const pushed = await c.checkpoint(s.storage.tip);
-			expect(pushed).toBeDefined();
-			const fork = await s.forkAt(forkPoint);
-			s.freshCheckout();
-			sh(s.dir, "reset", "-q", "--hard", "origin/main");
-			const ask = vi.fn<Ask>();
-			const result = await s.continuity(fork).restore({ ask });
-			expect(ask).not.toHaveBeenCalled();
-			expect(result.kind).toBe("ready");
-			// The newest snapshot is now the restored one; the newer stays below it on the ref.
-			expect(s.previousWrapper()).toBe(pushed);
-			const doc = await s.harness.snapshot(WorktreeDoc, fork.id, context);
-			expect(doc?.wrapper).toBe(sh(s.dir, "rev-parse", REF).trim());
-		});
-
-		/** The guard's question, asked: a newer snapshot on the root has work only it has. */
-		async function asked() {
-			const { s, fork } = await rewound();
-			s.write("newer, unique\n");
-			const newer = await s.continuity().checkpoint(s.storage.tip);
-			s.freshCheckout();
-			const ask = vi.fn<Ask>(async () => ({ url: "https://q" }));
-			const result = await s.continuity(fork).restore({ ask });
-			const answer = (choice: string) => answerTo(askedQuestion(ask), choice);
-			return { s, fork, ask, result, newer, answer };
-		}
-
-		it("asks, without touching the files, when the newer snapshot has work that exists nowhere else", async () => {
-			const { s, ask, result } = await asked();
-			expect(result).toStrictEqual({ kind: "asked", url: "https://q" });
-			expect(s.read()).toBe("base\n");
-			const question = askedQuestion(ask);
-			expect(question).toMatchObject({
-				kind: "select",
-				options: [REWIND_OPTION, KEEP_OPTION, CANCEL_OPTION],
-			});
-			expect(question.title).toContain("`file.txt`");
-		});
-
-		it.each([
-			[CANCEL_OPTION, "base\n", { kind: "cancelled" }],
-			[KEEP_OPTION, "newer, unique\n", { kind: "ready" }],
-			[REWIND_OPTION, "older\n", { kind: "ready" }],
-		])("answered %o: the files are %o", async (choice, files, kind) => {
-			const { s, fork, ask, answer } = await asked();
-			const c = s.continuity(fork);
-			await expect(
-				c.restore({ ask, answer: answer(choice) }),
-			).resolves.toMatchObject(kind);
-			expect(c.answered).toBe(true);
-			expect(s.read()).toBe(files);
-		});
-
-		it("keeps the newer snapshot on the ref after a rewind, and doesn't ask again", async () => {
-			const { s, fork, ask, newer, answer } = await asked();
-			await s.continuity(fork).restore({ ask, answer: answer(REWIND_OPTION) });
-			expect(s.previousWrapper()).toBe(newer);
-			// Next run: the conversation and the newest snapshot agree, so nothing is asked.
-			s.freshCheckout();
-			ask.mockClear();
-			await s.continuity(fork).restore({ ask });
-			expect(ask).not.toHaveBeenCalled();
-			expect(s.read()).toBe("older\n");
-		});
-
-		it("keeps the newest files and says why when nobody can answer", async () => {
-			const { s, fork } = await rewound();
-			s.write("newer, unique\n");
-			await s.continuity().checkpoint(s.storage.tip);
-			s.freshCheckout();
-			await expect(s.continuity(fork).restore({})).resolves.toMatchObject({
-				message: expect.stringContaining("nobody could be asked"),
-			});
-			expect(s.read()).toBe("newer, unique\n");
-			expect(s.log.warning).toHaveBeenCalledWith(
-				expect.stringContaining("the files were not rewound"),
-			);
-		});
+	it("rewinds the files with the conversation, and names the newer snapshot", async () => {
+		const s = await setup();
+		const c = s.continuity();
+		s.write("older\n");
+		await c.checkpoint(s.storage.tip);
+		const fork = await s.forkAt(await s.latestEntry());
+		s.write("newer\n");
+		const newer = await c.checkpoint(s.storage.tip);
+		const stash = sh(s.dir, "rev-parse", `${newer}^2`).trim();
+		s.freshCheckout();
+		await expect(s.continuity(fork).restore()).resolves.toContain(
+			`shows it (${stash})`,
+		);
+		expect(s.read()).toBe("older\n");
 	});
 
 	it.each<{
@@ -335,9 +217,7 @@ describe("WorktreeContinuity", () => {
 		await s.continuity().checkpoint(s.storage.tip);
 		s.freshCheckout();
 		await spoil(s);
-		await expect(s.continuity().restore()).resolves.toMatchObject({
-			message: expect.stringContaining(message),
-		});
+		await expect(s.continuity().restore()).resolves.toContain(message);
 		expect(s.read()).toBe(files);
 	});
 });

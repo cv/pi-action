@@ -103,7 +103,7 @@ pi-action is TypeScript on [pi-durable](https://www.npmjs.com/package/@earendil-
 | [`src/answers.ts`](src/answers.ts) | Answers from the event (a ticked box or an `/answer` reply), checked and changed into a `ui.answer` submission |
 | [`src/tool-env.ts`](src/tool-env.ts) | `GH_TOKEN` and the `github-actions[bot]` git identity for the tools of the agent |
 | [`src/push.ts`](src/push.ts) | The `if: always()` step that saves the working tree and pushes thread state that the run did not push |
-| [`src/worktree.ts`](src/worktree.ts) | `WorktreeContinuity`: saves the working tree at turn boundaries, points the conversation at each snapshot (the `pi-action.worktree` document), and restores it at the start of a run, asking first when that would drop work |
+| [`src/worktree.ts`](src/worktree.ts) | `WorktreeContinuity`: saves the working tree at turn boundaries, points the conversation at each snapshot (the `pi-action.worktree` document), and restores it at the start of a run |
 | [`src/storage/git.ts`](src/storage/git.ts) | Git objects in the process, and compare-and-swap ref updates |
 | [`src/storage/git-storage.ts`](src/storage/git-storage.ts) | `GitStorage`: a pi-durable `Storage` whose log is a chain of commits on one ref |
 | [`src/storage/sync.ts`](src/storage/sync.ts) | `GitSync`: fetches a thread ref, and pushes it (fast-forward only) at turn boundaries, with its working-tree ref in one atomic push |

@@ -100,15 +100,9 @@ At the start of a run, before pi continues any work, pi-action restores the snap
 
 If the restore fails, pi-action resets the checkout, and pi starts from the clean checkout. A failed restore does not make the run fail. If the checkout has uncommitted changes to tracked files before the restore, pi-action does not restore the snapshot.
 
-### Work that exists nowhere else
+### Rewinds and forks
 
-The newest snapshot on the ref is what pi worked on last. If the conversation records an older snapshot (for example, after a rewind), the newest snapshot can have work that the older snapshot does not have: changed files, or commits that are on no branch of the remote. Pushed commits do not count.
-
-- If there is no such work, pi-action restores the older snapshot.
-- If there is such work, pi-action does not change the files. It asks a question on the issue or pull request, which lists the files and the commits, and tells where they stay saved. The options are *Rewind files too*, *Keep the latest files, rewind only the conversation*, and *Cancel*. The run then ends. The answer starts the next run. See [Questions on GitHub](extensions.md#questions-on-github).
-- If nobody can answer (in `output` mode, where pi-action posts nothing), pi-action keeps the files of the newest snapshot, and tells pi why.
-
-pi-action never deletes a snapshot: all snapshots stay on the ref.
+When the conversation is rewound or forked, pi-action restores the snapshot that was current at that point, not the newest one. pi-action never deletes a snapshot: the newer snapshots stay on the ref, and the message to pi names the newest one, so that pi can get its files back.
 
 ### When there are no snapshots
 

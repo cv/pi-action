@@ -26,7 +26,6 @@ import {
 	restoreSnapshot,
 	type SnapshotRecord,
 	stateKey,
-	uniqueWork,
 	worktreeRef,
 	writeStash,
 } from "./worktree.ts";
@@ -358,46 +357,5 @@ describe("isExcluded", () => {
 		expect(
 			isExcluded(path, [".env*", "*.key", "id_rsa*", "docs/**/a.txt"]),
 		).toBe(excluded);
-	});
-});
-
-describe("uniqueWork", () => {
-	it("finds nothing when the newer snapshot only adds work that was pushed", async () => {
-		const w = world();
-		const dir = w.clone();
-		write(dir, "keep.txt", "uncommitted\n");
-		const target = await snapshot(dir);
-		// Later, pi committed and pushed that change.
-		sh(dir, "commit", "-q", "-am", "pushed");
-		sh(dir, "push", "-q", "origin", "main");
-		const latest = await snapshot(dir);
-		const fresh = freshCheckout(w, dir);
-		await expect(uniqueWork(fresh, latest, target)).resolves.toStrictEqual({
-			files: [],
-			commits: [],
-		});
-	});
-
-	it("finds the files and local commits only the newer snapshot has", async () => {
-		const w = world();
-		const dir = w.clone();
-		write(dir, "keep.txt", "older\n");
-		const target = await snapshot(dir);
-		write(dir, "local.txt", "local\n");
-		sh(dir, "add", "local.txt");
-		sh(dir, "commit", "-q", "-m", "local");
-		const commit = sh(dir, "rev-parse", "HEAD").trim();
-		write(dir, "keep.txt", "newer\n");
-		write(dir, "fresh.txt", "untracked\n");
-		const latest = await snapshot(dir);
-		const fresh = freshCheckout(w, dir);
-		await expect(uniqueWork(fresh, latest, target)).resolves.toStrictEqual({
-			files: ["fresh.txt", "keep.txt"],
-			commits: [commit],
-		});
-		// With no target, a clean checkout is what would be restored.
-		await expect(uniqueWork(fresh, latest, undefined)).resolves.toMatchObject({
-			files: ["fresh.txt", "keep.txt"],
-		});
 	});
 });

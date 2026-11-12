@@ -26,12 +26,12 @@ import type { ActionInputs } from "./inputs.ts";
 import { createActionModels, findModel } from "./models.ts";
 import { getRunContext } from "./run-context.ts";
 import { GitSyncConflictError } from "./storage/sync.ts";
-import { Thread, type WorktreeSettings } from "./thread.ts";
+import type { SnapshotLimits } from "./storage/worktree.ts";
+import { Thread } from "./thread.ts";
 import { toolEnv } from "./tool-env.ts";
 import { collectTriggers, type Trigger, triggerFromInfo } from "./triggers.ts";
 import type { Log, TriggerInfo } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
-import type { RestoreResult } from "./worktree.ts";
 
 type Env = Record<string, string | undefined>;
 
@@ -164,16 +164,11 @@ async function initialTriggers(
 	piContext: PIContext,
 	triggerInfo: TriggerInfo | undefined,
 	since: Date | undefined,
-	/** `true`: the answer that started the run was pi-action's own (the working-tree question). */
-	answer: Trigger | true | undefined,
+	answer: Trigger | undefined,
 ): Promise<Trigger[]> {
 	const { inputs } = deps;
 	if (!triggerInfo) {
 		return [oneOffTrigger(piContext, deps.env ?? process.env)];
-	}
-	if (answer === true) {
-		// The answer was for pi-action itself (the working-tree question): the comments still waiting go on.
-		return collectTriggers(gh, triggerInfo, inputs, since);
 	}
 	const current = answer ?? triggerFromInfo(triggerInfo, inputs.triggerPhrase);
 	return inputs.outputMode === "comment"
@@ -181,23 +176,8 @@ async function initialTriggers(
 		: [current];
 }
 
-/** Why the run ends right after opening the thread: the working-tree question. */
-function haltMessage(
-	restored: Exclude<RestoreResult, { kind: "ready" }>,
-): string {
-	if (restored.kind === "cancelled") {
-		return "The answer to the working-tree question was Cancel; the run ends";
-	}
-	const where = restored.url === undefined ? "" : ` (${restored.url})`;
-	return `pi-action asked whether to rewind the files with the conversation${where}; the run ends until someone answers`;
-}
-
-/** The `worktree` settings of the thread: off by input, for direct prompts, and on fork pull requests. */
-function worktreeSettings(
-	deps: ActionDependencies,
-	ui: GitHubUi | undefined,
-	answer: Trigger | undefined,
-): WorktreeSettings | undefined {
+/** The working-tree snapshot limits of the thread; undefined (off) by input and on fork pull requests. */
+function worktreeLimits(deps: ActionDependencies): SnapshotLimits | undefined {
 	const { inputs, log } = deps;
 	if (!inputs.worktreeSnapshots) {
 		return undefined;
@@ -208,11 +188,7 @@ function worktreeSettings(
 		);
 		return undefined;
 	}
-	return {
-		limits: inputs.worktreeLimits,
-		ask: ui ? async (question) => ui.ask(question) : undefined,
-		answer: answer?.answer,
-	};
+	return inputs.worktreeLimits;
 }
 
 /** Close the thread, pushing it; a failure to save is a warning, not a failed run. */
@@ -308,14 +284,10 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			remote: deps.remote,
 			extensions,
 			toolEnv: tools,
-			worktree: worktreeSettings(deps, ui, resolved.answer),
+			worktree: worktreeLimits(deps),
 		});
 		thread = opened;
 		stopSignals = pushOnSignals(opened, log);
-		if (opened.restored.kind !== "ready") {
-			log.info(haltMessage(opened.restored));
-			return;
-		}
 		log.info(
 			opened.ref
 				? `Thread ${opened.ref}: ${opened.isNew ? "new" : `since ${opened.startedAt?.toISOString()}`}`
@@ -365,7 +337,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 				piContext,
 				triggerInfo,
 				opened.startedAt,
-				opened.answeredWorktreeQuestion || resolved.answer,
+				resolved.answer,
 			),
 		);
 	} catch (error) {
