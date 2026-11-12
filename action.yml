@@ -94,6 +94,14 @@ inputs:
     description: 'Agent directory (user-level state) for pi-durable extensions, relative to the workspace; a fresh temp directory under RUNNER_TEMP when empty'
     required: false
     default: ''
+  context_files:
+    description: 'Put the repository''s AGENTS.md (or CLAUDE.md) into the system prompt: the one in agent_dir (when set), then one per directory from the workspace root down to the working directory. On a pull request from a fork, they come from its base commit'
+    required: false
+    default: 'true'
+  context_files_max_bytes:
+    description: 'Maximum size of all context files together, in bytes; a file past it is cut, with a note to the model and a warning in the log'
+    required: false
+    default: '65536'
   exclude_tools:
     description: 'Tools to disable completely, one per line or comma-separated; * matches any characters (for example bash). Neither the model nor other tools can call them'
     required: false
@@ -190,6 +198,8 @@ runs:
         INPUT_SKILLS: ${{ inputs.skills }}
         INPUT_TRUST_PROJECT: ${{ inputs.trust_project }}
         INPUT_AGENT_DIR: ${{ inputs.agent_dir }}
+        INPUT_CONTEXT_FILES: ${{ inputs.context_files }}
+        INPUT_CONTEXT_FILES_MAX_BYTES: ${{ inputs.context_files_max_bytes }}
         INPUT_EXCLUDE_TOOLS: ${{ inputs.exclude_tools }}
         INPUT_MODEL_TOOLS_HIDDEN: ${{ inputs.model_tools_hidden }}
         INPUT_WORKTREE_SNAPSHOTS: ${{ inputs.worktree_snapshots }}

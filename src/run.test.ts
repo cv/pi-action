@@ -464,6 +464,60 @@ describe("run (durable)", () => {
 		);
 	});
 
+	it("puts the checkout's AGENTS.md into the system prompt, and logs it in the setup group", async () => {
+		const w = world();
+		const seen: string[] = [];
+		const record: FauxResponseStep = (context) => {
+			seen.push(
+				JSON.stringify(context.messages.filter((m) => m.role === "system")),
+			);
+			return fauxAssistantMessage("ok");
+		};
+		w.faux.setResponses([record, record]);
+		const on = w.deps(w.comment("@pi one"));
+		writeFileSync(join(on.cwd, "AGENTS.md"), "Use tabs.");
+		const lines = logLines(on.log);
+		await run(on);
+		const off = w.deps(w.comment("@pi two"), { contextFiles: false });
+		writeFileSync(join(off.cwd, "AGENTS.md"), "Use tabs.");
+		await run(off);
+
+		expect(seen[0]).toContain("Use tabs.");
+		expect(seen[0]).toContain(join(on.cwd, "AGENTS.md"));
+		const setupEnd = lines.indexOf("::endgroup::");
+		expect(lines.slice(0, setupEnd)).toContain(
+			"Context files: AGENTS.md (9 B)",
+		);
+		// The next run without context files removes the section.
+		expect(seen[1]).toContain('"project_context":null');
+		expect(off.log.info).toHaveBeenCalledWith(
+			"Context files: off (context_files)",
+		);
+	});
+
+	it("reads AGENTS.md from the base commit on a pull request from a fork", async () => {
+		const w = world();
+		w.faux.setResponses([fauxAssistantMessage("ok")]);
+		const deps = w.deps(
+			undefined,
+			{ outputMode: "output", prompt: "review", prNumber: undefined },
+			{
+				pull_request: {
+					number: 42,
+					title: "Change",
+					body: "",
+					user: { login: "o", type: "User" },
+					head: { repo: { full_name: "fork/r" } },
+					base: { repo: { full_name: "o/r" }, sha: "" },
+				},
+			},
+		);
+		await run(deps);
+		expect(deps.log.warning).toHaveBeenCalledWith(
+			"Context files: the event names no base commit of the pull request",
+		);
+	});
+
 	it("answers with a provider from a pi extension (the extensions input)", async () => {
 		const w = world();
 		const trigger = w.comment("@pi say something");

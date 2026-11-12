@@ -78,9 +78,20 @@ An extension that you load with `extensions` runs inside pi-action, with the per
 
 A [prompt template](prompts.md#prompt-templates) becomes the request of the user. Anyone who can push a branch can change the files in `.pi/prompts`. Thus, pi-action loads them only with `trust_project: true`. Without it, pi-action writes `Not loading the prompt templates in .pi/prompts: trust_project is off` to the log. Templates from `extensions` and from `agent_dir` load in all cases.
 
+<<<<<<< HEAD
+## Context files from the repository
+
+`AGENTS.md` and `CLAUDE.md` go into the system prompt (see [Context files](prompts.md#context-files)). The system prompt has more weight for the model than a file that it reads. pi-action reads these files from the checkout, so their content is the content of the checked-out ref:
+
+- **Pull requests from forks** (`pull_request` events whose head is in another repository): pi-action reads the files from the base commit of the pull request (`pull_request.base.sha`), and fetches it if the clone does not have it. If it cannot read the base commit, it loads no workspace files and writes a warning. The author of the fork cannot change the system prompt.
+- **Pull requests from branches of the same repository:** pi-action uses the `AGENTS.md` of the branch. People who can push a branch can already change the code that your workflow runs.
+- pi-action removes invisible characters from the files, but keeps HTML comments, because `AGENTS.md` files use them.
+- Set `context_files: false` to load no files.
+=======
 ## Skills from the repository
 
 A [skill](skills.md) is instructions that pi follows, and it can tell pi to run its scripts. Anyone who can push a branch can change the files in `.pi/skills` and `.agents/skills`. Thus, pi-action loads them only with `trust_project: true`. Without it, pi-action writes `Not loading the skills in .pi/skills: trust_project is off` to the log (with the directories that exist). Skills from `extensions`, `skills`, and `agent_dir` load in all cases. Pin the packages, as for [extensions](#extensions).
+>>>>>>> f81bd9e (feat: load skills (SKILL.md), list them in the system prompt, and expand /skill:<name>)
 
 ## Thread contents are visible
 
