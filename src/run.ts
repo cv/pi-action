@@ -5,11 +5,8 @@ import type { Models } from "@earendil-works/pi-ai/models";
 import type { Extension } from "@earendil-works/pi-durable";
 
 import { Activity, formatStats, oneLine } from "./activity.ts";
-<<<<<<< HEAD
-import { loadProjectContext } from "./context-files.ts";
-=======
 import { createBuiltinExtension } from "./builtin-extension.ts";
->>>>>>> f81bd9e (feat: load skills (SKILL.md), list them in the system prompt, and expand /skill:<name>)
+import { loadProjectContext } from "./context-files.ts";
 import {
 	buildPrompt,
 	formatFollowUp,
@@ -190,11 +187,8 @@ async function setUp(
 	tools: Record<string, string>;
 	ui: GitHubUi | undefined;
 	templates: PromptTemplates;
-<<<<<<< HEAD
 	context: string | undefined;
-=======
 	skills: Skills;
->>>>>>> f81bd9e (feat: load skills (SKILL.md), list them in the system prompt, and expand /skill:<name>)
 }> {
 	const { inputs, log, cwd } = deps;
 	const env = deps.env ?? process.env;
@@ -237,11 +231,8 @@ async function setUp(
 		tools,
 		ui,
 		templates: promptTemplates(deps, loaded.prompts),
-<<<<<<< HEAD
 		context: await projectContext(deps, env),
-=======
 		skills: runSkills(deps, loaded.skills),
->>>>>>> f81bd9e (feat: load skills (SKILL.md), list them in the system prompt, and expand /skill:<name>)
 	};
 }
 
@@ -497,12 +488,9 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		} finally {
 			log.endGroup();
 		}
-<<<<<<< HEAD
-		const { models, extensions, tools, ui, templates, context } = setup;
-=======
-		const { models, extensions, tools, ui, templates, skills } = setup;
+		const { models, extensions, tools, ui, templates, context, skills } =
+			setup;
 		// `/skill:<name>` first, so a template can't take a skill's command.
->>>>>>> f81bd9e (feat: load skills (SKILL.md), list them in the system prompt, and expand /skill:<name>)
 		const expand = (triggers: Trigger[]) =>
 			triggers.map((trigger) => {
 				const expanded = expandSkill(trigger, skills);
@@ -517,12 +505,8 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			model: findModel(models, inputs.provider, inputs.model),
 			log,
 			remote: deps.remote,
-<<<<<<< HEAD
 			projectContext: context,
-			extensions,
-=======
 			extensions: [createBuiltinExtension({ skills }), ...extensions],
->>>>>>> f81bd9e (feat: load skills (SKILL.md), list them in the system prompt, and expand /skill:<name>)
 			tools: { exclude: inputs.excludeTools, hidden: inputs.modelToolsHidden },
 			toolEnv: tools,
 			worktree: worktreeLimits(deps),
