@@ -146,3 +146,46 @@ describe("Thread: extension overrides", () => {
 		expect(descriptionOf(context, "bash")).toBe("a sandboxed bash");
 	});
 });
+
+describe("Thread: the tools the model sees", () => {
+	it("hides tools from the model and disables excluded ones, by glob", async () => {
+		const log = createLogger();
+		const context = await firstRequest([pit], {
+			log,
+			tools: { exclude: ["bash"], hidden: ["*e*", "nothing*"] },
+		});
+		expect(toolNames(context)).toStrictEqual(["read", "typescript"]);
+		expect(log.warning).toHaveBeenCalledExactlyOnceWith(
+			'model_tools_hidden: "nothing*" matches no tool',
+		);
+	});
+
+	it("reports the tools the model gets", async () => {
+		const { models, model } = fauxModels();
+		const thread = await Thread.open({
+			cwd: tempDir(),
+			models,
+			model,
+			log: createLogger(),
+			extensions: [pit],
+			tools: { exclude: [], hidden: ["read", "write", "edit", "bash"] },
+		});
+		await thread.close();
+		expect(thread.modelTools).toStrictEqual(["typescript"]);
+	});
+
+	it("fails when the model would get no tools", async () => {
+		const { models, model } = fauxModels();
+		await expect(
+			Thread.open({
+				cwd: tempDir(),
+				models,
+				model,
+				log: createLogger(),
+				tools: { exclude: ["bash"], hidden: ["*"] },
+			}),
+		).rejects.toThrow(
+			"exclude_tools and model_tools_hidden leave the model with no tools (it would have read, write, edit, bash)",
+		);
+	});
+});
