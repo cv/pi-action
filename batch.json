@@ -1,1 +1,1 @@
-{"format":1,"seq":477,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"arguments","code"]," prompt has"]]}}]}
+{"format":1,"seq":478,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"arguments","code"]," more weight for the model than a file that it reads. pi-action reads these files from the checkout, so their content is the content of the chec"]]}}]}
