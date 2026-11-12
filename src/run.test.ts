@@ -30,6 +30,8 @@ import {
 	git,
 	tempDir,
 	tempRemote,
+	toolsOf,
+	write,
 } from "./test-helpers.ts";
 import type { GitHubComment, GitHubReaction } from "./types.ts";
 
@@ -248,6 +250,83 @@ describe("run (durable)", () => {
 		expect(log).toMatch(FIRST_COMMIT);
 	});
 
+	it("applies model_tools_hidden on each run, and clears it when the input is empty", async () => {
+		const w = world();
+		const seen: string[][] = [];
+		const record: FauxResponseStep = (context) => {
+			seen.push(toolsOf(context).map((tool) => tool.name));
+			return fauxAssistantMessage("ok");
+		};
+		w.faux.setResponses([record, record]);
+
+		const hidden = w.deps(w.comment("@pi one"), { modelToolsHidden: ["bash"] });
+		await run(hidden);
+		await run(w.deps(w.comment("@pi two")));
+
+		expect(seen).toStrictEqual([
+			["read", "write", "edit"],
+			["read", "write", "edit", "bash"],
+		]);
+		expect(hidden.log.info).toHaveBeenCalledWith(
+			expect.stringMatching(/ · tools: read, write, edit$/u),
+		);
+	});
+
+	it("loads .pi/prompts with trust_project only, before agent_dir/prompts, also for follow-ups", async () => {
+		const w = world();
+		const seen: string[][] = [];
+		const record: FauxResponseStep = (context) => {
+			seen.push(userTexts(context.messages));
+			return fauxAssistantMessage("ok");
+		};
+		w.faux.setResponses([record, record]);
+		const trusted = w.deps(w.comment("@pi /fix the login"), {
+			trustProject: true,
+			agentDir: ".agent",
+		});
+		write(join(trusted.cwd, ".pi/prompts/fix.md"), "Fix $ARGUMENTS.");
+		write(join(trusted.cwd, ".agent/prompts/fix.md"), "Ignored.");
+		write(join(trusted.cwd, ".agent/prompts/explain.md"), "Explain $1.");
+
+		await run(trusted);
+		const second = w.deps(w.comment("@pi /explain it"), {
+			trustProject: true,
+			agentDir: ".agent",
+		});
+		write(join(second.cwd, ".agent/prompts/explain.md"), "Explain $1.");
+		await run(second);
+
+		expect(seen[0]?.[0]).toContain("## Task\nFix the login.\n");
+		expect(seen[1]?.at(-1)).toBe(
+			withReplyReminder(
+				`**@user** commented (https://github.com/o/r/issues/42#issuecomment-102):\n\nExplain it.`,
+			),
+		);
+		expect(trusted.log.warning).toHaveBeenCalledWith(
+			"Prompt template /fix from agent_dir is ignored: .pi/prompts has one with that name",
+		);
+	});
+
+	it("leaves /name as text when no template has the name, and ignores .pi/prompts without trust_project", async () => {
+		const w = world();
+		let seen: string[] = [];
+		w.faux.setResponses([
+			(context) => {
+				seen = userTexts(context.messages);
+				return fauxAssistantMessage("ok");
+			},
+		]);
+		const deps = w.deps(w.comment("@pi /fix the login"));
+		write(join(deps.cwd, ".pi/prompts/fix.md"), "Fix $ARGUMENTS.");
+
+		await run(deps);
+
+		expect(seen[0]).toContain("## Task\n/fix the login\n");
+		expect(deps.log.info).toHaveBeenCalledWith(
+			"Not loading the prompt templates in .pi/prompts: trust_project is off",
+		);
+	});
+
 	it("logs the thread first, then what pi does, the reply, and where the thread ends up", async () => {
 		const w = world();
 		w.faux.setResponses([
@@ -272,7 +351,9 @@ describe("run (durable)", () => {
 		const setupEnd = lines.indexOf("::endgroup::");
 		expect(lines[0]).toBe("::group::Setup");
 		expect(lines.slice(setupEnd + 1)).toStrictEqual([
-			expect.stringMatching(/^🤖 faux\S*\/\S+$/u),
+			expect.stringMatching(
+				/^🤖 faux\S*\/\S+ · tools: read, write, edit, bash$/u,
+			),
 			`::group::🧵 Thread ${REF}: new`,
 			expect.stringContaining(
 				`This conversation is stored in git on ${REF}. To read it:\n  git fetch origin '${REF}:${REF}'\n`,
@@ -630,6 +711,27 @@ describe("run (durable) with main's modes", () => {
 		);
 		expect(deps.log.info).toHaveBeenCalledWith("💬 Release notes.");
 		expect(deps.summary).not.toHaveBeenCalled();
+	});
+
+	it("expands a prompt template in a direct prompt", async () => {
+		const w = world();
+		let seen: string[] = [];
+		w.faux.setResponses([
+			(context) => {
+				seen = userTexts(context.messages);
+				return fauxAssistantMessage("Notes.");
+			},
+		]);
+		const deps = w.deps(
+			undefined,
+			{ outputMode: "output", prompt: "/notes v2", agentDir: ".agent" },
+			{},
+		);
+		write(join(deps.cwd, ".agent/prompts/notes.md"), "Write notes for $1.");
+
+		await run(deps);
+
+		expect(seen[0]).toContain("## Task\nWrite notes for v2.\n");
 	});
 
 	it("pr_number reviews join that PR's thread and can post to it", async () => {
@@ -1002,6 +1104,40 @@ describe("run with a pi-durable extension (installed from npm)", () => {
 		expect(d.deps.log.info).toHaveBeenCalledWith(
 			"durable-ask: trustProject=false",
 		);
+	}, 120_000);
+
+	it("expands a prompt template of the package, and logs the request as typed", async () => {
+		const d = durableWorld();
+		let seen: string[] = [];
+		d.faux.setResponses([
+			(context) => {
+				seen = userTexts(context.messages);
+				return fauxAssistantMessage("Shipped.");
+			},
+		]);
+		const trigger = d.comment('@pi /ship 1.2 "fast and safe"');
+		const deps = d.durableDeps({
+			comment: trigger,
+			issue: {
+				number: 42,
+				title: "Fix the thing",
+				body: "It is broken",
+				user: { login: "o", type: "User" },
+			},
+		});
+
+		await run(deps);
+
+		expect(seen[0]).toContain(
+			"## Task\nShip version 1.2 with notes: fast and safe\n",
+		);
+		expect(deps.log.info).toHaveBeenCalledWith(
+			"Prompt templates: /ship (pi-action-durable-ask)",
+		);
+		expect(deps.log.info).toHaveBeenCalledWith(
+			`▶ Request from @${String(trigger.user?.login)} (${trigger.html_url}): /ship 1.2 "fast and safe" (prompt template from pi-action-durable-ask)`,
+		);
+		expect(d.gh.posted[0]).toContain("Shipped.");
 	}, 120_000);
 
 	it("ignores a box ticked by someone without write access", async () => {

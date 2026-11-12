@@ -5,6 +5,8 @@ The `extensions` input loads two kinds of packages into pi-action:
 - **pi extensions** give model **providers**. pi-action uses only the providers that they register. See [Providers](#providers).
 - **pi-durable extensions** give **tools and prompt sections** to every conversation. Their tools can ask questions, which pi-action posts on the issue or pull request. See [pi-durable extensions](#pi-durable-extensions).
 
+Both kinds can also give **prompt templates** (`pi.prompts`). See [Prompts](prompts.md#prompt-templates).
+
 An extension is code that runs inside pi-action, with all the permissions of the job. Load only extensions that you trust. See [Security](security.md#extensions).
 
 ## Declare extensions
@@ -80,7 +82,16 @@ A [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) extensi
 - The module exports `createPiDurableExtension(options)`, or a default export with the same signature.
 - The function returns a pi-durable `Extension`: `{ name, tools?, sections?, hooks?, wraps?, tasks? }`.
 - If a package has `pi.durable` and `pi.extensions`, pi-action loads only the `pi.durable` entry, because its pi extensions need the pi coding agent. pi-action writes this to the log.
-- pi-action installs the extensions after its coding tools (read, write, edit, bash). Each extension must have a unique name.
+- pi-action installs the extensions after its coding tools (read, write, edit, bash). Each extension must have a unique name. Tool names can repeat (see [Override tools and sections](#override-tools-and-sections)).
+
+### Override tools and sections
+
+An extension can change the tools and prompt sections of pi-action and of other extensions:
+
+- **Replace a tool.** A tool with the name of an earlier tool replaces it, as `pi.registerTool` does in pi. For example, an extension with its own `bash` tool replaces the `bash` of pi-action. pi-action writes `pi-durable extension <name> replaces tool bash from coding-tools` to the log.
+- **Wrap a tool or a section.** `wrapTool(tool, wrapper)` and `wrapSection(key, wrapper)` of pi-durable change a tool or a section, for example its description or its text. `wrapTool("read", (t) => ({ ...t, callers: ["tools"] }))` hides `read` from the model, but other tools can still call it (see [Tools the model sees](#tools-the-model-sees)).
+
+The order is: the coding tools of pi-action (`coding-tools`) first, then the extensions in the order of the `extensions` input. pi-durable applies the wraps of all extensions in this order. Thus, the last wrap wins.
 
 ### Host options
 
@@ -101,6 +112,34 @@ pi-durable extensions run in the process of pi-action. Thus, pi-action also sets
 `trust_project` (default `false`) tells the extension that it can load and run the configuration of the repository. For pit, this is `.pi/pit.json` and `.pi/functions`.
 
 Anyone who can push a branch or open a pull request can change those files. Set `trust_project: true` only for repositories whose code you already run. Do not set it in workflows that run on pull requests from people you do not trust.
+
+## Tools the model sees
+
+By default, the model gets all tools: the coding tools of pi-action (`read`, `write`, `edit`, `bash`), then the tools of each pi-durable extension. Two inputs change this:
+
+| Input | Effect |
+|-------|--------|
+| `exclude_tools` | pi-action disables these tools completely. Neither the model nor other tools can call them |
+| `model_tools_hidden` | pi-action does not offer these tools to the model. Other tools can still call them, for example pit's `tools.*` |
+
+For example, to give the model only pit's `typescript` tool, and keep the coding tools available to its programs:
+
+```yaml
+- uses: cv/pi-action@v2
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    extensions: |
+      github:cv/pit#v0.35.1
+    model_tools_hidden: read, write, edit, bash
+```
+
+- Write one name per line, or separate names with commas. `*` matches any characters, as in pit's `allowedTools`. For example, `mcp_*`.
+- pi-action resolves the names against the tools after it installs the extensions, and after the [overrides](#override-tools-and-sections). For a name that matches no tool, pi-action writes a warning.
+- If the inputs leave the model with no tools, the run fails.
+- pi-action applies the inputs on each run. When an input is empty, pi-action clears the setting of an earlier run on the thread.
+- The `🤖` line of the log shows the tools that the model gets, for example `🤖 anthropic/claude-sonnet-5-5 · tools: typescript · extensions: pit (typescript)`.
+
+An extension can also hide a tool itself, with a wrap that sets `callers: ["tools"]` (see [Override tools and sections](#override-tools-and-sections)). The inputs apply after the wraps, and they only remove tools. Thus, an input cannot give the model a tool that a wrap hid.
 
 ## Questions on GitHub
 

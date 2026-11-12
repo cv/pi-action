@@ -90,6 +90,14 @@ inputs:
     description: 'Agent directory (user-level state) for pi-durable extensions, relative to the workspace; a fresh temp directory under RUNNER_TEMP when empty'
     required: false
     default: ''
+  exclude_tools:
+    description: 'Tools to disable completely, one per line or comma-separated; * matches any characters (for example bash). Neither the model nor other tools can call them'
+    required: false
+    default: ''
+  model_tools_hidden:
+    description: 'Tools not to offer the model, one per line or comma-separated; * matches any characters (for example read, write, edit, bash). Other tools, such as pit''s tools.*, can still call them'
+    required: false
+    default: ''
   worktree_snapshots:
     description: 'Save the files pi leaves uncommitted with the thread (on refs/pi/worktrees/<number>) and restore them at the start of the next run'
     required: false
@@ -177,6 +185,8 @@ runs:
         INPUT_EXTENSIONS: ${{ inputs.extensions }}
         INPUT_TRUST_PROJECT: ${{ inputs.trust_project }}
         INPUT_AGENT_DIR: ${{ inputs.agent_dir }}
+        INPUT_EXCLUDE_TOOLS: ${{ inputs.exclude_tools }}
+        INPUT_MODEL_TOOLS_HIDDEN: ${{ inputs.model_tools_hidden }}
         INPUT_WORKTREE_SNAPSHOTS: ${{ inputs.worktree_snapshots }}
         INPUT_WORKTREE_SNAPSHOT_EXCLUDE: ${{ inputs.worktree_snapshot_exclude }}
         INPUT_PROMPT_TEMPLATE: ${{ inputs.prompt_template }}

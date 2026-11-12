@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
+
 import type { Models } from "@earendil-works/pi-ai/models";
 import type { Extension } from "@earendil-works/pi-durable";
 
@@ -25,6 +28,12 @@ import {
 } from "./github.ts";
 import type { ActionInputs } from "./inputs.ts";
 import { createActionModels, findModel } from "./models.ts";
+import {
+	expandTrigger,
+	loadPromptTemplates,
+	type PromptSource,
+	type PromptTemplates,
+} from "./prompts.ts";
 import { getRunContext } from "./run-context.ts";
 import { GitSyncConflictError } from "./storage/sync.ts";
 import type { SnapshotLimits } from "./storage/worktree.ts";
@@ -62,6 +71,46 @@ export interface ActionDependencies {
 }
 
 /**
+ * The prompt templates of the run: the extensions' `pi.prompts`, then the project's `.pi/prompts` (with
+ * `trust_project` only: anyone who can push a branch can change them), then `<agent_dir>/prompts`.
+ */
+function promptTemplates(
+	deps: ActionDependencies,
+	packages: readonly PromptSource[],
+): PromptTemplates {
+	const { inputs, log, cwd } = deps;
+	const project = join(cwd, ".pi", "prompts");
+	if (!inputs.trustProject && existsSync(project)) {
+		log.info(
+			"Not loading the prompt templates in .pi/prompts: trust_project is off",
+		);
+	}
+	const templates = loadPromptTemplates(
+		[
+			...packages,
+			...(inputs.trustProject
+				? [{ source: ".pi/prompts", paths: [project] }]
+				: []),
+			...(inputs.agentDir
+				? [
+						{
+							source: "agent_dir",
+							paths: [join(resolve(cwd, inputs.agentDir), "prompts")],
+						},
+					]
+				: []),
+		],
+		log,
+	);
+	if (templates.size > 0) {
+		log.info(
+			`Prompt templates: ${[...templates.values()].map((t) => `/${t.name} (${t.source})`).join(", ")}`,
+		);
+	}
+	return templates;
+}
+
+/**
  * The `extensions` input and the model setup: the built-in and custom providers and those extensions register
  * (unless `createModels` overrides it), the pi-durable extensions for the thread, which get the GitHub UI when
  * the run posts to an issue or PR, and the variables the agent's tools get (see `toolEnv()`). pi-durable extensions
@@ -76,6 +125,7 @@ async function setUp(
 	extensions: Extension[];
 	tools: Record<string, string>;
 	ui: GitHubUi | undefined;
+	templates: PromptTemplates;
 }> {
 	const { inputs, log, cwd } = deps;
 	const env = deps.env ?? process.env;
@@ -111,7 +161,13 @@ async function setUp(
 		log,
 		env,
 	});
-	return { models, extensions, tools, ui };
+	return {
+		models,
+		extensions,
+		tools,
+		ui,
+		templates: promptTemplates(deps, loaded.prompts),
+	};
 }
 
 /** On cancellation (SIGINT, then SIGTERM), push what the thread has so far before the runner kills us. */
@@ -137,29 +193,34 @@ function pushOnSignals(thread: Thread, log: Log): () => void {
 	};
 }
 
-/** One line for the model and the pi-durable extensions, after the setup group. */
+/** One line for the model, the tools it gets, and the pi-durable extensions, after the setup group. */
 function describeSetup(
 	inputs: ActionInputs,
 	extensions: readonly Extension[],
+	modelTools: readonly string[],
 ): string {
 	const loaded = extensions.map(
 		(extension) =>
 			`${extension.name} (${(extension.tools ?? []).map((tool) => tool.name).join(", ") || "no tools"})`,
 	);
-	return `🤖 ${inputs.provider}/${inputs.model}${loaded.length > 0 ? ` · extensions: ${loaded.join(", ")}` : ""}`;
+	return `🤖 ${inputs.provider}/${inputs.model} · tools: ${modelTools.join(", ")}${loaded.length > 0 ? ` · extensions: ${loaded.join(", ")}` : ""}`;
 }
 
-/** One line for a request as pi gets it: who, where, and its first line. */
+/** One line for a request as pi gets it: who, where, and its first line (as typed, for a prompt template). */
 function describeTrigger(trigger: Trigger): string {
 	const what = trigger.answer ? "Answer" : "Request";
 	const where = trigger.url ? ` (${trigger.url})` : "";
-	return `▶ ${what} from @${trigger.author.login}${where}: ${oneLine(trigger.task || trigger.text)}`;
+	const { template } = trigger;
+	const request = template
+		? `${oneLine(template.typed)} (prompt template from ${template.source})`
+		: oneLine(trigger.task || trigger.text);
+	return `▶ ${what} from @${trigger.author.login}${where}: ${request}`;
 }
 
 /** The context of the first message of a thread, for the trigger that starts it. */
 function contextFor(piContext: PIContext, trigger: Trigger): PIContext {
 	return piContext.type === "direct"
-		? piContext
+		? { ...piContext, task: trigger.task }
 		: { ...piContext, task: trigger.task, triggerComment: trigger.text };
 }
 
@@ -323,8 +384,9 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		} finally {
 			log.endGroup();
 		}
-		const { models, extensions, tools, ui } = setup;
-		log.info(describeSetup(inputs, extensions));
+		const { models, extensions, tools, ui, templates } = setup;
+		const expand = (triggers: Trigger[]) =>
+			triggers.map((trigger) => expandTrigger(trigger, templates));
 		const opened = await Thread.open({
 			cwd: deps.cwd,
 			issueNumber,
@@ -333,6 +395,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			log,
 			remote: deps.remote,
 			extensions,
+			tools: { exclude: inputs.excludeTools, hidden: inputs.modelToolsHidden },
 			toolEnv: tools,
 			worktree: worktreeLimits(deps),
 			onEntries: (entries) => {
@@ -340,6 +403,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			},
 		});
 		thread = opened;
+		log.info(describeSetup(inputs, extensions, opened.modelTools));
 		stopSignals = pushOnSignals(opened, log);
 		announceThread(deps, opened);
 		// New comments: on a new thread, from the time of the trigger; on an existing one, since it began.
@@ -378,18 +442,23 @@ export async function run(deps: ActionDependencies): Promise<void> {
 					alreadyPosted,
 				),
 			...(interactive
-				? { poll: async () => collectTriggers(gh, interactive, inputs, since) }
+				? {
+						poll: async () =>
+							expand(await collectTriggers(gh, interactive, inputs, since)),
+					}
 				: {}),
 			...(ui ? { asked: () => ui.asked } : {}),
 		});
 		await conversation.run(
-			await initialTriggers(
-				deps,
-				gh,
-				piContext,
-				triggerInfo,
-				opened.startedAt,
-				resolved.answer,
+			expand(
+				await initialTriggers(
+					deps,
+					gh,
+					piContext,
+					triggerInfo,
+					opened.startedAt,
+					resolved.answer,
+				),
 			),
 		);
 		if (conversation.failures.length > 0) {

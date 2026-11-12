@@ -1,10 +1,10 @@
 // Shared fixtures: inputs, a fake GitHub, faux models, and scratch git repositories.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
-import type { Api, Model } from "@earendil-works/pi-ai";
+import type { Api, Context, Model, Tool } from "@earendil-works/pi-ai";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxProvider } from "@earendil-works/pi-ai/providers/faux";
 import { onTestFinished, vi } from "vitest";
@@ -134,6 +134,8 @@ export function createActionInputs(
 		agentDir: undefined,
 		worktreeSnapshots: DEFAULTS.worktreeSnapshots,
 		worktreeLimits: DEFAULT_SNAPSHOT_LIMITS,
+		excludeTools: [],
+		modelToolsHidden: [],
 		...overrides,
 	};
 }
@@ -171,6 +173,13 @@ export function tempDir(prefix = "pi-action-"): string {
 	return dir;
 }
 
+/** Write a file, with its directories; returns its path. */
+export function write(path: string, content: string): string {
+	mkdirSync(dirname(path), { recursive: true });
+	writeFileSync(path, content);
+	return path;
+}
+
 /** A fresh, empty git repository. */
 export function tempRepo(): {
 	dir: string;
@@ -203,4 +212,20 @@ export function tempRemote(): {
 			return dir;
 		},
 	};
+}
+
+/** The tools a model request offers: its system messages' tools, added and removed in order. */
+export function toolsOf(context: Context): Tool[] {
+	const tools = new Map<string, Tool>();
+	for (const message of context.messages) {
+		if (message.role === "system") {
+			for (const { name } of message.toolsRemoved ?? []) {
+				tools.delete(name);
+			}
+			for (const added of message.toolsAdded ?? []) {
+				tools.set(added.name, added);
+			}
+		}
+	}
+	return [...tools.values()];
 }
