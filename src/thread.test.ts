@@ -152,7 +152,7 @@ describe("Thread: the tools the model sees", () => {
 		const log = createLogger();
 		const context = await firstRequest([pit], {
 			log,
-			tools: { exclude: ["bash"], hidden: ["*e*", "nothing*"] },
+			tools: { exclude: ["bash"], hidden: ["w*", "*dit", "nothing*"] },
 		});
 		expect(toolNames(context)).toStrictEqual(["read", "typescript"]);
 		expect(log.warning).toHaveBeenCalledExactlyOnceWith(
