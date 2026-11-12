@@ -362,7 +362,14 @@ describe("GitSync with a companion ref", () => {
 
 	it("fetches into local refs of their own, and pushes from them to the remote names", async () => {
 		const { dir, first, second } = twoTips();
-		sh(dir, "push", "-q", "origin", `${first}:${REF}`, `${second}:${COMPANION}`);
+		sh(
+			dir,
+			"push",
+			"-q",
+			"origin",
+			`${first}:${REF}`,
+			`${second}:${COMPANION}`,
+		);
 		const local = liveRef(REF);
 		const localCompanion = liveRef(COMPANION);
 		expect(local).toBe("refs/pi-action/threads/7");

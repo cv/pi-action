@@ -479,7 +479,11 @@ describe("run (durable) when the agent moves refs (#46)", () => {
 
 	it("answers when the agent fetches or deletes refs/pi/* mid-run", async () => {
 		const w = world();
-		w.faux.setResponses(agentRuns("git fetch -q origin '+refs/pi/*:refs/pi/*'; git update-ref -d " + REF));
+		w.faux.setResponses(
+			agentRuns(
+				"git fetch -q origin '+refs/pi/*:refs/pi/*'; git update-ref -d " + REF,
+			),
+		);
 		const deps = w.deps(w.comment("@pi go"));
 		await run(deps);
 		expect(w.gh.posted).toHaveLength(1);
@@ -1070,7 +1074,11 @@ describe("run (durable) with working-tree continuity", () => {
 		);
 		expect(log.warning).not.toHaveBeenCalled();
 		expect(git(w.remote, "rev-parse", WORKTREES).trim()).toBe(
-			git(deps.cwd, "rev-parse", WORKTREES.replace("refs/pi/", "refs/pi-action/")).trim(),
+			git(
+				deps.cwd,
+				"rev-parse",
+				WORKTREES.replace("refs/pi/", "refs/pi-action/"),
+			).trim(),
 		);
 		await expect(pushThread(deps.payload, deps.cwd, log)).resolves.toBe(
 			"up-to-date",

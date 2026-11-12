@@ -85,9 +85,7 @@ export async function pushThread(
 				remote.companion === companion ||
 				(await contains(cwd, remote.companion, companion)))
 		) {
-			log.info(
-				`${ref} is already saved at ${(remote.tip ?? tip).slice(0, 7)}`,
-			);
+			log.info(`${ref} is already saved at ${(remote.tip ?? tip).slice(0, 7)}`);
 			return "up-to-date";
 		}
 		await sync.flush(tip, companion || undefined);
