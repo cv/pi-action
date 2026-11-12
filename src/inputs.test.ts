@@ -220,7 +220,8 @@ describe("tool inputs", () => {
 		const inputs = readActionInputs(
 			reader({
 				exclude_tools: "bash",
-				model_tools_hidden: "read, write\nedit # pit's tools.* calls them\nmcp_*",
+				model_tools_hidden:
+					"read, write\nedit # pit's tools.* calls them\nmcp_*",
 			}),
 			{},
 		);

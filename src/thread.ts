@@ -28,9 +28,9 @@ import { GitStorage } from "./storage/git-storage.ts";
 import { git } from "./storage/git.ts";
 import { GitSync, isTurnBoundary, liveRef } from "./storage/sync.ts";
 import { type SnapshotLimits, worktreeRef } from "./storage/worktree.ts";
+import { planTools, type ToolSelection } from "./tool-filter.ts";
 import type { Log } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
-import { planTools, type ToolSelection } from "./tool-filter.ts";
 import { RESTORE_ENTRY_KIND, WorktreeContinuity } from "./worktree.ts";
 
 const context: Context = BACKGROUND_CONTEXT;
@@ -458,7 +458,12 @@ async function configureAgent(
 	if (options.tools === undefined) {
 		return offered;
 	}
-	const plan = planTools(options.tools, [...byName.keys()], offered, options.log);
+	const plan = planTools(
+		options.tools,
+		[...byName.keys()],
+		offered,
+		options.log,
+	);
 	const pick = (names: readonly string[]) =>
 		names.flatMap((name) => byName.get(name) ?? []);
 	if (plan.exclude.length > 0 || plan.hide.length > 0) {

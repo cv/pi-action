@@ -13,12 +13,7 @@ import {
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { describe, expect, it } from "vitest";
 
-import {
-	createLogger,
-	fauxModels,
-	tempDir,
-	toolsOf,
-} from "./test-helpers.ts";
+import { createLogger, fauxModels, tempDir, toolsOf } from "./test-helpers.ts";
 import { Thread, type ThreadOptions } from "./thread.ts";
 
 const bash = (CodingTools.tools ?? []).find((tool) => tool.name === "bash");
