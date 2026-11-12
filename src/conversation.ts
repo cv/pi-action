@@ -205,7 +205,6 @@ export class ThreadConversation {
 		this.enqueueDelivery(trigger, {
 			key: `rejected-${trigger.key}`,
 			empty: false,
-			rejected: true,
 			result: { success: false, error },
 		});
 	}
@@ -457,12 +456,7 @@ export class ThreadConversation {
 			outcome.result,
 			alreadyPosted,
 		);
-		// A new thread that pi got nothing for stays new: a rejected trigger alone does not start it.
-		const record =
-			outcome.rejected !== true ||
-			!this.options.thread.isNew ||
-			this.submitted > 0;
-		if (url !== undefined && !alreadyPosted && record) {
+		if (url !== undefined && !alreadyPosted) {
 			this.posted.set(outcome.key, url);
 			await this.options.thread.markPosted(outcome.key, url);
 		}
@@ -476,8 +470,6 @@ interface SettledResult {
 	result: ThreadResult;
 	/** The run ended on these questions: nothing is posted, the answers start a later run. */
 	waiting?: readonly string[];
-	/** The trigger was rejected before it reached pi (`Trigger.rejected`). */
-	rejected?: boolean;
 	/** The answer hit the output token limit with no tool call (`settle()` continues it). */
 	cutOff?: { text: string; usedTools: boolean };
 }

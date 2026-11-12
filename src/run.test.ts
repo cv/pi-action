@@ -400,20 +400,13 @@ describe("run (durable)", () => {
 		expect(deps.log.info).toHaveBeenCalledWith(
 			"Not loading the skills in .pi/skills: trust_project is off",
 		);
-		// pi got nothing, so the thread was not started.
-		expect(git(w.remote, "for-each-ref", "refs/pi")).toBe("");
-
-		// The next request starts the thread with the issue's context.
-		let seen: string[] = [];
-		w.faux.setResponses([
-			(context) => {
-				seen = userTexts(context.messages);
-				return fauxAssistantMessage("Done.");
-			},
-		]);
+		// A later run does not post the error again.
+		const respond2 = vi.fn<FauxResponseStep>(() => fauxAssistantMessage("Done."));
+		w.faux.setResponses([respond2]);
 		await run(w.deps(w.comment("@pi fix it")));
-		expect(seen[0]).toContain("# GitHub Issue #42");
+		expect(respond2).toHaveBeenCalledTimes(1);
 		expect(w.gh.posted).toHaveLength(2);
+		expect(w.gh.posted[1]).toContain("Done.");
 	});
 
 	it("logs the thread first, then what pi does, the reply, and where the thread ends up", async () => {
