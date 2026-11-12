@@ -93,6 +93,13 @@ function describeUnanswered(
 	return `${record.reason}: ${detail}`;
 }
 
+/** An error's message with its cause's (pi-durable's SessionFailed carries the storage error as its cause). */
+function withCause(error: unknown): string {
+	const message = getErrorMessage(error);
+	const cause: unknown = error instanceof Error ? error.cause : undefined;
+	return cause === undefined ? message : `${message} (${getErrorMessage(cause)})`;
+}
+
 /**
  * Drives a thread through a set of triggers: submits them (new ones join the running conversation), waits for
  * every answer within the timeout, and delivers each answer or failure exactly once.
@@ -182,7 +189,7 @@ export class ThreadConversation {
 			} catch (error) {
 				// Waiting for the answer threw (the session failed after a storage error, say): report it on the
 				// trigger, or it gets no reply and no reaction at all (#46).
-				const message = getErrorMessage(error);
+				const message = withCause(error);
 				this.options.log.warning(message);
 				this.unanswered.push(message);
 				outcome = {
