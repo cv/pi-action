@@ -82,6 +82,10 @@ inputs:
     description: 'pi extensions to load: npm package specs or paths relative to the workspace, one per line or comma-separated. pi extensions contribute the model providers they register; packages with a pi-durable extension (pi.durable in package.json) add their tools to the conversation. npm packages are installed into a temp directory without lifecycle scripts. Extensions run inside the action with the job''s permissions and environment.'
     required: false
     default: ''
+  skills:
+    description: 'Packages with skills (SKILL.md) to load, with the same syntax as extensions: npm package specs or paths relative to the workspace. Only their skills are used (pi.skills in package.json, else a skills/ directory); packages in extensions give their skills too'
+    required: false
+    default: ''
   trust_project:
     description: 'Let pi-durable extensions trust the repository: load and run its own configuration (such as .pi/ files). Only for repositories whose code you would run anyway; anyone who can open a PR can change those files.'
     required: false
@@ -183,6 +187,7 @@ runs:
         INPUT_COMPAT_SUPPORTS_REASONING_EFFORT: ${{ inputs.compat_supports_reasoning_effort }}
         INPUT_COMPAT_FORCE_ADAPTIVE_THINKING: ${{ inputs.compat_force_adaptive_thinking }}
         INPUT_EXTENSIONS: ${{ inputs.extensions }}
+        INPUT_SKILLS: ${{ inputs.skills }}
         INPUT_TRUST_PROJECT: ${{ inputs.trust_project }}
         INPUT_AGENT_DIR: ${{ inputs.agent_dir }}
         INPUT_EXCLUDE_TOOLS: ${{ inputs.exclude_tools }}
