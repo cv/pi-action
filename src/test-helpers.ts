@@ -13,6 +13,7 @@ import { DEFAULTS } from "./defaults.ts";
 import type { GitHubClient } from "./github.ts";
 import type { ActionInputs } from "./inputs.ts";
 import type { Logger } from "./run.ts";
+import { DEFAULT_SNAPSHOT_LIMITS } from "./storage/worktree.ts";
 import type { GitHubComment, TriggerInfo } from "./types.ts";
 
 /** A Logger whose methods are typed mocks. */
@@ -130,6 +131,8 @@ export function createActionInputs(
 		extensions: [],
 		trustProject: DEFAULTS.trustProject,
 		agentDir: undefined,
+		worktreeSnapshots: DEFAULTS.worktreeSnapshots,
+		worktreeLimits: DEFAULT_SNAPSHOT_LIMITS,
 		...overrides,
 	};
 }

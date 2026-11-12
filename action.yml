@@ -90,6 +90,22 @@ inputs:
     description: 'Agent directory (user-level state) for pi-durable extensions, relative to the workspace; a fresh temp directory under RUNNER_TEMP when empty'
     required: false
     default: ''
+  worktree_snapshots:
+    description: 'Save the files pi leaves uncommitted with the thread (on refs/pi/worktrees/<number>) and restore them at the start of the next run'
+    required: false
+    default: 'true'
+  worktree_snapshot_max_file_mb:
+    description: 'Untracked files larger than this many MB are not saved in a working-tree snapshot'
+    required: false
+    default: '10'
+  worktree_snapshot_max_total_mb:
+    description: 'Untracked files past this many MB in total are not saved in a working-tree snapshot'
+    required: false
+    default: '100'
+  worktree_snapshot_exclude:
+    description: 'Globs of untracked files never to save in a working-tree snapshot, one per line or comma-separated (for example .env*, *.pem, *.key, id_rsa*). Ignored files are never saved'
+    required: false
+    default: ''
   prompt_template:
     description: 'Custom prompt template with placeholder variables'
     required: false
@@ -169,16 +185,25 @@ runs:
         INPUT_EXTENSIONS: ${{ inputs.extensions }}
         INPUT_TRUST_PROJECT: ${{ inputs.trust_project }}
         INPUT_AGENT_DIR: ${{ inputs.agent_dir }}
+        INPUT_WORKTREE_SNAPSHOTS: ${{ inputs.worktree_snapshots }}
+        INPUT_WORKTREE_SNAPSHOT_MAX_FILE_MB: ${{ inputs.worktree_snapshot_max_file_mb }}
+        INPUT_WORKTREE_SNAPSHOT_MAX_TOTAL_MB: ${{ inputs.worktree_snapshot_max_total_mb }}
+        INPUT_WORKTREE_SNAPSHOT_EXCLUDE: ${{ inputs.worktree_snapshot_exclude }}
         INPUT_PROMPT_TEMPLATE: ${{ inputs.prompt_template }}
         INPUT_OUTPUT_MODE: ${{ inputs.output_mode }}
         INPUT_PROMPT: ${{ inputs.prompt }}
         INPUT_PR_NUMBER: ${{ inputs.pr_number }}
 
-    # Pushes the thread's refs/pi/threads/<number> if the step above was cancelled, timed out, or crashed
-    # before its own final push. Fast-forward only: it never overwrites another run's history.
+    # Pushes the thread's refs/pi/threads/<number> (and refs/pi/worktrees/<number>, after saving the working tree
+    # once more) if the step above was cancelled, timed out, or crashed before its own final push. Fast-forward
+    # only: it never overwrites another run's history.
     - name: Save pi thread state
       if: always()
       shell: bash
       run: node --disable-warning=ExperimentalWarning ${{ github.action_path }}/src/push.ts
       env:
         INPUT_PR_NUMBER: ${{ inputs.pr_number }}
+        INPUT_WORKTREE_SNAPSHOTS: ${{ inputs.worktree_snapshots }}
+        INPUT_WORKTREE_SNAPSHOT_MAX_FILE_MB: ${{ inputs.worktree_snapshot_max_file_mb }}
+        INPUT_WORKTREE_SNAPSHOT_MAX_TOTAL_MB: ${{ inputs.worktree_snapshot_max_total_mb }}
+        INPUT_WORKTREE_SNAPSHOT_EXCLUDE: ${{ inputs.worktree_snapshot_exclude }}

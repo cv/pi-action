@@ -18,4 +18,7 @@ export const DEFAULTS = {
 	customModelMaxTokens: 16_384,
 	outputMode: "comment",
 	trustProject: false,
+	worktreeSnapshots: true,
+	worktreeSnapshotMaxFileMb: 10,
+	worktreeSnapshotMaxTotalMb: 100,
 } as const;

@@ -68,6 +68,12 @@ describe("readActionInputs", () => {
 			extensions: ["@acme/pi-provider@1.2.3", "./ext.ts"],
 			trustProject: true,
 			agentDir: ".pi/agent",
+			worktreeSnapshots: true,
+			worktreeLimits: {
+				maxFileBytes: 10 * 1024 * 1024,
+				maxTotalBytes: 100 * 1024 * 1024,
+				exclude: [],
+			},
 		});
 	});
 });
@@ -176,5 +182,38 @@ describe("parsers", () => {
 		...["", "0", "-1", "1.5", "10s", "abc"].map((v) => [v, undefined] as const),
 	])("parses %o as the positive integer %s", (value, expected) => {
 		expect(parsePositiveInteger(value)).toBe(expected);
+	});
+});
+
+describe("working-tree snapshot inputs", () => {
+	it("reads the switch and the limits, in MB, with the globs to exclude", () => {
+		const inputs = readActionInputs(
+			reader({
+				worktree_snapshots: "off",
+				worktree_snapshot_max_file_mb: "2",
+				worktree_snapshot_max_total_mb: "20",
+				worktree_snapshot_exclude: ".env*, *.pem\n# keys\nid_rsa*",
+			}),
+			{},
+		);
+		expect(inputs.worktreeSnapshots).toBe(false);
+		expect(inputs.worktreeLimits).toStrictEqual({
+			maxFileBytes: 2 * 1024 * 1024,
+			maxTotalBytes: 20 * 1024 * 1024,
+			exclude: [".env*", "*.pem", "id_rsa*"],
+		});
+	});
+
+	it("falls back to the defaults for values that are not valid", () => {
+		const inputs = readActionInputs(
+			reader({
+				worktree_snapshots: "maybe",
+				worktree_snapshot_max_file_mb: "-1",
+			}),
+			{},
+		);
+		expect(inputs.worktreeSnapshots).toBe(true);
+		expect(inputs.worktreeLimits.maxFileBytes).toBe(10 * 1024 * 1024);
+		expect(inputs.worktreeLimits.exclude).toStrictEqual([]);
 	});
 });

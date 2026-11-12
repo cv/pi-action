@@ -4,6 +4,7 @@ import type {
 	ModelInputMode,
 } from "./custom-provider.ts";
 import { DEFAULTS } from "./defaults.ts";
+import type { SnapshotLimits } from "./storage/worktree.ts";
 
 export type InputReader = (name: string) => string;
 
@@ -32,6 +33,10 @@ export interface ActionInputs {
 	trustProject: boolean;
 	/** The agent directory for pi-durable extensions; a temp dir when unset. */
 	agentDir: string | undefined;
+	/** Whether a thread saves and restores the files pi left uncommitted (`worktree_snapshots`). */
+	worktreeSnapshots: boolean;
+	/** What a snapshot leaves out of the untracked files. */
+	worktreeLimits: SnapshotLimits;
 }
 
 const TRUE_VALUES = new Set(["true", "1", "yes", "y", "on"]);
@@ -136,6 +141,28 @@ export function readCustomProviderConfig(
 	};
 }
 
+const MB = 1024 * 1024;
+
+/** The `worktree_snapshot_*` inputs. */
+export function readWorktreeLimits(readInput: InputReader): SnapshotLimits {
+	return {
+		maxFileBytes:
+			(parsePositiveInteger(readInput("worktree_snapshot_max_file_mb")) ??
+				DEFAULTS.worktreeSnapshotMaxFileMb) * MB,
+		maxTotalBytes:
+			(parsePositiveInteger(readInput("worktree_snapshot_max_total_mb")) ??
+				DEFAULTS.worktreeSnapshotMaxTotalMb) * MB,
+		exclude: parseExtensionSpecs(readInput("worktree_snapshot_exclude")),
+	};
+}
+
+/** `worktree_snapshots`: on unless set to false. */
+export function readWorktreeSnapshots(readInput: InputReader): boolean {
+	return (
+		parseBoolean(readInput("worktree_snapshots")) ?? DEFAULTS.worktreeSnapshots
+	);
+}
+
 export function readActionInputs(
 	readInput: InputReader,
 	env: Record<string, string | undefined> = process.env,
@@ -165,5 +192,7 @@ export function readActionInputs(
 		trustProject:
 			parseBoolean(readInput("trust_project")) ?? DEFAULTS.trustProject,
 		agentDir: readInput("agent_dir").trim() || undefined,
+		worktreeSnapshots: readWorktreeSnapshots(readInput),
+		worktreeLimits: readWorktreeLimits(readInput),
 	};
 }
