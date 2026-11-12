@@ -137,6 +137,25 @@ function pushOnSignals(thread: Thread, log: Log): () => void {
 	};
 }
 
+/** One line for the model and the pi-durable extensions, after the setup group. */
+function describeSetup(
+	inputs: ActionInputs,
+	extensions: readonly Extension[],
+): string {
+	const loaded = extensions.map(
+		(extension) =>
+			`${extension.name} (${(extension.tools ?? []).map((tool) => tool.name).join(", ") || "no tools"})`,
+	);
+	return `🤖 ${inputs.provider}/${inputs.model}${loaded.length > 0 ? ` · extensions: ${loaded.join(", ")}` : ""}`;
+}
+
+/** One line for a request as pi gets it: who, where, and its first line. */
+function describeTrigger(trigger: Trigger): string {
+	const what = trigger.answer ? "Answer" : "Request";
+	const where = trigger.url ? ` (${trigger.url})` : "";
+	return `▶ ${what} from @${trigger.author.login}${where}: ${oneLine(trigger.task || trigger.text)}`;
+}
+
 /** The context of the first message of a thread, for the trigger that starts it. */
 function contextFor(piContext: PIContext, trigger: Trigger): PIContext {
 	return piContext.type === "direct"
@@ -277,9 +296,6 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		if (alreadyPosted || issueNumber === undefined) {
 			return undefined;
 		}
-		if (alreadyPosted || issueNumber === undefined) {
-			return undefined;
-		}
 		const body = result.success
 			? formatSuccessComment(result.response, ref)
 			: formatErrorComment(result.error, ref);
@@ -296,11 +312,15 @@ export async function run(deps: ActionDependencies): Promise<void> {
 	let thread: Thread | undefined;
 	let stopSignals: (() => void) | undefined;
 	try {
-		const { models, extensions, tools, ui } = await setUp(
-			deps,
-			gh,
-			issueNumber,
-		);
+		log.startGroup("Setup");
+		let setup: Awaited<ReturnType<typeof setUp>>;
+		try {
+			setup = await setUp(deps, gh, issueNumber);
+		} finally {
+			log.endGroup();
+		}
+		const { models, extensions, tools, ui } = setup;
+		log.info(describeSetup(inputs, extensions));
 		const opened = await Thread.open({
 			cwd: deps.cwd,
 			issueNumber,
@@ -311,14 +331,13 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			extensions,
 			toolEnv: tools,
 			worktree: worktreeLimits(deps),
+			onEntries: (entries) => {
+				activity.entries(entries);
+			},
 		});
 		thread = opened;
 		stopSignals = pushOnSignals(opened, log);
-		log.info(
-			opened.ref
-				? `Thread ${opened.ref}: ${opened.isNew ? "new" : `since ${opened.startedAt?.toISOString()}`}`
-				: "One-off conversation (not stored)",
-		);
+		announceThread(deps, opened);
 		// New comments: on a new thread, from the time of the trigger; on an existing one, since it began.
 		const since =
 			opened.startedAt ??
@@ -331,6 +350,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			timeoutSeconds: inputs.timeout,
 			pollIntervalMs: inputs.pollInterval * 1000,
 			message: async (trigger, first) => {
+				log.info(describeTrigger(trigger));
 				// As `report` does, pi-action posts the reply: say so, or pi may post it with `gh` too (#42).
 				const repliesAsComment =
 					inputs.outputMode === "comment" && issueNumber !== undefined;
@@ -381,7 +401,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		if (thread) {
 			await closeThread(thread, log);
 			if (thread.ref !== undefined) {
-				await showThread(deps, thread.ref);
+				await showThread(deps, thread, thread.ref);
 			}
 		}
 	}
