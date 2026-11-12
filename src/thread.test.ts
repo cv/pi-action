@@ -1,5 +1,5 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import type { Context as ModelContext, Tool } from "@earendil-works/pi-ai";
+import type { Context as ModelContext } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai/providers/faux";
 import {
 	defineExtension,
@@ -13,7 +13,12 @@ import {
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { describe, expect, it } from "vitest";
 
-import { createLogger, fauxModels, tempDir } from "./test-helpers.ts";
+import {
+	createLogger,
+	fauxModels,
+	tempDir,
+	toolsOf,
+} from "./test-helpers.ts";
 import { Thread, type ThreadOptions } from "./thread.ts";
 
 const bash = (CodingTools.tools ?? []).find((tool) => tool.name === "bash");
@@ -71,22 +76,6 @@ async function firstRequest(
 		throw new Error("the model got no request");
 	}
 	return seen;
-}
-
-/** The tools the model is offered: the system messages' tools, added and removed in order. */
-function toolsOf(context: ModelContext): Tool[] {
-	const tools = new Map<string, Tool>();
-	for (const message of context.messages) {
-		if (message.role === "system") {
-			for (const { name } of message.toolsRemoved ?? []) {
-				tools.delete(name);
-			}
-			for (const added of message.toolsAdded ?? []) {
-				tools.set(added.name, added);
-			}
-		}
-	}
-	return [...tools.values()];
 }
 
 const toolNames = (context: ModelContext) =>
