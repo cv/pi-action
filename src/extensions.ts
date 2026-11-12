@@ -240,7 +240,7 @@ function manifestEntries(dir: string, entries: string[]): string[] {
 }
 
 /** A package's prompt templates (`pi.prompts`: files and directories), under its name; undefined without any. */
-export function findPromptSource(dir: string): PromptSource | undefined {
+function findPromptSource(dir: string): PromptSource | undefined {
 	const manifest = readManifest(dir);
 	const prompts = field(field(manifest, "pi"), "prompts");
 	if (!Array.isArray(prompts)) {
