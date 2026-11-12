@@ -340,6 +340,11 @@ export async function run(deps: ActionDependencies): Promise<void> {
 				resolved.answer,
 			),
 		);
+		if (conversation.failures.length > 0) {
+			log.setFailed(
+				`pi could not answer ${conversation.failures.length} comment(s): ${conversation.failures.join("; ")}`,
+			);
+		}
 	} catch (error) {
 		await report(
 			{ success: false, error: getErrorMessage(error) },
