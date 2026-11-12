@@ -205,7 +205,8 @@ export class WorktreeContinuity {
 		const record = await recordSnapshot(cwd, ref, { ...state, stash });
 		await this.point(record);
 		this.lastKey = key;
-		this.options.log.info(
+		const { log } = this.options;
+		(log.debug ?? log.info)(
 			`Saved the working tree as ${short(stash)} on ${this.options.name ?? ref}${state.skipped.length > 0 ? ` (skipped ${state.skipped.length} untracked file(s))` : ""}`,
 		);
 		return record.wrapper;

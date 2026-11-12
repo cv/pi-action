@@ -2,6 +2,8 @@
 export interface Log {
 	info: (msg: string) => void;
 	warning: (msg: string) => void;
+	/** Plumbing (each push, each snapshot), shown with step debug logging; `info` when absent. */
+	debug?: ((msg: string) => void) | undefined;
 }
 
 /** A question a pi-durable extension asks its user; `key` is stable for the same question (pit derives it). */

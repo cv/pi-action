@@ -1,6 +1,7 @@
 import type { Models } from "@earendil-works/pi-ai/models";
 import type { Extension } from "@earendil-works/pi-durable";
 
+import { Activity, formatStats, oneLine } from "./activity.ts";
 import {
 	buildPrompt,
 	formatFollowUp,
@@ -36,6 +37,7 @@ import { getErrorMessage } from "./utils.ts";
 type Env = Record<string, string | undefined>;
 
 export interface Logger extends Log {
+	debug: (msg: string) => void;
 	error: (msg: string) => void;
 	setFailed: (msg: string) => void;
 	setOutput: (name: string, value: string) => void;
@@ -204,16 +206,31 @@ async function closeThread(thread: Thread, log: Log): Promise<void> {
 	}
 }
 
-/** After the final push: how to read the thread with git, in a log group and the job summary. */
+/** The thread, first thing in the log: whether it is new, with how to read it with git in its group. */
+function announceThread(deps: ActionDependencies, thread: Thread): void {
+	const { log } = deps;
+	if (thread.ref === undefined) {
+		log.info("🧵 One-off conversation (not stored)");
+		return;
+	}
+	const since = thread.startedAt?.toISOString().replace(/:\d\d\.\d+Z$/u, " UTC");
+	log.startGroup(
+		`🧵 Thread ${thread.ref}: ${since === undefined ? "new" : `continuing, started ${since.replace("T", " ")}`}`,
+	);
+	log.info(formatThreadLog(thread.ref, deps.remote ?? "origin"));
+	log.endGroup();
+}
+
+/** After the final push: where the thread is now, in the log, and how to read it, in the job summary. */
 async function showThread(
 	deps: ActionDependencies,
+	thread: Thread,
 	ref: string,
 ): Promise<void> {
 	const { log } = deps;
 	const remote = deps.remote ?? "origin";
-	log.startGroup(`How to read ${ref} with git`);
-	log.info(formatThreadLog(ref, remote));
-	log.endGroup();
+	const { tip } = thread;
+	log.info(`🧵 ${ref} is at ${tip === undefined ? "(nothing stored)" : tip.slice(0, 7)}`);
 	try {
 		await deps.summary?.(formatThreadSummary(ref, remote));
 	} catch (error) {
@@ -228,7 +245,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 	}
 	const { piContext, ghClient: gh, triggerInfo } = resolved;
 	const { inputs, log } = deps;
-	log.info(`Running pi agent for: ${piContext.task}`);
+	const activity = new Activity(log);
 	const issueNumber =
 		piContext.type === "direct" ? undefined : piContext.number;
 	// In comment mode, a trigger makes the run a conversation on its issue or PR (reactions, new comments join).
@@ -244,7 +261,9 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		if (!result.success) {
 			log.error(`pi execution failed: ${result.error}`);
 		}
+		const stats = formatStats(activity.take());
 		if (inputs.outputMode === "output") {
+			log.info(`${result.success ? "✅" : "❌"} Set the outputs (${stats})`);
 			log.setOutput("success", String(result.success));
 			log.setOutput(
 				"response",
@@ -258,10 +277,17 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		if (alreadyPosted || issueNumber === undefined) {
 			return undefined;
 		}
+		if (alreadyPosted || issueNumber === undefined) {
+			return undefined;
+		}
 		const body = result.success
 			? formatSuccessComment(result.response, ref)
 			: formatErrorComment(result.error, ref);
-		return (await gh.createComment(issueNumber, body)).url;
+		const { url } = await gh.createComment(issueNumber, body);
+		log.info(
+			`${result.success ? "✅ Replied" : "❌ Reported the error"}: ${url} (${stats})`,
+		);
+		return url;
 	};
 
 	if (interactive) {
