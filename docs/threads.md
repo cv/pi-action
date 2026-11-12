@@ -40,6 +40,9 @@ All pushes are fast-forward only.
 
 - If two runs on one thread push at the same time, the remote rejects the later push. pi-action writes this to the log and does not overwrite the history of the other run. The run that was rejected stops pushing.
 - pi-action retries other push failures (a network error, or `[remote rejected] ... (failed)` from GitHub) after 1, 3, and 10 seconds. If all retries fail, pi-action writes a warning to the log, and the next push tries again.
+- **A run keeps its refs outside `refs/pi/`.** On the runner, the run stores `refs/pi/threads/42` on `refs/pi-action/threads/42`, and `refs/pi/worktrees/42` on `refs/pi-action/worktrees/42`. It pushes them to their `refs/pi/` names on the remote. Thus, a `git fetch` into `refs/pi/*` by pi or by a step of your workflow cannot move the refs that the run writes to.
+- **A run reports a failed thread.** If the storage of the thread fails during a run, pi-action posts a `❌ pi Error` comment with the cause, adds 😕 to the request, and fails the step. The next `@pi` request continues from the last commit that pi-action stored.
+- **The `Save pi thread state` step leaves a remote that is ahead alone.** If the remote already has the local commits, for example because the main step pushed them, the step writes `already saved` to the log, not a warning.
 
 ## Working-tree continuity
 
