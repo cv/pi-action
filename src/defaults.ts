@@ -19,4 +19,6 @@ export const DEFAULTS = {
 	outputMode: "comment",
 	trustProject: false,
 	worktreeSnapshots: true,
+	contextFiles: true,
+	contextFilesMaxBytes: 65_536,
 } as const;
