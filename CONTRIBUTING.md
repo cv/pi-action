@@ -99,6 +99,8 @@ pi-action is TypeScript on [pi-durable](https://www.npmjs.com/package/@earendil-
 | [`src/extensions.ts`](src/extensions.ts) | The `extensions` input: npm installation, entry points, loading with jiti, and the `pi` object |
 | [`src/extension-provider.ts`](src/extension-provider.ts) | Changes `pi.registerProvider(name, config)` into a pi-ai provider |
 | [`src/context-files.ts`](src/context-files.ts) | The context files (`AGENTS.md`, `CLAUDE.md`) and the built-in `pi-action-context` extension with the `project_context` section |
+| [`src/skills.ts`](src/skills.ts) | Skills: discovery, the `SKILL.md` frontmatter, the `available_skills` section, and `/skill:<name>` |
+| [`src/builtin-extension.ts`](src/builtin-extension.ts) | pi-action's own pi-durable extension (`pi-action`), with the `available_skills` section |
 | [`src/durable-extensions.ts`](src/durable-extensions.ts) | Creates the pi-durable extensions (`pi.durable`) with the host options of the run |
 | [`src/github-ui.ts`](src/github-ui.ts) | Questions (`ui.ask`) as GitHub comments, and `ui.notify` in the job summary |
 | [`src/answers.ts`](src/answers.ts) | Answers from the event (a ticked box or an `/answer` reply), checked and changed into a `ui.answer` submission |
