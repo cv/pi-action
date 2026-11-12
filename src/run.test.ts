@@ -43,11 +43,15 @@ const CONTINUE = "Your last response hit the output token limit (max_tokens)";
 /** The info lines and groups `log` gets, in order (`::group::<name>`, `::endgroup::`). */
 function logLines(log: Logger): string[] {
 	const lines: string[] = [];
-	vi.mocked(log.info).mockImplementation((line) => lines.push(line));
-	vi.mocked(log.startGroup).mockImplementation((name) =>
-		lines.push(`::group::${name}`),
-	);
-	vi.mocked(log.endGroup).mockImplementation(() => lines.push("::endgroup::"));
+	vi.mocked(log.info).mockImplementation((line) => {
+		lines.push(line);
+	});
+	vi.mocked(log.startGroup).mockImplementation((name) => {
+		lines.push(`::group::${name}`);
+	});
+	vi.mocked(log.endGroup).mockImplementation(() => {
+		lines.push("::endgroup::");
+	});
 	return lines;
 }
 
@@ -257,6 +261,7 @@ describe("run (durable)", () => {
 			fauxAssistantMessage("Fixed it."),
 		]);
 		const trigger = w.comment("@pi please fix\nthe thing");
+		const author = trigger.user?.login;
 		const deps = w.deps(trigger);
 		const lines = logLines(deps.log);
 
@@ -273,10 +278,10 @@ describe("run (durable)", () => {
 				`This conversation is stored in git on ${REF}. To read it:\n  git fetch origin '${REF}:${REF}'\n`,
 			),
 			"::endgroup::",
-			`▶ Request from @${trigger.user?.login ?? ""} (${trigger.html_url}): please fix the thing`,
+			`▶ Request from @${String(author)} (${trigger.html_url}): please fix the thing`,
 			"💬 Looking.",
 			"🔧 bash: echo hi",
-			expect.stringMatching(/^::group::  ↳ ✓ \d+\.\ds · 1 line$/u),
+			expect.stringMatching(/^::group:: {2}↳ ✓ \d+\.\ds · 1 line$/u),
 			expect.stringContaining('"command": "echo hi"'),
 			"──",
 			"hi",

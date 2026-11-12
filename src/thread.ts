@@ -78,7 +78,9 @@ class ObservedMemoryStorage extends MemoryStorage {
 		...args: Parameters<MemoryStorage["commit"]>
 	): Promise<CommitResult> {
 		const result = await super.commit(...args);
-		this.onEntries(args[0].slice(0, result.stored).flatMap(entriesOf));
+		this.onEntries(
+			args[0].slice(0, result.stored).flatMap((writes) => entriesOf(writes)),
+		);
 		return result;
 	}
 }
