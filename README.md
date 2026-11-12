@@ -13,7 +13,7 @@ Each issue or pull request is one conversation (a **thread**). The thread contin
 - **Tools from pi-durable extensions.** Extensions such as [pit](https://github.com/cv/pit) add tools. When a tool asks a question, pi-action posts it on the issue, and an answer starts a new run. See [Extensions](docs/extensions.md).
 - **Pull request context.** On a pull request, the first prompt includes the diff and the existing review comments.
 - **Automation.** Use `output_mode: output` to get the answer as a step output, with no comments. See [Workflow recipes](docs/workflows.md).
-- **Your conventions.** pi follows the conventions of your repository: its git hooks, `AGENTS.md`, and `CONTRIBUTING.md`. pi-action installs no git hooks of its own. See [Commit conventions](docs/how-it-works.md#commit-conventions).
+- **Your conventions.** pi-action puts your `AGENTS.md` (or `CLAUDE.md`) into the system prompt, as pi does, so your rules apply from the first request. pi follows your git hooks, and installs none of its own. See [The system prompt](docs/prompts.md#the-system-prompt) and [Commit conventions](docs/how-it-works.md#commit-conventions).
 
 ## Quick start
 
@@ -98,6 +98,8 @@ Only `github_token` is necessary. All other inputs have a default or are optiona
 | `extensions` | pi extensions and pi-durable extensions to load: npm package specs or workspace paths, one per line or comma-separated (see [Extensions](docs/extensions.md)) | No | - |
 | `trust_project` | Let pi-durable extensions load and run the configuration of the repository (see [Extensions](docs/extensions.md#trust_project)) | No | `false` |
 | `agent_dir` | Agent directory (user-level state) for pi-durable extensions, relative to the workspace | No | (a new temporary directory in `RUNNER_TEMP`) |
+| `context_files` | Put `AGENTS.md` (or `CLAUDE.md`) into the system prompt: the one in `agent_dir`, then one for each directory from the workspace root down to the working directory. On a pull request from a fork, they come from its base commit (see [The system prompt](docs/prompts.md#the-system-prompt)) | No | `true` |
+| `context_files_max_bytes` | Maximum size of all context files together, in bytes. pi-action cuts a file at the limit, tells the model, and writes a warning | No | `65536` |
 | `exclude_tools` | Tools to disable completely, one per line or comma-separated. `*` matches any characters. Neither the model nor other tools can call them (see [Tools the model sees](docs/extensions.md#tools-the-model-sees)) | No | - |
 | `model_tools_hidden` | Tools not to offer the model, one per line or comma-separated. `*` matches any characters. Other tools (such as pit's `tools.*`) can still call them (see [Tools the model sees](docs/extensions.md#tools-the-model-sees)) | No | - |
 | `worktree_snapshots` | Save the files pi leaves uncommitted with the thread, and restore them at the start of the next run (see [Working-tree continuity](docs/threads.md#working-tree-continuity)) | No | `true` |
