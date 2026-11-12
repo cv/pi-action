@@ -86,6 +86,7 @@ A [prompt template](prompts.md#prompt-templates) becomes the request of the user
 - **Pull requests from branches of the same repository:** pi-action uses the `AGENTS.md` of the branch. People who can push a branch can already change the code that your workflow runs.
 - pi-action removes invisible characters from the files, but keeps HTML comments, because `AGENTS.md` files use them.
 - Set `context_files: false` to load no files.
+
 ## Skills from the repository
 
 A [skill](skills.md) is instructions that pi follows, and it can tell pi to run its scripts. Anyone who can push a branch can change the files in `.pi/skills` and `.agents/skills`. Thus, pi-action loads them only with `trust_project: true`. Without it, pi-action writes `Not loading the skills in .pi/skills: trust_project is off` to the log (with the directories that exist). Skills from `extensions`, `skills`, and `agent_dir` load in all cases. Pin the packages, as for [extensions](#extensions).

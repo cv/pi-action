@@ -82,7 +82,7 @@ A [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) extensi
 - The module exports `createPiDurableExtension(options)`, or a default export with the same signature.
 - The function returns a pi-durable `Extension`: `{ name, tools?, sections?, hooks?, wraps?, tasks? }`.
 - If a package has `pi.durable` and `pi.extensions`, pi-action loads only the `pi.durable` entry, because its pi extensions need the pi coding agent. pi-action writes this to the log.
-- pi-action installs the extensions after its coding tools (read, write, edit, bash). Each extension must have a unique name, other than `coding-tools` and `pi-action`. Tool names can repeat (see [Override tools and sections](#override-tools-and-sections)).
+- pi-action installs the extensions after its coding tools (read, write, edit, bash). Each extension must have a unique name, other than `coding-tools`, `pi-action-context`, and `pi-action`. Tool names can repeat (see [Override tools and sections](#override-tools-and-sections)).
 
 ### Override tools and sections
 

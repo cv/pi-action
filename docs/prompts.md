@@ -15,9 +15,10 @@ A follow-up does not repeat the issue or the diff, because the thread already ha
 The system prompt has these sections, in this sequence:
 
 1. `project_context`: the context files of the repository, from the built-in `pi-action-context` extension. Set `context_files: false` to remove it.
-2. The sections of the pi-durable extensions, in the order of `extensions` (for example pit's guidelines). See [Extensions](extensions.md#pi-durable-extensions).
+2. `available_skills`: the [skills](skills.md#the-system-prompt) that pi can use, from the built-in `pi-action` extension. It is not there when no skill is listed.
+3. The sections of the pi-durable extensions, in the order of `extensions` (for example pit's guidelines). See [Extensions](extensions.md#pi-durable-extensions).
 
-Without context files and extensions, the system prompt is empty.
+Without context files, skills, and extensions, the system prompt is empty.
 
 ### Context files
 
