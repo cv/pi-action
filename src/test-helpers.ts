@@ -130,6 +130,7 @@ export function createActionInputs(
 		prNumber: undefined,
 		pollInterval: DEFAULTS.pollInterval,
 		extensions: [],
+		skills: [],
 		trustProject: DEFAULTS.trustProject,
 		agentDir: undefined,
 		worktreeSnapshots: DEFAULTS.worktreeSnapshots,
