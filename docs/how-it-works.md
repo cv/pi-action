@@ -33,7 +33,7 @@ The log of the `Run pi-action` step shows what pi does while it works, one line 
 
 ```text
 ▸ Setup
-🤖 nvidia/aws/anthropic/bedrock-claude-opus-5-5 · extensions: pit (typescript)
+🤖 nvidia/aws/anthropic/bedrock-claude-opus-5-5 · tools: read, write, edit, bash, typescript · extensions: pit (typescript)
 ▸ 🧵 Thread refs/pi/threads/46: continuing, started 2026-11-12 07:11 UTC
 ▶ Request from @cv (https://github.com/o/r/issues/46#issuecomment-1): Ready to write a PR?
 💬 I'll look at the existing sessions first.
@@ -48,10 +48,10 @@ The log of the `Run pi-action` step shows what pi does while it works, one line 
 
 | Line | What it shows | Details (`▸`) |
 |------|---------------|---------------|
-| `Setup` | | The extensions that pi-action loaded, and the variables that the tools of pi get |
-| `🤖` | The model, and the pi-durable extensions with their tools | |
+| `Setup` | | The extensions and prompt templates that pi-action loaded, and the variables that the tools of pi get |
+| `🤖` | The model, the tools that it gets (see [Tools the model sees](extensions.md#tools-the-model-sees)), and the pi-durable extensions with their tools | |
 | `🧵 Thread` | The thread ref, and if the thread is new or continues | The git commands that read the thread ([Read a thread](threads.md#read-a-thread)) |
-| `▶` | A request that pi gets: who asked, where, and its first line | |
+| `▶` | A request that pi gets: who asked, where, and its first line. For a [prompt template](prompts.md#prompt-templates), the line as typed and where the template comes from | |
 | `💬` | The text of a model response (its first line, if it is longer) | The full text |
 | `🔧` | A tool call, when it starts: the tool and its main argument (the command, the path, or the label). For a script of more than one line, the first line and the number of other lines | |
 | `↳ ✓` or `↳ ✗ failed` | The end of a tool call: how long it took, and how many lines of output it gave | The arguments, and the last 30 lines of output |
