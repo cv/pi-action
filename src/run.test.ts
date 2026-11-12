@@ -327,6 +327,90 @@ describe("run (durable)", () => {
 		);
 	});
 
+	it("lists the project's skills with trust_project, and expands /skill:<name> in first messages and follow-ups", async () => {
+		const w = world();
+		const system: string[] = [];
+		const seen: string[][] = [];
+		const record: FauxResponseStep = (context) => {
+			system.push(
+				JSON.stringify(context.messages.filter((m) => m.role === "system")),
+			);
+			seen.push(userTexts(context.messages));
+			return fauxAssistantMessage("ok");
+		};
+		w.faux.setResponses([record, record]);
+		const skill = (deps: ActionDependencies) => {
+			write(
+				join(deps.cwd, ".pi/skills/release/SKILL.md"),
+				"---\nname: release\ndescription: Cut a release of xyz\n---\nBump with scripts/bump.sh $1.\n",
+			);
+			write(
+				join(deps.cwd, ".agents/skills/deploy/SKILL.md"),
+				"---\nname: deploy\ndescription: Deploy xyz\ndisable-model-invocation: true\n---\nDeploy it.\n",
+			);
+			return deps;
+		};
+		const first = skill(
+			w.deps(w.comment("@pi /skill:release 2.4.0"), { trustProject: true }),
+		);
+
+		await run(first);
+		const second = skill(
+			w.deps(w.comment("@pi /skill:deploy now"), { trustProject: true }),
+		);
+		await run(second);
+
+		const location = join(first.cwd, ".pi/skills/release/SKILL.md");
+		expect(system[0]).toContain("<available_skills>");
+		expect(system[0]).toContain(`<location>${location}</location>`);
+		expect(system[0]).toContain("Use the read tool to load");
+		expect(system[0]).not.toContain("<name>deploy</name>");
+		expect(seen[0]?.[0]).toContain(
+			`## Task\n<skill name="release" location="${location}">\nReferences are relative to ${join(first.cwd, ".pi/skills/release")}.\n\nBump with scripts/bump.sh $1.\n</skill>\n\n2.4.0\n`,
+		);
+		expect(seen[1]?.at(-1)).toContain("Deploy it.\n</skill>\n\nnow");
+		expect(first.log.info).toHaveBeenCalledWith(
+			"Skills: release (project), deploy (project, /skill:deploy only)",
+		);
+		expect(first.log.info).toHaveBeenCalledWith(
+			expect.stringMatching(
+				/: \/skill:release 2\.4\.0 \(skill from project\)$/u,
+			),
+		);
+	});
+
+	it("doesn't load the project's skills without trust_project, and answers an unknown skill with an error", async () => {
+		const w = world();
+		const respond = vi.fn<FauxResponseStep>(() => fauxAssistantMessage("ok"));
+		w.faux.setResponses([respond]);
+		const deps = w.deps(w.comment("@pi /skill:release 2.4.0"));
+		write(
+			join(deps.cwd, ".pi/skills/release/SKILL.md"),
+			"---\nname: release\ndescription: Cut a release\n---\nBody\n",
+		);
+
+		await run(deps);
+
+		expect(respond).not.toHaveBeenCalled();
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain(
+			"There is no skill named `release`. No skills are loaded.",
+		);
+		expect(w.reacted("confused")).toHaveLength(1);
+		expect(deps.log.info).toHaveBeenCalledWith(
+			"Not loading the skills in .pi/skills: trust_project is off",
+		);
+		// A later run does not post the error again.
+		const respond2 = vi.fn<FauxResponseStep>(() =>
+			fauxAssistantMessage("Done."),
+		);
+		w.faux.setResponses([respond2]);
+		await run(w.deps(w.comment("@pi fix it")));
+		expect(respond2).toHaveBeenCalledTimes(1);
+		expect(w.gh.posted).toHaveLength(2);
+		expect(w.gh.posted[1]).toContain("Done.");
+	});
+
 	it("logs the thread first, then what pi does, the reply, and where the thread ends up", async () => {
 		const w = world();
 		w.faux.setResponses([
