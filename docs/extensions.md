@@ -109,7 +109,7 @@ pi-durable extensions run in the process of pi-action. Thus, pi-action also sets
 
 ### `trust_project`
 
-`trust_project` (default `false`) tells the extension that it can load and run the configuration of the repository. For pit, this is `.pi/pit.json` and `.pi/functions`.
+`trust_project` (default `false`) tells the extension that it can load and run the configuration of the repository. For pit, this is `.pi/pit.json` and `.pi/functions`. pi-action uses it too: for the prompt templates in `.pi/prompts` and the skills in `.pi/skills` and `.agents/skills` (see [Security](security.md#skills-from-the-repository)).
 
 Anyone who can push a branch or open a pull request can change those files. Set `trust_project: true` only for repositories whose code you already run. Do not set it in workflows that run on pull requests from people you do not trust.
 
