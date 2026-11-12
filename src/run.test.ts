@@ -381,8 +381,12 @@ describe("run (durable)", () => {
 
 	it("doesn't load the project's skills without trust_project, and answers an unknown skill with an error", async () => {
 		const w = world();
-		const respond = vi.fn<FauxResponseStep>(() => fauxAssistantMessage("ok"));
-		w.faux.setResponses([respond]);
+		let calls = 0;
+		const respond: FauxResponseStep = () => {
+			calls += 1;
+			return fauxAssistantMessage("Done.");
+		};
+		w.faux.setResponses([respond, respond]);
 		const deps = w.deps(w.comment("@pi /skill:release 2.4.0"));
 		write(
 			join(deps.cwd, ".pi/skills/release/SKILL.md"),
@@ -391,7 +395,7 @@ describe("run (durable)", () => {
 
 		await run(deps);
 
-		expect(respond).not.toHaveBeenCalled();
+		expect(calls).toBe(0);
 		expect(w.gh.posted).toHaveLength(1);
 		expect(w.gh.posted[0]).toContain(
 			"There is no skill named `release`. No skills are loaded.",
@@ -401,12 +405,8 @@ describe("run (durable)", () => {
 			"Not loading the skills in .pi/skills: trust_project is off",
 		);
 		// A later run does not post the error again.
-		const respond2 = vi.fn<FauxResponseStep>(() =>
-			fauxAssistantMessage("Done."),
-		);
-		w.faux.setResponses([respond2]);
 		await run(w.deps(w.comment("@pi fix it")));
-		expect(respond2).toHaveBeenCalledTimes(1);
+		expect(calls).toBe(1);
 		expect(w.gh.posted).toHaveLength(2);
 		expect(w.gh.posted[1]).toContain("Done.");
 	});
