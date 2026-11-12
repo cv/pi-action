@@ -5,6 +5,7 @@ import type { Models } from "@earendil-works/pi-ai/models";
 import type { Extension } from "@earendil-works/pi-durable";
 
 import { Activity, formatStats, oneLine } from "./activity.ts";
+import { createBuiltinExtension } from "./builtin-extension.ts";
 import {
 	buildPrompt,
 	formatFollowUp,
@@ -35,6 +36,12 @@ import {
 	type PromptTemplates,
 } from "./prompts.ts";
 import { getRunContext } from "./run-context.ts";
+import {
+	expandSkill,
+	loadSkills,
+	type SkillSource,
+	type Skills,
+} from "./skills.ts";
 import { GitSyncConflictError } from "./storage/sync.ts";
 import type { SnapshotLimits } from "./storage/worktree.ts";
 import { Thread } from "./thread.ts";
@@ -71,43 +78,95 @@ export interface ActionDependencies {
 }
 
 /**
- * The prompt templates of the run: the extensions' `pi.prompts`, then the project's `.pi/prompts` (with
- * `trust_project` only: anyone who can push a branch can change them), then `<agent_dir>/prompts`.
+ * The sources of one kind in the repository and in `agent_dir`: the project's `dirs` with `trust_project` only
+ * (anyone who can push a branch can change them), then `<agent_dir>/<kind>`.
  */
+function localSources(
+	deps: ActionDependencies,
+	what: string,
+	project: { source: string; dirs: readonly string[] },
+	kind: string,
+): { source: string; paths: string[] }[] {
+	const { inputs, log, cwd } = deps;
+	const present = project.dirs.filter((dir) => existsSync(join(cwd, dir)));
+	if (!inputs.trustProject && present.length > 0) {
+		log.info(
+			`Not loading the ${what} in ${present.join(", ")}: trust_project is off`,
+		);
+	}
+	return [
+		...(inputs.trustProject
+			? [
+					{
+						source: project.source,
+						paths: project.dirs.map((dir) => join(cwd, dir)),
+					},
+				]
+			: []),
+		...(inputs.agentDir
+			? [
+					{
+						source: "agent_dir",
+						paths: [join(resolve(cwd, inputs.agentDir), kind)],
+					},
+				]
+			: []),
+	];
+}
+
+/** The prompt templates of the run: the extensions' `pi.prompts`, then `.pi/prompts`, then `<agent_dir>/prompts`. */
 function promptTemplates(
 	deps: ActionDependencies,
 	packages: readonly PromptSource[],
 ): PromptTemplates {
-	const { inputs, log, cwd } = deps;
-	const project = join(cwd, ".pi", "prompts");
-	if (!inputs.trustProject && existsSync(project)) {
-		log.info(
-			"Not loading the prompt templates in .pi/prompts: trust_project is off",
-		);
-	}
 	const templates = loadPromptTemplates(
 		[
 			...packages,
-			...(inputs.trustProject
-				? [{ source: ".pi/prompts", paths: [project] }]
-				: []),
-			...(inputs.agentDir
-				? [
-						{
-							source: "agent_dir",
-							paths: [join(resolve(cwd, inputs.agentDir), "prompts")],
-						},
-					]
-				: []),
+			...localSources(
+				deps,
+				"prompt templates",
+				{ source: ".pi/prompts", dirs: [".pi/prompts"] },
+				"prompts",
+			),
 		],
-		log,
+		deps.log,
 	);
 	if (templates.size > 0) {
-		log.info(
+		deps.log.info(
 			`Prompt templates: ${[...templates.values()].map((t) => `/${t.name} (${t.source})`).join(", ")}`,
 		);
 	}
 	return templates;
+}
+
+/**
+ * The skills of the run: the packages' (`extensions`, then `skills`), then the project's `.pi/skills` and
+ * `.agents/skills`, then `<agent_dir>/skills`.
+ */
+function runSkills(
+	deps: ActionDependencies,
+	packages: readonly SkillSource[],
+): Skills {
+	const skills = loadSkills(
+		[
+			...packages,
+			...localSources(
+				deps,
+				"skills",
+				{ source: "project", dirs: [".pi/skills", ".agents/skills"] },
+				"skills",
+			),
+		],
+		deps.log,
+	);
+	if (skills.size > 0) {
+		const listed = [...skills.values()].map(
+			(skill) =>
+				`${skill.name} (${skill.source}${skill.disableModelInvocation ? `, /skill:${skill.name} only` : ""})`,
+		);
+		deps.log.info(`Skills: ${listed.join(", ")}`);
+	}
+	return skills;
 }
 
 /**
@@ -126,11 +185,13 @@ async function setUp(
 	tools: Record<string, string>;
 	ui: GitHubUi | undefined;
 	templates: PromptTemplates;
+	skills: Skills;
 }> {
 	const { inputs, log, cwd } = deps;
 	const env = deps.env ?? process.env;
 	const loaded = await loadExtensions({
 		specs: inputs.extensions,
+		skillSpecs: inputs.skills,
 		cwd,
 		log,
 		env,
@@ -167,6 +228,7 @@ async function setUp(
 		tools,
 		ui,
 		templates: promptTemplates(deps, loaded.prompts),
+		skills: runSkills(deps, loaded.skills),
 	};
 }
 
@@ -206,14 +268,17 @@ function describeSetup(
 	return `🤖 ${inputs.provider}/${inputs.model} · tools: ${modelTools.join(", ")}${loaded.length > 0 ? ` · extensions: ${loaded.join(", ")}` : ""}`;
 }
 
-/** One line for a request as pi gets it: who, where, and its first line (as typed, for a prompt template). */
+/** One line for a request as pi gets it: who, where, and its first line (as typed, for a prompt template or skill). */
 function describeTrigger(trigger: Trigger): string {
 	const what = trigger.answer ? "Answer" : "Request";
 	const where = trigger.url ? ` (${trigger.url})` : "";
-	const { template } = trigger;
-	const request = template
-		? `${oneLine(template.typed)} (prompt template from ${template.source})`
-		: oneLine(trigger.task || trigger.text);
+	const { template, skill } = trigger;
+	let request = oneLine(trigger.task || trigger.text);
+	if (template) {
+		request = `${oneLine(template.typed)} (prompt template from ${template.source})`;
+	} else if (skill) {
+		request = `${oneLine(skill.typed)} (skill from ${skill.source})`;
+	}
 	return `▶ ${what} from @${trigger.author.login}${where}: ${request}`;
 }
 
@@ -384,9 +449,15 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		} finally {
 			log.endGroup();
 		}
-		const { models, extensions, tools, ui, templates } = setup;
+		const { models, extensions, tools, ui, templates, skills } = setup;
+		// `/skill:<name>` first, so a template can't take a skill's command.
 		const expand = (triggers: Trigger[]) =>
-			triggers.map((trigger) => expandTrigger(trigger, templates));
+			triggers.map((trigger) => {
+				const expanded = expandSkill(trigger, skills);
+				return expanded === trigger
+					? expandTrigger(trigger, templates)
+					: expanded;
+			});
 		const opened = await Thread.open({
 			cwd: deps.cwd,
 			issueNumber,
@@ -394,7 +465,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			model: findModel(models, inputs.provider, inputs.model),
 			log,
 			remote: deps.remote,
-			extensions,
+			extensions: [createBuiltinExtension({ skills }), ...extensions],
 			tools: { exclude: inputs.excludeTools, hidden: inputs.modelToolsHidden },
 			toolEnv: tools,
 			worktree: worktreeLimits(deps),
