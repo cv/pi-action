@@ -54,6 +54,8 @@ const stringArg = (args: Record<string, unknown>, ...keys: string[]) => {
 	return undefined;
 };
 
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 /** The one thing that says what a tool call does: a command, a path, a label, a pattern. */
 export function describeCall(
 	name: string,
@@ -62,15 +64,17 @@ export function describeCall(
 	const edits = Array.isArray(args["edits"]) ? args["edits"].length : 0;
 	const main =
 		stringArg(args, "command", "label", "path", "file", "pattern", "query") ??
-		(typeof args["code"] === "string"
-			? args["code"].split("\n").find((line) => line.trim() !== "")
-			: undefined);
+		stringArg(args, "code");
 	if (main === undefined) {
 		const json = JSON.stringify(args);
 		return json === "{}" ? name : `${name} ${oneLine(json)}`;
 	}
+	// A script (a heredoc, a program) reads best as its first line and its length: the group shows the rest.
+	const lines = main.trim().split("\n");
+	const more =
+		lines.length > 1 ? ` (+${plural(lines.length - 1, "line")})` : "";
 	const detail = edits > 0 ? ` (${edits} edit${edits === 1 ? "" : "s"})` : "";
-	return `${name}: ${oneLine(main)}${detail}`;
+	return `${name}: ${oneLine(lines[0] ?? "")}${more}${detail}`;
 }
 
 /** 1.2s, 41s, 3m12s. */
@@ -96,8 +100,6 @@ function formatCount(n: number): string {
 	}
 	return `${(n / 1_000_000).toFixed(1)}M`;
 }
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** `40 model responses · 39 tool calls (2 failed) · 8m24s · 1.2M tokens in, 40k out · $0.41`. */
 export function formatStats(stats: ActivityStats): string {
