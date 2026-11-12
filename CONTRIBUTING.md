@@ -150,13 +150,51 @@ The tests use [Vitest](https://vitest.dev/). They are next to the code (`src/**/
 | [`pi-assistant.yml`](.github/workflows/pi-assistant.yml) | Uses the action of this checkout to answer `@pi` requests in this repository. It acts as the `pi-action-agent` GitHub App (secrets `PI_APP_CLIENT_ID` and `PI_APP_PRIVATE_KEY`), so that pi can open pull requests and its pushes run CI |
 | [`pi-direct-dogfood.yml`](.github/workflows/pi-direct-dogfood.yml) | `workflow_dispatch`: runs a direct prompt in `output` mode |
 | [`pi-pr-review-dogfood.yml`](.github/workflows/pi-pr-review-dogfood.yml) | `workflow_dispatch`: reviews a pull request with `pr_number` in `output` mode |
+| `.github/workflows/release.yml` | On a pushed `vX.Y.Z` tag: checks the tag, creates a draft GitHub Release, and moves the major tag. See [Releases](#releases) |
 
 ## Releases
 
-1. Make sure that `npm run check` passes on `main`.
-2. Change `version` in `package.json`. Commit with the message `chore: release X.Y.Z`.
-3. Tag the commit `vX.Y.Z`.
-4. Move the major tag (`v2`) to the same commit. Users refer to the action as `cv/pi-action@v2`.
+A release is a pull request that changes the version, then a tag on its merge commit. `.github/workflows/release.yml` does the rest. Users refer to the action by its major tag, such as `cv/pi-action@v2`.
+
+1. Make a branch from `main`, and set the version. `npm version` changes `package.json` and `package-lock.json`:
+
+   ```bash
+   git switch -c chore/release-X.Y.Z main
+   npm version X.Y.Z --no-git-tag-version
+   git commit -am "chore: release X.Y.Z"
+   git push -u origin chore/release-X.Y.Z
+   ```
+
+2. Open a pull request with the title `chore: release X.Y.Z`. Write the notes in a `## Release notes` section of its description, in the [release notes format](#release-notes).
+3. When CI passes, squash-merge the pull request.
+4. Tag the merge commit on `main` with an annotated tag, and push the tag:
+
+   ```bash
+   git switch main && git pull
+   git tag -a vX.Y.Z -m vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+
+5. `release.yml` makes sure that the tag agrees with `package.json` and is on `main`, and runs `npm run check`. Then it creates a draft GitHub Release with the `## Release notes` section, and moves the major tag (`vN`) to the commit. It does not move the major tag back for a tag that is earlier than the latest one.
+6. Review the draft in [Releases](https://github.com/cv/pi-action/releases), and publish it.
+
+### Release notes
+
+Write the notes for users. Copy this structure:
+
+```markdown
+### Added
+- **Short summary in bold** (#33, added in #44). What changed, for whom, and what to do, in a few sentences. See [Doc title](https://github.com/cv/pi-action/blob/vX.Y.Z/docs/file.md#anchor).
+
+### Fixed
+- **Short summary in bold** (#42, fixed in #43). ...
+```
+
+- Use the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) headings, in this order: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`. Write only the headings that have items.
+- Write one item for each change that users can see. Do not write items for CI, refactoring, or tests.
+- After the summary, write the issue and the pull request, such as `(#42, fixed in #43)`. If there is no issue, write only the pull request, such as `(#43)`.
+- Use full links to the docs of the tag (`blob/vX.Y.Z/...`), so that the links stay correct after later releases.
+- Do not add the **Full Changelog** link. `release.yml` adds it.
 
 ## Pull requests
 
