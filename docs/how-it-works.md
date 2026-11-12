@@ -19,13 +19,46 @@ The action does not change your checkout before the run. In particular, it insta
 2. **Check the author** ([`src/security.ts`](../src/security.ts)). See [Security](security.md#who-can-start-pi). If the author cannot start pi, the run stops and writes a warning to the log.
 3. **Acknowledge.** In `comment` mode, pi-action adds 👀 to the comment, issue, or pull request that started the run.
 4. **Load models and extensions** ([`src/models.ts`](../src/models.ts), [`src/extensions.ts`](../src/extensions.ts)). See [Models](models.md) and [Extensions](extensions.md).
-5. **Open the thread** ([`src/thread.ts`](../src/thread.ts)). pi-action gets `refs/pi/threads/<number>` and `refs/pi/worktrees/<number>`, opens the conversation, and restores the files that the earlier run left uncommitted (see [Working-tree continuity](threads.md#working-tree-continuity)). If an earlier run did not complete its work, pi continues that work.
+5. **Open the thread** ([`src/thread.ts`](../src/thread.ts)). pi-action gets `refs/pi/threads/<number>` and `refs/pi/worktrees/<number>` into local refs under `refs/pi-action/` (see [Protection against conflicts](threads.md#protection-against-conflicts)), opens the conversation, and restores the files that the earlier run left uncommitted (see [Working-tree continuity](threads.md#working-tree-continuity)). If an earlier run did not complete its work, pi continues that work.
 6. **Collect the requests** ([`src/triggers.ts`](../src/triggers.ts)). In `comment` mode, pi-action collects all `@pi` comments on the thread that have no answer, not only the comment of the event. The first request of a new thread gets the full context of the issue or pull request. Later requests are follow-ups. See [Prompts](prompts.md).
 7. **Work** ([`src/conversation.ts`](../src/conversation.ts)). While pi works, pi-action adds new `@pi` comments to the conversation, and saves the working tree and pushes the thread after each model response and tool result. At `timeout`, pi-action stops pi and reports the timeout.
 8. **Report.** For each request, pi-action posts a `🤖 pi Response` comment (or `❌ pi Error`), and adds 🚀 (or 😕) to the request. If pi gives an empty answer, pi-action asks one time for a summary. If a response hits the output token limit (`max_tokens`) without a tool call, pi-action asks pi to continue, up to 3 times in a row and within `timeout`, and then posts an error. In `output` mode, pi-action sets the `response` and `success` outputs and posts nothing.
-9. **Save.** pi-action pushes the thread. Then it writes the git commands that read the thread to the log and the job summary. See [Read a thread](threads.md#read-a-thread).
+9. **Save.** pi-action pushes the thread, and writes the git commands that read the thread to the job summary. See [Read a thread](threads.md#read-a-thread).
 
 When a tool from a pi-durable extension asks a question, the run ends after step 7 without a `pi Response` comment. See [Questions on GitHub](extensions.md#questions-on-github).
+
+## The workflow log
+
+The log of the `Run pi-action` step shows what pi does while it works, one line for each step. Click a line with a `▸` to see its details. A run that answers one comment looks like this:
+
+```text
+▸ Setup
+🤖 nvidia/aws/anthropic/bedrock-claude-opus-5-5 · extensions: pit (typescript)
+▸ 🧵 Thread refs/pi/threads/46: continuing, started 2026-11-12 07:11 UTC
+▶ Request from @cv (https://github.com/o/r/issues/46#issuecomment-1): Ready to write a PR?
+💬 I'll look at the existing sessions first.
+🔧 bash: git log --oneline -5
+▸   ↳ ✓ 0.1s · 5 lines
+🔧 edit: src/run.ts (2 edits)
+▸   ↳ ✓ 0.0s · 1 line
+▸ 💬 I opened PR #48, which ...
+✅ Replied: https://github.com/o/r/issues/46#issuecomment-2 (24 model responses · 23 tool calls · 6m40s · 2.1M tokens in, 31k out)
+🧵 refs/pi/threads/46 is at 4325d9a
+```
+
+| Line | What it shows | Details (`▸`) |
+|------|---------------|---------------|
+| `Setup` | | The extensions that pi-action loaded, and the variables that the tools of pi get |
+| `🤖` | The model, and the pi-durable extensions with their tools | |
+| `🧵 Thread` | The thread ref, and if the thread is new or continues | The git commands that read the thread ([Read a thread](threads.md#read-a-thread)) |
+| `▶` | A request that pi gets: who asked, where, and its first line | |
+| `💬` | The text of a model response (its first line, if it is longer) | The full text |
+| `🔧` | A tool call, when it starts: the tool and its main argument (the command, the path, or the label). For a script of more than one line, the first line and the number of other lines | |
+| `↳ ✓` or `↳ ✗ failed` | The end of a tool call: how long it took, and how many lines of output it gave | The arguments, and the last 30 lines of output |
+| `✅ Replied` or `❌ Reported the error` | The comment, and totals for the reply: model responses, tool calls, time, tokens, and cost if the provider reports it | |
+| `🧵 … is at` | The commit of the thread ref after the last push | |
+
+pi-action writes each push of the thread and each snapshot of the working tree as debug messages. To see them, [enable step debug logging](https://docs.github.com/en/actions/how-tos/monitor-workflows/enable-debug-logging) and run the job again. Warnings and errors always show.
 
 ## Commit conventions
 

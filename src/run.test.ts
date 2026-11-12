@@ -20,7 +20,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { withReplyReminder } from "./context.ts";
 import type { ActionInputs } from "./inputs.ts";
 import { pushThread } from "./push.ts";
-import { type ActionDependencies, run } from "./run.ts";
+import { type ActionDependencies, type Logger, run } from "./run.ts";
 import {
 	createActionInputs,
 	createComment,
@@ -34,9 +34,26 @@ import {
 import type { GitHubComment, GitHubReaction } from "./types.ts";
 
 const REF = "refs/pi/threads/42";
+/** Where a run keeps REF locally (liveRef()). */
+const LIVE = "refs/pi-action/threads/42";
 const FIRST_COMMIT = /pi-durable: seq 1 /u;
 const COMMIT_ID = /^[0-9a-f]{40}$/u;
 const CONTINUE = "Your last response hit the output token limit (max_tokens)";
+
+/** The info lines and groups `log` gets, in order (`::group::<name>`, `::endgroup::`). */
+function logLines(log: Logger): string[] {
+	const lines: string[] = [];
+	vi.mocked(log.info).mockImplementation((line) => {
+		lines.push(line);
+	});
+	vi.mocked(log.startGroup).mockImplementation((name) => {
+		lines.push(`::group::${name}`);
+	});
+	vi.mocked(log.endGroup).mockImplementation(() => {
+		lines.push("::endgroup::");
+	});
+	return lines;
+}
 
 /** A bare "GitHub" remote, a fresh runner checkout per run, a faux model, and a fake GitHub API. */
 function world() {
@@ -231,27 +248,52 @@ describe("run (durable)", () => {
 		expect(log).toMatch(FIRST_COMMIT);
 	});
 
-	it("shows how to read the thread with git after the final push", async () => {
+	it("logs the thread first, then what pi does, the reply, and where the thread ends up", async () => {
 		const w = world();
-		w.faux.setResponses([fauxAssistantMessage("Fixed it.")]);
-		const deps = w.deps(w.comment("@pi please fix"));
-		let tipWhenShown = "";
-		vi.mocked(deps.log.startGroup).mockImplementation(() => {
-			tipWhenShown = git(w.remote, "rev-parse", REF).trim();
-		});
+		w.faux.setResponses([
+			fauxAssistantMessage(
+				[
+					{ type: "text", text: "Looking." },
+					fauxToolCall("bash", { command: "echo hi" }),
+				],
+				{ stopReason: "toolUse" },
+			),
+			fauxAssistantMessage("Fixed it."),
+		]);
+		const trigger = w.comment("@pi please fix\nthe thing");
+		const author = trigger.user?.login;
+		const deps = w.deps(trigger);
+		const lines = logLines(deps.log);
 
 		await run(deps);
 
-		expect(deps.log.startGroup).toHaveBeenCalledExactlyOnceWith(
-			`How to read ${REF} with git`,
-		);
-		expect(deps.log.info).toHaveBeenCalledWith(
+		const tip = git(w.remote, "rev-parse", REF).trim();
+		expect(tip).toBe(git(deps.cwd, "rev-parse", LIVE).trim());
+		const setupEnd = lines.indexOf("::endgroup::");
+		expect(lines[0]).toBe("::group::Setup");
+		expect(lines.slice(setupEnd + 1)).toStrictEqual([
+			expect.stringMatching(/^🤖 faux\S*\/\S+$/u),
+			`::group::🧵 Thread ${REF}: new`,
 			expect.stringContaining(
 				`This conversation is stored in git on ${REF}. To read it:\n  git fetch origin '${REF}:${REF}'\n`,
 			),
-		);
-		expect(deps.log.endGroup).toHaveBeenCalledExactlyOnceWith();
-		expect(tipWhenShown).toBe(git(deps.cwd, "rev-parse", REF).trim());
+			"::endgroup::",
+			`▶ Request from @${String(author)} (${trigger.html_url}): please fix the thing`,
+			"💬 Looking.",
+			"🔧 bash: echo hi",
+			expect.stringMatching(/^::group:: {2}↳ ✓ \d+\.\ds · 1 line$/u),
+			expect.stringContaining('"command": "echo hi"'),
+			"──",
+			"hi",
+			"::endgroup::",
+			"💬 Fixed it.",
+			expect.stringMatching(
+				/^✅ Replied: https:\/\/\S+ \(2 model responses · 1 tool call · \d+\.\ds · \S+ tokens in, \S+ out\)$/u,
+			),
+			`🧵 ${REF} is at ${tip.slice(0, 7)}`,
+		]);
+		// The plumbing is debug output.
+		expect(deps.log.debug).toHaveBeenCalledWith(`${REF}: new on origin`);
 		expect(deps.summary).toHaveBeenCalledExactlyOnceWith(
 			expect.stringContaining(`git log --oneline ${REF}`),
 		);
@@ -383,9 +425,7 @@ describe("run (durable)", () => {
 		expect(w.gh.posted[0]).toContain("Timeout after 0.3 seconds");
 		expect(w.reacted("confused")).toStrictEqual([trigger.id]);
 		expect(git(w.remote, "rev-parse", REF).trim()).toMatch(COMMIT_ID);
-		expect(deps.log.startGroup).toHaveBeenCalledExactlyOnceWith(
-			`How to read ${REF} with git`,
-		);
+		expect(deps.log.startGroup).toHaveBeenCalledWith(`🧵 Thread ${REF}: new`);
 	}, 20_000);
 
 	it("does not repeat a failure report in a later run", async () => {
@@ -435,8 +475,8 @@ describe("pushThread (the always() step)", () => {
 		const { payload } = deps;
 
 		// Simulate a step killed before its final push: rewind the remote ref.
-		const tip = git(deps.cwd, "rev-parse", REF).trim();
-		const parent = git(deps.cwd, "rev-parse", `${REF}~3`).trim();
+		const tip = git(deps.cwd, "rev-parse", LIVE).trim();
+		const parent = git(deps.cwd, "rev-parse", `${LIVE}~3`).trim();
 		git(w.remote, "update-ref", REF, parent);
 
 		await expect(pushThread(payload, deps.cwd, log)).resolves.toBe("pushed");
@@ -467,6 +507,63 @@ describe("pushThread (the always() step)", () => {
 	});
 });
 
+describe("run (durable) when the agent moves refs (#46)", () => {
+	const agentRuns = (command: string) => [
+		fauxAssistantMessage([fauxToolCall("bash", { command })], {
+			stopReason: "toolUse",
+		}),
+		fauxAssistantMessage("done"),
+	];
+
+	it("answers when the agent fetches or deletes refs/pi/* mid-run", async () => {
+		const w = world();
+		w.faux.setResponses(
+			agentRuns(
+				`git fetch -q origin '+refs/pi/*:refs/pi/*'; git update-ref -d ${REF}`,
+			),
+		);
+		const deps = w.deps(w.comment("@pi go"));
+		await run(deps);
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain("### 🤖 pi Response\n\ndone");
+		expect(deps.log.setFailed).not.toHaveBeenCalled();
+		expect(git(w.remote, "rev-parse", REF).trim()).toBe(
+			git(deps.cwd, "rev-parse", LIVE).trim(),
+		);
+	});
+
+	it("reports a session that failed in storage on the comment, and fails the step", async () => {
+		const w = world();
+		w.faux.setResponses(agentRuns(`git update-ref -d ${LIVE}`));
+		const trigger = w.comment("@pi go");
+		const deps = w.deps(trigger);
+		await run(deps);
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain("### ❌ pi Error");
+		expect(w.gh.posted[0]).toContain("Session failed after a storage error");
+		expect(w.gh.posted[0]).toContain(`Ref ${LIVE} moved`);
+		expect(w.reacted("confused")).toContain(trigger.id);
+		expect(deps.log.setFailed).toHaveBeenCalledWith(
+			expect.stringContaining("pi could not answer 1 comment(s)"),
+		);
+	});
+
+	it("leaves a remote that is ahead of the local ref alone, in the always() step", async () => {
+		const w = world();
+		w.faux.setResponses([fauxAssistantMessage("ok")]);
+		const deps = w.deps(w.comment("@pi go"));
+		await run(deps);
+		const tip = git(w.remote, "rev-parse", REF).trim();
+		git(deps.cwd, "update-ref", LIVE, `${LIVE}~2`);
+		const log = { info: vi.fn(), warning: vi.fn() };
+		await expect(pushThread(deps.payload, deps.cwd, log)).resolves.toBe(
+			"up-to-date",
+		);
+		expect(log.warning).not.toHaveBeenCalled();
+		expect(git(w.remote, "rev-parse", REF).trim()).toBe(tip);
+	});
+});
+
 describe("run (durable) with main's modes", () => {
 	const outputs = (deps: ActionDependencies) =>
 		Object.fromEntries(vi.mocked(deps.log.setOutput).mock.calls);
@@ -492,9 +589,7 @@ describe("run (durable) with main's modes", () => {
 		expect(w.gh.addReaction).not.toHaveBeenCalled();
 		expect(git(w.remote, "rev-parse", REF).trim()).toMatch(COMMIT_ID);
 		// A job summary that cannot be written is a warning; the log still shows the thread.
-		expect(deps.log.startGroup).toHaveBeenCalledExactlyOnceWith(
-			`How to read ${REF} with git`,
-		);
+		expect(deps.log.startGroup).toHaveBeenCalledWith(`🧵 Thread ${REF}: new`);
 		expect(summary).toHaveBeenCalledExactlyOnceWith(
 			expect.stringContaining(REF),
 		);
@@ -519,7 +614,13 @@ describe("run (durable) with main's modes", () => {
 			response: "Release notes.",
 		});
 		expect(git(w.remote, "for-each-ref", "refs/pi")).toBe("");
-		expect(deps.log.startGroup).not.toHaveBeenCalled();
+		expect(deps.log.startGroup).not.toHaveBeenCalledWith(
+			expect.stringContaining("🧵"),
+		);
+		expect(deps.log.info).toHaveBeenCalledWith(
+			"🧵 One-off conversation (not stored)",
+		);
+		expect(deps.log.info).toHaveBeenCalledWith("💬 Release notes.");
 		expect(deps.summary).not.toHaveBeenCalled();
 	});
 
@@ -853,8 +954,8 @@ describe("run with a pi-durable extension (installed from npm)", () => {
 		expect(d.reacted("rocket")).toHaveLength(0);
 		expect(d.reacted("confused")).toHaveLength(0);
 		expect(d.gh.getComment).not.toHaveBeenCalled();
-		expect(d.deps.log.startGroup).toHaveBeenCalledExactlyOnceWith(
-			expect.stringMatching(/^How to read refs\/pi\/threads\/\d+ with git$/u),
+		expect(d.deps.log.startGroup).toHaveBeenCalledWith(
+			expect.stringMatching(/^🧵 Thread refs\/pi\/threads\/\d+: new$/u),
 		);
 
 		// Ticking Yes starts a new run: the answer reaches the thread, and the tool asks its next question.
@@ -1015,7 +1116,11 @@ describe("run (durable) with working-tree continuity", () => {
 		);
 		expect(log.warning).not.toHaveBeenCalled();
 		expect(git(w.remote, "rev-parse", WORKTREES).trim()).toBe(
-			git(deps.cwd, "rev-parse", WORKTREES).trim(),
+			git(
+				deps.cwd,
+				"rev-parse",
+				WORKTREES.replace("refs/pi/", "refs/pi-action/"),
+			).trim(),
 		);
 		await expect(pushThread(deps.payload, deps.cwd, log)).resolves.toBe(
 			"up-to-date",

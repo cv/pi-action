@@ -40,6 +40,9 @@ All pushes are fast-forward only.
 
 - If two runs on one thread push at the same time, the remote rejects the later push. pi-action writes this to the log and does not overwrite the history of the other run. The run that was rejected stops pushing.
 - pi-action retries other push failures (a network error, or `[remote rejected] ... (failed)` from GitHub) after 1, 3, and 10 seconds. If all retries fail, pi-action writes a warning to the log, and the next push tries again.
+- **A run keeps its refs outside `refs/pi/`.** On the runner, the run stores `refs/pi/threads/42` on `refs/pi-action/threads/42`, and `refs/pi/worktrees/42` on `refs/pi-action/worktrees/42`. It pushes them to their `refs/pi/` names on the remote. Thus, a `git fetch` into `refs/pi/*` by pi or by a step of your workflow cannot move the refs that the run writes to.
+- **A run reports a failed thread.** If the storage of the thread fails during a run, pi-action posts a `❌ pi Error` comment with the cause, adds 😕 to the request, and fails the step. The next `@pi` request continues from the last commit that pi-action stored.
+- **The `Save pi thread state` step leaves a remote that is ahead alone.** If the remote already has the local commits, for example because the main step pushed them, the step writes `already saved` to the log, not a warning.
 
 ## Working-tree continuity
 
@@ -121,7 +124,7 @@ git log --oneline refs/pi/threads/42            # one commit for each stored ste
 git show refs/pi/threads/42:batch.json | jq .   # the records of the newest step
 ```
 
-The workflow log of each run on a thread shows these commands for that thread, in the group `How to read refs/pi/threads/<number> with git`, after the last push of the run. The job summary of the run shows them too. Each answer comment of pi-action shows the ref of its thread, and the `git fetch` command.
+The workflow log of each run on a thread shows these commands for that thread at the start of the run, in the group `🧵 Thread refs/pi/threads/<number>`. The job summary of the run shows them too. Each answer comment of pi-action shows the ref of its thread, and the `git fetch` command.
 
 To get all threads with each `git fetch`, run this command one time:
 
