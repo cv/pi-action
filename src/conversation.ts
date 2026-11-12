@@ -93,6 +93,23 @@ function describeUnanswered(
 	return `${record.reason}: ${detail}`;
 }
 
+/** How many causes `withCause()` follows. */
+const MAX_CAUSES = 5;
+
+/**
+ * An error's message with the messages of its causes: pi-durable's SessionFailed carries the storage error as its
+ * cause, which may have its own cause (a ref that moved, say).
+ */
+function withCause(error: unknown): string {
+	const messages = [getErrorMessage(error)];
+	let cause: unknown = error instanceof Error ? error.cause : undefined;
+	while (cause !== undefined && messages.length <= MAX_CAUSES) {
+		messages.push(getErrorMessage(cause));
+		cause = cause instanceof Error ? cause.cause : undefined;
+	}
+	return messages.join(": ");
+}
+
 /**
  * Drives a thread through a set of triggers: submits them (new ones join the running conversation), waits for
  * every answer within the timeout, and delivers each answer or failure exactly once.
@@ -106,6 +123,8 @@ export class ThreadConversation {
 	/** When the run times out; set once the initial triggers are submitted. */
 	private deadline = Number.POSITIVE_INFINITY;
 	private readonly options: ConversationOptions;
+	/** Why triggers could not be answered at all (the session failed, say): each was reported as an error. */
+	private readonly unanswered: string[] = [];
 
 	constructor(options: ConversationOptions) {
 		this.options = options;
@@ -167,13 +186,29 @@ export class ThreadConversation {
 		}
 	}
 
+	/** The errors of triggers that got no answer, not even a failed one; empty when every trigger was answered. */
+	get failures(): readonly string[] {
+		return this.unanswered;
+	}
+
 	private track(trigger: Trigger, result: Promise<SettledResult>): void {
 		const settled = (async () => {
+			let outcome: SettledResult;
 			try {
-				this.enqueueDelivery(trigger, await result);
+				outcome = await result;
 			} catch (error) {
-				this.options.log.warning(getErrorMessage(error));
+				// Waiting for the answer threw (the session failed after a storage error, say): report it on the
+				// trigger, or it gets no reply and no reaction at all (#46).
+				const message = withCause(error);
+				this.options.log.warning(message);
+				this.unanswered.push(message);
+				outcome = {
+					key: `failed-${trigger.key}`,
+					empty: false,
+					result: { success: false, error: message },
+				};
 			}
+			this.enqueueDelivery(trigger, outcome);
 		})();
 		this.pending.add(settled);
 		settled
@@ -394,7 +429,7 @@ export class ThreadConversation {
 }
 
 interface SettledResult {
-	/** `answer-<entryId>` or `error-<submissionId>`: what is delivered once. */
+	/** `answer-<entryId>`, `error-<submissionId>`, or `failed-<trigger key>`: what is delivered once. */
 	key: string;
 	empty: boolean;
 	result: ThreadResult;
