@@ -332,7 +332,9 @@ describe("run (durable)", () => {
 		const system: string[] = [];
 		const seen: string[][] = [];
 		const record: FauxResponseStep = (context) => {
-			system.push(JSON.stringify(context.messages.filter((m) => m.role === "system")));
+			system.push(
+				JSON.stringify(context.messages.filter((m) => m.role === "system")),
+			);
 			seen.push(userTexts(context.messages));
 			return fauxAssistantMessage("ok");
 		};
@@ -371,7 +373,9 @@ describe("run (durable)", () => {
 			"Skills: release (project), deploy (project, /skill:deploy only)",
 		);
 		expect(first.log.info).toHaveBeenCalledWith(
-			expect.stringMatching(/: \/skill:release 2\.4\.0 \(skill from project\)$/u),
+			expect.stringMatching(
+				/: \/skill:release 2\.4\.0 \(skill from project\)$/u,
+			),
 		);
 	});
 
