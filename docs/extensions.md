@@ -5,7 +5,7 @@ The `extensions` input loads two kinds of packages into pi-action:
 - **pi extensions** give model **providers**. pi-action uses only the providers that they register. See [Providers](#providers).
 - **pi-durable extensions** give **tools and prompt sections** to every conversation. Their tools can ask questions, which pi-action posts on the issue or pull request. See [pi-durable extensions](#pi-durable-extensions).
 
-Both kinds can also give **prompt templates** (`pi.prompts`). See [Prompts](prompts.md#prompt-templates).
+Both kinds can also give **prompt templates** (`pi.prompts`) and **skills** (`pi.skills`, or a `skills/` directory). See [Prompts](prompts.md#prompt-templates) and [Skills](skills.md). A package with only skills can go in the `skills` input instead, which does not run its code.
 
 An extension is code that runs inside pi-action, with all the permissions of the job. Load only extensions that you trust. See [Security](security.md#extensions).
 
@@ -82,7 +82,7 @@ A [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) extensi
 - The module exports `createPiDurableExtension(options)`, or a default export with the same signature.
 - The function returns a pi-durable `Extension`: `{ name, tools?, sections?, hooks?, wraps?, tasks? }`.
 - If a package has `pi.durable` and `pi.extensions`, pi-action loads only the `pi.durable` entry, because its pi extensions need the pi coding agent. pi-action writes this to the log.
-- pi-action installs the extensions after its coding tools (read, write, edit, bash). Each extension must have a unique name. Tool names can repeat (see [Override tools and sections](#override-tools-and-sections)).
+- pi-action installs the extensions after its coding tools (read, write, edit, bash). Each extension must have a unique name, other than `coding-tools`, `pi-action-context`, and `pi-action`. Tool names can repeat (see [Override tools and sections](#override-tools-and-sections)).
 
 ### Override tools and sections
 
@@ -91,7 +91,7 @@ An extension can change the tools and prompt sections of pi-action and of other 
 - **Replace a tool.** A tool with the name of an earlier tool replaces it, as `pi.registerTool` does in pi. For example, an extension with its own `bash` tool replaces the `bash` of pi-action. pi-action writes `pi-durable extension <name> replaces tool bash from coding-tools` to the log.
 - **Wrap a tool or a section.** `wrapTool(tool, wrapper)` and `wrapSection(key, wrapper)` of pi-durable change a tool or a section, for example its description or its text. `wrapTool("read", (t) => ({ ...t, callers: ["tools"] }))` hides `read` from the model, but other tools can still call it (see [Tools the model sees](#tools-the-model-sees)).
 
-The order is: the coding tools of pi-action (`coding-tools`) first, then pi-action's `pi-action-context` (the `project_context` section, see [The system prompt](prompts.md#the-system-prompt)), then the extensions in the order of the `extensions` input. Extensions cannot use the names `coding-tools` and `pi-action-context`. pi-durable applies the wraps of all extensions in this order. Thus, the last wrap wins.
+The order is: the coding tools of pi-action (`coding-tools`) first, then pi-action's `pi-action-context` (the `project_context` section, see [The system prompt](prompts.md#the-system-prompt)), then its built-in extension `pi-action` (the [`available_skills`](skills.md#the-system-prompt) section), then the extensions in the order of the `extensions` input. Extensions cannot use the names `coding-tools`, `pi-action-context`, and `pi-action`. pi-durable applies the wraps of all extensions in this order. Thus, the last wrap wins.
 
 ### Host options
 
@@ -109,7 +109,7 @@ pi-durable extensions run in the process of pi-action. Thus, pi-action also sets
 
 ### `trust_project`
 
-`trust_project` (default `false`) tells the extension that it can load and run the configuration of the repository. For pit, this is `.pi/pit.json` and `.pi/functions`.
+`trust_project` (default `false`) tells the extension that it can load and run the configuration of the repository. For pit, this is `.pi/pit.json` and `.pi/functions`. pi-action uses it too: for the prompt templates in `.pi/prompts` and the skills in `.pi/skills` and `.agents/skills` (see [Security](security.md#skills-from-the-repository)).
 
 Anyone who can push a branch or open a pull request can change those files. Set `trust_project: true` only for repositories whose code you already run. Do not set it in workflows that run on pull requests from people you do not trust.
 

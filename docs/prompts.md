@@ -15,9 +15,10 @@ A follow-up does not repeat the issue or the diff, because the thread already ha
 The system prompt has these sections, in this sequence:
 
 1. `project_context`: the context files of the repository, from the built-in `pi-action-context` extension. Set `context_files: false` to remove it.
-2. The sections of the pi-durable extensions, in the order of `extensions` (for example pit's guidelines). See [Extensions](extensions.md#pi-durable-extensions).
+2. `available_skills`: the [skills](skills.md#the-system-prompt) that pi can use, from the built-in `pi-action` extension. It is not there when no skill is listed.
+3. The sections of the pi-durable extensions, in the order of `extensions` (for example pit's guidelines). See [Extensions](extensions.md#pi-durable-extensions).
 
-Without context files and extensions, the system prompt is empty.
+Without context files, skills, and extensions, the system prompt is empty.
 
 ### Context files
 
@@ -57,7 +58,7 @@ Before pi-action finds the task, it removes HTML comments and invisible characte
 
 For a `pr_number` run, the task is `prompt`, or `Please review this pull request` when `prompt` is empty. For a direct prompt, the task is `prompt`.
 
-A task that starts with `/<name>` can be a [prompt template](#prompt-templates).
+A task that starts with `/<name>` can be a [prompt template](#prompt-templates). A task that starts with `/skill:<name>` uses a [skill](skills.md#use-a-skill-explicitly).
 
 ## Prompt templates
 
