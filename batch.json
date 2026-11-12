@@ -1,1 +1,1 @@
-{"format":1,"seq":151,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"npm run coverage.........................................................Passed\nTo https://github.com/cv/pi-action\n   440b5eb..c5ae856  main -> main\n"]]}}]}
+{"format":1,"seq":152,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"To https://github.com/cv/pi-action\n * [new tag]         v2.2.1 -> v2.2.1\nUpdated tag 'v2' (was 313819b)\n"]]}}]}
