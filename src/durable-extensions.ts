@@ -38,7 +38,8 @@ async function agentDirectory(
 
 /**
  * Builds the pi-durable extensions the `extensions` input declared, with the run's host options, for the thread's
- * registry. Their names must not collide with each other or with pi-action's coding tools.
+ * registry. Their names must not collide with each other or with pi-action's coding tools. Their tools may: a tool
+ * named like an earlier one replaces it (the last one wins, as with pi's `registerTool`), which the log says.
  */
 export async function createDurableExtensions(
 	factories: readonly DurableExtensionFactory[],
@@ -53,6 +54,9 @@ export async function createDurableExtensions(
 		`pi-durable extensions: agent directory ${agentDir}, project ${trustProject ? "trusted" : "not trusted"}, ${ui ? "questions answered on GitHub" : "no UI"}`,
 	);
 	const names = new Set([CodingTools.name]);
+	const owners = new Map(
+		(CodingTools.tools ?? []).map((tool) => [tool.name, CodingTools.name]),
+	);
 	const extensions: Extension[] = [];
 	for (const factory of factories) {
 		let extension: Extension;
@@ -77,6 +81,15 @@ export async function createDurableExtensions(
 			);
 		}
 		names.add(extension.name);
+		for (const { name } of extension.tools ?? []) {
+			const owner = owners.get(name);
+			if (owner !== undefined && owner !== extension.name) {
+				log.info(
+					`pi-durable extension ${extension.name} replaces tool ${name} from ${owner}`,
+				);
+			}
+			owners.set(name, extension.name);
+		}
 		log.info(
 			`pi-durable extension ${extension.name} (${factory.source}): ${(extension.tools ?? []).map((tool) => tool.name).join(", ") || "no tools"}`,
 		);
