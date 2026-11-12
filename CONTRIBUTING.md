@@ -75,6 +75,7 @@ pi-action is TypeScript on [pi-durable](https://www.npmjs.com/package/@earendil-
 
 - **One file has side effects.** [`src/index.ts`](src/index.ts) reads the environment and creates the GitHub client. All other code gets its dependencies as parameters (`ActionDependencies` in [`src/run.ts`](src/run.ts)), so tests can replace them.
 - **No build step.** Node.js runs the TypeScript directly (type stripping). There is no `dist/`. Thus, imports use `.ts` extensions, and the code uses only erasable syntax (no enums, namespaces, or parameter properties). `erasableSyntaxOnly` in [`tsconfig.json`](tsconfig.json) enforces this.
+- **Thread refs stay linear; worktree refs merge.** `GitStorage` refuses merge commits on `refs/pi/threads/<n>`. The wrapper commits on `refs/pi/worktrees/<n>` are merges ([previous wrapper, snapshot]) on purpose, so that one ref keeps every snapshot and every local commit reachable. The conversation points at its snapshot through a rewindable document with `fork: "asOf"`, written in the same commit as a marker entry, never by looking snapshots up by sequence number: after a fork, the newest snapshot at or before a point can belong to the abandoned branch.
 - **Values from outside are `unknown`.** Check JSON, GitHub payloads, and git output before you use them. Do not cast them.
 
 ### Source files
@@ -101,10 +102,12 @@ pi-action is TypeScript on [pi-durable](https://www.npmjs.com/package/@earendil-
 | [`src/github-ui.ts`](src/github-ui.ts) | Questions (`ui.ask`) as GitHub comments, and `ui.notify` in the job summary |
 | [`src/answers.ts`](src/answers.ts) | Answers from the event (a ticked box or an `/answer` reply), checked and changed into a `ui.answer` submission |
 | [`src/tool-env.ts`](src/tool-env.ts) | `GH_TOKEN` and the `github-actions[bot]` git identity for the tools of the agent |
-| [`src/push.ts`](src/push.ts) | The `if: always()` step that pushes thread state that the run did not push |
+| [`src/push.ts`](src/push.ts) | The `if: always()` step that saves the working tree and pushes thread state that the run did not push |
+| [`src/worktree.ts`](src/worktree.ts) | `WorktreeContinuity`: saves the working tree at turn boundaries, points the conversation at each snapshot (the `pi-action.worktree` document), and restores it at the start of a run, asking first when that would drop work |
 | [`src/storage/git.ts`](src/storage/git.ts) | Git objects in the process, and compare-and-swap ref updates |
 | [`src/storage/git-storage.ts`](src/storage/git-storage.ts) | `GitStorage`: a pi-durable `Storage` whose log is a chain of commits on one ref |
-| [`src/storage/sync.ts`](src/storage/sync.ts) | `GitSync`: fetches a thread ref, and pushes it (fast-forward only) at turn boundaries |
+| [`src/storage/sync.ts`](src/storage/sync.ts) | `GitSync`: fetches a thread ref, and pushes it (fast-forward only) at turn boundaries, with its working-tree ref in one atomic push |
+| [`src/storage/worktree.ts`](src/storage/worktree.ts) | Working-tree snapshots as git stash commits, chained on `refs/pi/worktrees/<n>`, and their restore |
 | [`src/types.ts`](src/types.ts) | Shared types |
 | [`src/utils.ts`](src/utils.ts) | Small helpers |
 | [`src/test-helpers.ts`](src/test-helpers.ts) | Test fixtures: inputs, a fake GitHub client, faux models, and scratch git repositories |

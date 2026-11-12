@@ -6,7 +6,7 @@ Each issue or pull request is one conversation (a **thread**). The thread contin
 
 ## Features
 
-- **One conversation per issue or pull request.** A later `@pi` comment continues the thread. pi keeps everything it saw and did before. The workflow log shows the git commands that [read the thread](docs/threads.md#read-a-thread). See [Durable threads](docs/threads.md).
+- **One conversation per issue or pull request.** A later `@pi` comment continues the thread. pi keeps everything it saw and did before, also the files it left uncommitted. The workflow log shows the git commands that [read the thread](docs/threads.md#read-a-thread). See [Durable threads](docs/threads.md).
 - **Made for teams.** Comments that people post while pi works join the running conversation. The next run answers comments that a cancelled or queued run did not answer.
 - **Safe by default.** Only repository owners and organization members can start pi. You can change this with allowlists for users, author associations, and bots. See [Security](docs/security.md).
 - **Any model.** Use a built-in pi provider, a custom OpenAI- or Anthropic-compatible endpoint, or a provider from a pi extension. See [Models and authentication](docs/models.md).
@@ -98,7 +98,7 @@ Only `github_token` is necessary. All other inputs have a default or are optiona
 | `extensions` | pi extensions and pi-durable extensions to load: npm package specs or workspace paths, one per line or comma-separated (see [Extensions](docs/extensions.md)) | No | - |
 | `trust_project` | Let pi-durable extensions load and run the configuration of the repository (see [Extensions](docs/extensions.md#trust_project)) | No | `false` |
 | `agent_dir` | Agent directory (user-level state) for pi-durable extensions, relative to the workspace | No | (a new temporary directory in `RUNNER_TEMP`) |
-| `worktree_snapshots` | Save the files pi leaves uncommitted with the thread, and restore them at the start of the next run (see [Durable threads](docs/threads.md)) | No | `true` |
+| `worktree_snapshots` | Save the files pi leaves uncommitted with the thread, and restore them at the start of the next run (see [Working-tree continuity](docs/threads.md#working-tree-continuity)) | No | `true` |
 | `worktree_snapshot_max_file_mb` | Untracked files larger than this (in MB) are not saved in a snapshot | No | `10` |
 | `worktree_snapshot_max_total_mb` | Untracked files past this total (in MB) are not saved in a snapshot | No | `100` |
 | `worktree_snapshot_exclude` | Globs of untracked files never to save in a snapshot, one per line or comma-separated, for example `.env*, *.pem, *.key, id_rsa*`. Ignored files are never saved | No | - |
@@ -132,7 +132,7 @@ pi-action sets these outputs only when `output_mode` is `output`:
 | [Models and authentication](docs/models.md) | API keys, built-in providers, a custom provider, and providers from pi extensions |
 | [Extensions](docs/extensions.md) | How pi-action loads pi extensions and pi-durable extensions, and how extensions ask questions on GitHub |
 | [Prompts and templates](docs/prompts.md) | What pi receives, and how to change it with `prompt_template` |
-| [Durable threads](docs/threads.md) | How pi-action stores, continues, reads, and deletes threads |
+| [Durable threads](docs/threads.md) | How pi-action stores, continues, reads, and deletes threads, and keeps the files pi leaves uncommitted |
 | [Security](docs/security.md) | Who can start pi, what the agent can access, and what to trust |
 | [How it works](docs/how-it-works.md) | The steps of a run, and the commit conventions that pi follows |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, architecture, tests, and releases |
