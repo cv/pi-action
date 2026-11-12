@@ -80,7 +80,16 @@ A [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) extensi
 - The module exports `createPiDurableExtension(options)`, or a default export with the same signature.
 - The function returns a pi-durable `Extension`: `{ name, tools?, sections?, hooks?, wraps?, tasks? }`.
 - If a package has `pi.durable` and `pi.extensions`, pi-action loads only the `pi.durable` entry, because its pi extensions need the pi coding agent. pi-action writes this to the log.
-- pi-action installs the extensions after its coding tools (read, write, edit, bash). Each extension must have a unique name.
+- pi-action installs the extensions after its coding tools (read, write, edit, bash). Each extension must have a unique name. Tool names can repeat (see [Override tools and sections](#override-tools-and-sections)).
+
+### Override tools and sections
+
+An extension can change the tools and prompt sections of pi-action and of other extensions:
+
+- **Replace a tool.** A tool with the name of an earlier tool replaces it, as `pi.registerTool` does in pi. For example, an extension with its own `bash` tool replaces the `bash` of pi-action. pi-action writes `pi-durable extension <name> replaces tool bash from coding-tools` to the log.
+- **Wrap a tool or a section.** `wrapTool(tool, wrapper)` and `wrapSection(key, wrapper)` of pi-durable change a tool or a section, for example its description or its text. `wrapTool("read", (t) => ({ ...t, callers: ["tools"] }))` hides `read` from the model, but other tools can still call it.
+
+The order is: the coding tools of pi-action (`coding-tools`) first, then the extensions in the order of the `extensions` input. pi-durable applies the wraps of all extensions in this order. Thus, the last wrap wins.
 
 ### Host options
 
