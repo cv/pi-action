@@ -1,1 +1,1 @@
-{"format":1,"seq":802,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":803,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"      Tests  100 passed (100)\n"]]}}]}
