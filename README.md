@@ -98,6 +98,8 @@ Only `github_token` is necessary. All other inputs have a default or are optiona
 | `extensions` | pi extensions and pi-durable extensions to load: npm package specs or workspace paths, one per line or comma-separated (see [Extensions](docs/extensions.md)) | No | - |
 | `trust_project` | Let pi-durable extensions load and run the configuration of the repository (see [Extensions](docs/extensions.md#trust_project)) | No | `false` |
 | `agent_dir` | Agent directory (user-level state) for pi-durable extensions, relative to the workspace | No | (a new temporary directory in `RUNNER_TEMP`) |
+| `exclude_tools` | Tools to disable completely, one per line or comma-separated. `*` matches any characters. Neither the model nor other tools can call them (see [Tools the model sees](docs/extensions.md#tools-the-model-sees)) | No | - |
+| `model_tools_hidden` | Tools not to offer the model, one per line or comma-separated. `*` matches any characters. Other tools (such as pit's `tools.*`) can still call them (see [Tools the model sees](docs/extensions.md#tools-the-model-sees)) | No | - |
 | `worktree_snapshots` | Save the files pi leaves uncommitted with the thread, and restore them at the start of the next run (see [Working-tree continuity](docs/threads.md#working-tree-continuity)) | No | `true` |
 | `worktree_snapshot_exclude` | Globs (as in `.gitignore`) of untracked files never to save in a snapshot, one per line or comma-separated, for example `.env*, *.pem, *.key, id_rsa*`. Ignored files are never saved | No | - |
 | `prompt_template` | Template for the first message of a new thread (see [Prompts](docs/prompts.md#custom-templates)) | No | (built-in prompt) |
@@ -108,7 +110,7 @@ Only `github_token` is necessary. All other inputs have a default or are optiona
 ### How pi-action reads input values
 
 - Lists (`allowed_*`) are comma-separated. pi-action removes spaces around each item. Logins ignore case and a leading `@`. Associations ignore case.
-- `extensions` accepts commas and new lines. pi-action ignores empty lines and `#` comments: a full line, or the rest of a line after a spec and a space.
+- `extensions`, `exclude_tools`, `model_tools_hidden`, and `worktree_snapshot_exclude` accept commas and new lines. pi-action ignores empty lines and `#` comments: a full line, or the rest of a line after a spec and a space.
 - Boolean inputs accept `true`, `1`, `yes`, `y`, `on` and `false`, `0`, `no`, `n`, `off`, in any case.
 - When a number or boolean input has a value that is not valid, pi-action uses the default.
 - Any `output_mode` value other than `output` means `comment`.
