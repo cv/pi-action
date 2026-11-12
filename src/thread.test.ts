@@ -1,3 +1,6 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Context as ModelContext } from "@earendil-works/pi-ai";
 import {
@@ -15,9 +18,6 @@ import {
 } from "@earendil-works/pi-durable";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { describe, expect, it } from "vitest";
-
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
 
 import { loadProjectContext } from "./context-files.ts";
 import { createLogger, fauxModels, tempDir, toolsOf } from "./test-helpers.ts";
@@ -140,7 +140,11 @@ describe("Thread: the project_context section (pi-action-context)", () => {
 			projectContext: text,
 		});
 		try {
-			const submission = await thread.submit({ key: "k", content: "hi", data: {} });
+			const submission = await thread.submit({
+				key: "k",
+				content: "hi",
+				data: {},
+			});
 			await submission.wait(BACKGROUND_CONTEXT);
 		} finally {
 			await thread.close();
