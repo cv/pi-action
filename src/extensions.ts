@@ -27,6 +27,7 @@ import {
 	parseProviderConfig,
 } from "./extension-provider.ts";
 import type { PromptSource } from "./prompts.ts";
+import type { SkillSource } from "./skills.ts";
 import type { DurableHostOptions } from "./types.ts";
 import { field, getErrorMessage, isRecord } from "./utils.ts";
 
@@ -54,12 +55,14 @@ export interface DurableExtensionFactory {
 	create: (options: DurableHostOptions) => Promise<Extension>;
 }
 
-/** What the `extensions` input loaded: model providers, pi-durable extensions, and prompt templates. */
+/** What the `extensions` and `skills` inputs loaded: model providers, pi-durable extensions, prompt templates, skills. */
 export interface LoadedExtensions {
 	providers: ExtensionProvider[];
 	durable: DurableExtensionFactory[];
 	/** Each package's `pi.prompts`, in input order. */
 	prompts: PromptSource[];
+	/** Each package's skills (`pi.skills`, else its `skills/` directory): `extensions` first, then `skills`. */
+	skills: SkillSource[];
 }
 
 export type NpmRunner = (
@@ -71,6 +74,8 @@ export type NpmRunner = (
 export interface LoadExtensionsOptions {
 	/** The `extensions` input: npm package specs, or paths relative to `cwd`. */
 	specs: readonly string[];
+	/** The `skills` input: packages loaded for their skills only, with the same spec syntax. */
+	skillSpecs?: readonly string[];
 	/** The workspace (the checked-out repository). */
 	cwd: string;
 	log: ExtensionLog;
@@ -239,21 +244,40 @@ function manifestEntries(dir: string, entries: string[]): string[] {
 	);
 }
 
+/** A package's name in its manifest, else its directory's name. */
+function packageName(dir: string, manifest: unknown): string {
+	const name = field(manifest, "name");
+	return typeof name === "string" && name !== "" ? name : basename(dir);
+}
+
+/** The paths of a `pi` manifest list (`pi.prompts`, `pi.skills`); undefined when the package has no such list. */
+function manifestList(dir: string, key: string): string[] | undefined {
+	const entries = field(readPiManifest(dir), key);
+	return Array.isArray(entries)
+		? manifestPaths(
+				dir,
+				entries.filter((entry) => typeof entry === "string"),
+			)
+		: undefined;
+}
+
 /** A package's prompt templates (`pi.prompts`: files and directories), under its name; undefined without any. */
 function findPromptSource(dir: string): PromptSource | undefined {
-	const manifest = readManifest(dir);
-	const prompts = field(field(manifest, "pi"), "prompts");
-	if (!Array.isArray(prompts)) {
-		return undefined;
-	}
-	const name = field(manifest, "name");
-	return {
-		source: typeof name === "string" && name !== "" ? name : basename(dir),
-		paths: manifestPaths(
-			dir,
-			prompts.filter((entry) => typeof entry === "string"),
-		),
-	};
+	const paths = manifestList(dir, "prompts");
+	return paths === undefined
+		? undefined
+		: { source: packageName(dir, readManifest(dir)), paths };
+}
+
+/** A package's skills, as pi finds them: `pi.skills`, else its `skills/` directory; undefined without either. */
+export function findSkillSource(dir: string): SkillSource | undefined {
+	const conventional = join(dir, "skills");
+	const paths =
+		manifestList(dir, "skills") ??
+		(isDirectory(conventional) ? [conventional] : undefined);
+	return paths === undefined
+		? undefined
+		: { source: packageName(dir, readManifest(dir)), paths };
 }
 
 /** A directory's declared entries (`pi.extensions`) or its index.ts / index.js. */
@@ -562,6 +586,10 @@ async function loadRoot(
 	if (prompts !== undefined) {
 		loaded.prompts.push(prompts);
 	}
+	const skills = findSkillSource(root.path);
+	if (skills !== undefined) {
+		loaded.skills.push(skills);
+	}
 	const durable = findDurableEntry(root.path);
 	if (durable !== undefined) {
 		if ((readPiExtensions(root.path) ?? []).length > 0) {
@@ -575,7 +603,7 @@ async function loadRoot(
 		return;
 	}
 	const entries = findExtensionEntries(root.path);
-	if (entries.length === 0 && prompts === undefined) {
+	if (entries.length === 0 && prompts === undefined && skills === undefined) {
 		log.warning(
 			`${root.name} has no pi extensions; it is installed for other extensions to import`,
 		);
@@ -586,56 +614,94 @@ async function loadRoot(
 	}
 }
 
+type Root = { name: string; path: string };
+
+/** The packages and paths of specs: npm packages installed into a temp directory (`what` in the log), paths in place. */
+async function resolveRoots(
+	specs: readonly string[],
+	what: string,
+	options: LoadExtensionsOptions,
+): Promise<Root[]> {
+	const { cwd, log } = options;
+	const sources = specs.map((spec) => classifySpec(spec, cwd));
+	const npmSpecs = sources.flatMap((source) =>
+		source.kind === "npm" ? [source.spec] : [],
+	);
+	const roots = sources.flatMap((source) =>
+		source.kind === "path" ? [{ name: source.path, path: source.path }] : [],
+	);
+	if (npmSpecs.length > 0) {
+		log.info(`Installing ${what}: ${npmSpecs.join(", ")}`);
+		const installed = await installPackages(
+			npmSpecs,
+			options.env ?? process.env,
+			options.runNpm ?? defaultRunNpm,
+		);
+		roots.push(...installed);
+	}
+	for (const root of roots) {
+		if (!existsSync(root.path)) {
+			throw new Error(`Extension ${root.name} not found`);
+		}
+	}
+	return roots;
+}
+
+/** Loads the skills of the `skills` input's packages and paths: nothing else of them runs. */
+async function loadSkillPackages(
+	options: LoadExtensionsOptions,
+	loaded: LoadedExtensions,
+): Promise<void> {
+	const specs = options.skillSpecs ?? [];
+	if (specs.length === 0) {
+		return;
+	}
+	for (const root of await resolveRoots(specs, "skill packages", options)) {
+		const skills = findSkillSource(root.path);
+		if (skills === undefined) {
+			options.log.warning(
+				`${root.name} (in the skills input) has no skills: no pi.skills in its package.json, and no skills/ directory`,
+			);
+		} else {
+			loaded.skills.push(skills);
+		}
+	}
+}
+
 /**
  * Installs and loads the `extensions` input: the providers pi extensions register, and the pi-durable extensions
- * packages declare. npm packages are installed into a temporary directory (never the repository) without lifecycle
- * scripts; paths load in place. Extensions run in this process with its permissions and environment.
+ * packages declare; then the skills of the `skills` input. npm packages are installed into a temporary directory
+ * (never the repository) without lifecycle scripts; paths load in place. Extensions run in this process with its
+ * permissions and environment.
  */
 export async function loadExtensions(
 	options: LoadExtensionsOptions,
 ): Promise<LoadedExtensions> {
 	const { specs, cwd, log } = options;
-	const loaded: LoadedExtensions = { providers: [], durable: [], prompts: [] };
-	if (specs.length === 0) {
-		return loaded;
-	}
-	const env = options.env ?? process.env;
-	const sources = specs.map((spec) => ({
-		spec,
-		source: classifySpec(spec, cwd),
-	}));
-	const npmSpecs = sources.flatMap(({ source }) =>
-		source.kind === "npm" ? [source.spec] : [],
-	);
-	const roots = sources.flatMap(({ source }) =>
-		source.kind === "path" ? [{ name: source.path, path: source.path }] : [],
-	);
-	if (npmSpecs.length > 0) {
-		log.info(`Installing pi extensions: ${npmSpecs.join(", ")}`);
-		const installed = await installPackages(
-			npmSpecs,
-			env,
-			options.runNpm ?? defaultRunNpm,
-		);
-		roots.push(...installed);
-	}
-	const jiti = createJiti(import.meta.url, {
-		moduleCache: false,
-		alias: hostAliases(),
-	});
-	for (const root of roots) {
-		if (!existsSync(root.path)) {
-			throw new Error(`Extension ${root.name} not found`);
-		}
-		try {
-			// oxlint-disable-next-line eslint/no-await-in-loop -- extensions load one after another, in order, like pi's
-			await loadRoot(root, jiti, loaded, log, cwd);
-		} catch (error) {
-			throw new Error(
-				`Could not load pi extension ${root.name}: ${getErrorMessage(error)}`,
-				{ cause: error },
-			);
+	const loaded: LoadedExtensions = {
+		providers: [],
+		durable: [],
+		prompts: [],
+		skills: [],
+	};
+	if (specs.length > 0) {
+		const roots = await resolveRoots(specs, "pi extensions", options);
+		const jiti = createJiti(import.meta.url, {
+			moduleCache: false,
+			alias: hostAliases(),
+		});
+		for (const root of roots) {
+			try {
+				// oxlint-disable-next-line eslint/no-await-in-loop -- extensions load one after another, in order, like pi's
+				await loadRoot(root, jiti, loaded, log, cwd);
+			} catch (error) {
+				throw new Error(
+					`Could not load pi extension ${root.name}: ${getErrorMessage(error)}`,
+					{ cause: error },
+				);
+			}
 		}
 	}
+	await loadSkillPackages(options, loaded);
 	return loaded;
 }
