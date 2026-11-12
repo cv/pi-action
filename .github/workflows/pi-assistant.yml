@@ -80,3 +80,5 @@ jobs:
           model_max_tokens: 128000 # Bedrock's maximum for Opus 5.5
           compat_force_adaptive_thinking: true
           extensions: github:cv/pit#v0.35.1
+          # Only pit's `typescript` for the model. Not exclude_tools: pit's programs still call these through tools.*.
+          model_tools_hidden: read, write, edit, bash
