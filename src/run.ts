@@ -232,7 +232,9 @@ function announceThread(deps: ActionDependencies, thread: Thread): void {
 		log.info("🧵 One-off conversation (not stored)");
 		return;
 	}
-	const since = thread.startedAt?.toISOString().replace(/:\d\d\.\d+Z$/u, " UTC");
+	const since = thread.startedAt
+		?.toISOString()
+		.replace(/:\d\d\.\d+Z$/u, " UTC");
 	log.startGroup(
 		`🧵 Thread ${thread.ref}: ${since === undefined ? "new" : `continuing, started ${since.replace("T", " ")}`}`,
 	);
@@ -249,7 +251,9 @@ async function showThread(
 	const { log } = deps;
 	const remote = deps.remote ?? "origin";
 	const { tip } = thread;
-	log.info(`🧵 ${ref} is at ${tip === undefined ? "(nothing stored)" : tip.slice(0, 7)}`);
+	log.info(
+		`🧵 ${ref} is at ${tip === undefined ? "(nothing stored)" : tip.slice(0, 7)}`,
+	);
 	try {
 		await deps.summary?.(formatThreadSummary(ref, remote));
 	} catch (error) {
