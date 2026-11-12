@@ -67,15 +67,11 @@ These limits apply to untracked files only. Changes to tracked files are always 
 
 pi-action stores the snapshots of issue 42 on `refs/pi/worktrees/42`, next to `refs/pi/threads/42`, and pushes the two refs together in one atomic push (`git push --atomic`). Thus, the remote never has the conversation without its snapshot.
 
-Each snapshot is a stash commit, as `git stash` makes it. On the ref, each snapshot has a wrapper commit. The parents of a wrapper commit are the earlier wrapper and the stash commit. The wrapper commit has these trailers:
+Each snapshot is a stash commit, as `git stash` makes it. On the ref, each snapshot has a wrapper commit. The parents of a wrapper commit are the earlier wrapper and the stash commit. The branch and the commit that `HEAD` pointed to are in the stash commit, as `git stash` records them: its first parent is `HEAD`, and its subject is `WIP on <branch>: ...`. The wrapper commit has these trailers:
 
 | Trailer | Value |
 |---------|-------|
 | `Snapshot` | The stash commit |
-| `Thread-Tip` | The commit of `refs/pi/threads/<number>` when pi-action saved the snapshot |
-| `Thread-Entry` | The newest entry of the conversation when pi-action saved the snapshot |
-| `Branch` | The branch, or `(detached)` |
-| `Head` | The commit that `HEAD` pointed to |
 | `Skipped` | An untracked file that the snapshot does not contain, and why (one trailer for each file) |
 
 The conversation records which snapshot belongs to it, in a document that pi-action writes in the same commit as a `pi-action.worktree` entry. The model does not see the document or the entry. When the conversation is forked or rewound to an earlier entry, it gets the snapshot that was current at that entry.

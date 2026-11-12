@@ -20,6 +20,9 @@ const AUTHOR = {
 	email: "pi-action@users.noreply.github.com",
 } as const;
 const DETACHED = "(detached)";
+const NO_BRANCH = "(no branch)";
+/** A stash commit's subject; branch names can't hold a colon. */
+const STASH_SUBJECT = /^WIP on ([^:]+): /u;
 const TRAILER_PATTERN = /^([A-Za-z-]+): (.*)$/u;
 const NUL = "\0";
 
@@ -64,8 +67,6 @@ export interface SnapshotRecord {
 	readonly stash: string;
 	readonly head: string;
 	readonly branch: string | undefined;
-	readonly threadTip: string | undefined;
-	readonly threadEntry: string | undefined;
 	readonly skipped: readonly Skipped[];
 }
 
@@ -282,7 +283,7 @@ export async function writeStash(
 	const subject = (
 		await git(cwd, ["log", "-1", "--format=%h %s", state.head])
 	).trim();
-	const on = `${state.branch ?? "(no branch)"}: ${subject}`;
+	const on = `${state.branch ?? NO_BRANCH}: ${subject}`;
 	const index = await commitTree(
 		cwd,
 		state.indexTree,
@@ -335,17 +336,11 @@ export interface RecordInput {
 	readonly head: string;
 	readonly branch: string | undefined;
 	readonly skipped: readonly Skipped[];
-	readonly threadTip?: string | undefined;
-	readonly threadEntry?: string | undefined;
 }
 
 function wrapperMessage(input: RecordInput): string {
 	const trailers = [
 		`Snapshot: ${input.stash}`,
-		...(input.threadTip ? [`Thread-Tip: ${input.threadTip}`] : []),
-		...(input.threadEntry ? [`Thread-Entry: ${input.threadEntry}`] : []),
-		`Branch: ${input.branch ?? DETACHED}`,
-		`Head: ${input.head}`,
 		...input.skipped.map((skip) => `Skipped: ${JSON.stringify(skip)}`),
 	];
 	return `pi-action: working-tree snapshot ${input.stash.slice(0, 7)}\n\n${trailers.join("\n")}\n`;
@@ -375,8 +370,6 @@ export async function recordSnapshot(
 		stash: input.stash,
 		head: input.head,
 		branch: input.branch,
-		threadTip: input.threadTip,
-		threadEntry: input.threadEntry,
 		skipped: input.skipped,
 	};
 }
@@ -416,24 +409,17 @@ export async function readSnapshot(
 			trailers.set(key, value);
 		}
 	}
-	// The snapshot is the wrapper's last parent (its only one on the first wrapper).
-	const stash =
-		trailers.get("Snapshot") ??
-		(await git(cwd, ["rev-list", "--parents", "-n", "1", wrapper]))
-			.trim()
-			.split(" ")
-			.at(-1) ??
-		"";
-	const head =
-		trailers.get("Head") ?? (await trim(git(cwd, ["rev-parse", `${stash}^1`])));
-	const branch = trailers.get("Branch");
+	const stash = trailers.get("Snapshot") ?? "";
+	// W's first parent is HEAD; its subject, `WIP on <branch>: ...`, as git stash writes it, names the branch.
+	const [parents = "", subject = ""] = (
+		await git(cwd, ["log", "-1", "--format=%P%n%s", stash])
+	).split("\n");
+	const branch = STASH_SUBJECT.exec(subject)?.[1];
 	return {
 		wrapper,
 		stash,
-		head,
-		branch: branch === DETACHED ? undefined : branch,
-		threadTip: trailers.get("Thread-Tip"),
-		threadEntry: trailers.get("Thread-Entry"),
+		head: parents.split(" ")[0] ?? "",
+		branch: branch === NO_BRANCH ? undefined : branch,
 		skipped,
 	};
 }

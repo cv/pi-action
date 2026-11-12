@@ -984,7 +984,7 @@ describe("run (durable) with working-tree continuity", () => {
 		).trim();
 		expect(git(w.remote, "show", `${stash}^3:notes.md`)).toBe("draft\n");
 		expect(git(w.remote, "log", "-1", "--format=%B", WORKTREES)).toContain(
-			"Thread-Tip: ",
+			"Snapshot: ",
 		);
 
 		await run(w.deps(w.comment("@pi go on")));

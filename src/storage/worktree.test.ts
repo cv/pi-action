@@ -77,12 +77,11 @@ function makeChanges(dir: string) {
 
 async function snapshot(
 	dir: string,
-	extra: { threadTip?: string; threadEntry?: string } = {},
 	limits = DEFAULT_SNAPSHOT_LIMITS,
 ): Promise<SnapshotRecord> {
 	const state = await captureState(dir, limits);
 	const stash = await writeStash(dir, state);
-	return recordSnapshot(dir, REF, { ...state, stash, ...extra });
+	return recordSnapshot(dir, REF, { ...state, stash });
 }
 
 /** A fresh checkout of main (a new runner) with the snapshot ref fetched. */
@@ -99,7 +98,7 @@ describe("working-tree snapshots", () => {
 		const dir = w.clone();
 		makeChanges(dir);
 		const before = status(dir);
-		const record = await snapshot(dir, { threadTip: "abc", threadEntry: "e1" });
+		const record = await snapshot(dir);
 		// Capturing touches neither the index nor the files.
 		expect(status(dir)).toBe(before);
 		expect(record.branch).toBe("main");
@@ -306,15 +305,11 @@ describe("working-tree snapshots", () => {
 		write(dir, "big.dat", Buffer.alloc(2048));
 		write(dir, "a.txt", Buffer.alloc(600));
 		write(dir, "b.txt", Buffer.alloc(600));
-		const record = await snapshot(
-			dir,
-			{},
-			{
-				maxFileBytes: 1024,
-				maxTotalBytes: 1000,
-				exclude: [".env*", "*.pem", "docs/**/a.txt"],
-			},
-		);
+		const record = await snapshot(dir, {
+			maxFileBytes: 1024,
+			maxTotalBytes: 1000,
+			exclude: [".env*", "*.pem", "docs/**/a.txt"],
+		});
 		expect(record.skipped.map((skip) => skip.path).toSorted()).toStrictEqual([
 			"b.txt",
 			"big.dat",

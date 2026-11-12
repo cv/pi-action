@@ -181,25 +181,16 @@ export class WorktreeContinuity {
 		}, context);
 	}
 
-	private async latestEntry(): Promise<string | undefined> {
-		const { root } = this.attached();
-		const id = await root.commit(
-			async (tx) => tx.latestEntryId(root.id),
-			context,
-		);
-		return id === undefined ? undefined : String(id);
-	}
-
 	/**
 	 * Save the working tree if it changed since the last save (or restore): a new snapshot on the ref, and the
 	 * conversation pointed at it. Resolves with the new wrapper, undefined when nothing changed. Calls run one at a
 	 * time. A failure is logged, never thrown.
 	 */
-	async checkpoint(threadTip: string | undefined): Promise<string | undefined> {
+	async checkpoint(): Promise<string | undefined> {
 		if (this.conversation === undefined) {
 			return undefined;
 		}
-		const next = this.queue.then(async () => this.save(threadTip));
+		const next = this.queue.then(async () => this.save());
 		this.queue = next.catch(() => undefined);
 		try {
 			return await next;
@@ -211,9 +202,7 @@ export class WorktreeContinuity {
 		}
 	}
 
-	private async save(
-		threadTip: string | undefined,
-	): Promise<string | undefined> {
+	private async save(): Promise<string | undefined> {
 		const { cwd, ref, limits } = this.options;
 		const state = await captureState(cwd, limits);
 		const key = stateKey(state);
@@ -226,12 +215,7 @@ export class WorktreeContinuity {
 			return undefined;
 		}
 		const stash = await writeStash(cwd, state);
-		const record = await recordSnapshot(cwd, ref, {
-			...state,
-			stash,
-			threadTip,
-			threadEntry: await this.latestEntry(),
-		});
+		const record = await recordSnapshot(cwd, ref, { ...state, stash });
 		await this.point(record);
 		this.lastKey = key;
 		this.options.log.info(

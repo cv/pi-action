@@ -111,7 +111,7 @@ class ThreadSaver {
 	async push(how: "schedule" | "flush", save: boolean): Promise<void> {
 		const tip = () => this.storage?.tip;
 		if (this.worktree !== undefined && save) {
-			await this.worktree.checkpoint(tip());
+			await this.worktree.checkpoint();
 		}
 		const companion =
 			this.worktree === undefined
@@ -363,7 +363,7 @@ export class Thread {
 		}
 		this.closed = true;
 		const worktree = this.persistence?.worktree;
-		await worktree?.checkpoint(this.persistence?.storage.tip);
+		await worktree?.checkpoint();
 		// Turn boundaries the closing harness still commits must not save into a closed conversation.
 		worktree?.detach();
 		await this.harness.close(context);

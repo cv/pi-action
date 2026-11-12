@@ -79,7 +79,7 @@ async function saveWorktree(
 		});
 		worktree.attach(harness, await harness.root(BACKGROUND_CONTEXT));
 		await worktree.resumeFrom();
-		await worktree.checkpoint(storage.tip);
+		await worktree.checkpoint();
 	} finally {
 		await harness.close(BACKGROUND_CONTEXT);
 	}

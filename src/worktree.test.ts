@@ -116,25 +116,24 @@ describe("WorktreeContinuity", () => {
 	it("saves only when the files changed, and points the conversation at each snapshot", async () => {
 		const s = await setup();
 		const c = s.continuity();
-		await expect(c.checkpoint(s.storage.tip)).resolves.toBeUndefined();
+		await expect(c.checkpoint()).resolves.toBeUndefined();
 		s.write("one\n");
-		const first = await c.checkpoint(s.storage.tip);
+		const first = await c.checkpoint();
 		expect(first).toBeDefined();
-		await expect(c.checkpoint(s.storage.tip)).resolves.toBeUndefined();
+		await expect(c.checkpoint()).resolves.toBeUndefined();
 		const doc = await s.harness.snapshot(WorktreeDoc, s.root.id, context);
 		expect(doc?.wrapper).toBe(first);
 		const marker = await s.lastEntry();
 		expect(marker?.kind).toBe(WORKTREE_ENTRY_KIND);
 		expect(marker?.model).toBeUndefined();
 		const latest = await latestSnapshot(s.dir, REF);
-		expect(latest?.threadTip).toBeDefined();
 		expect(latest?.wrapper).toBe(first);
 	});
 
 	it("restores what the conversation points at into a fresh checkout", async () => {
 		const s = await setup();
 		s.write("pi's edit\n");
-		await s.continuity().checkpoint(s.storage.tip);
+		await s.continuity().checkpoint();
 		s.freshCheckout();
 		expect(s.read()).toBe("base\n");
 		const c = s.continuity();
@@ -143,7 +142,7 @@ describe("WorktreeContinuity", () => {
 		);
 		expect(s.read()).toBe("pi's edit\n");
 		// The restored state is the saved one: nothing new to save.
-		await expect(c.checkpoint(s.storage.tip)).resolves.toBeUndefined();
+		await expect(c.checkpoint()).resolves.toBeUndefined();
 	});
 
 	it("starts clean without a message when the conversation has no snapshot", async () => {
@@ -155,11 +154,11 @@ describe("WorktreeContinuity", () => {
 		const s = await setup();
 		const c = s.continuity();
 		s.write("first\n");
-		const first = await c.checkpoint(s.storage.tip);
+		const first = await c.checkpoint();
 		const forkPoint = await s.latestEntry();
 		await s.say("later");
 		s.write("second\n");
-		const second = await c.checkpoint(s.storage.tip);
+		const second = await c.checkpoint();
 		expect(second).not.toBe(first);
 		const fork = await s.forkAt(forkPoint);
 		const target = await s.continuity(fork).target();
@@ -173,10 +172,10 @@ describe("WorktreeContinuity", () => {
 		const s = await setup();
 		const c = s.continuity();
 		s.write("older\n");
-		await c.checkpoint(s.storage.tip);
+		await c.checkpoint();
 		const fork = await s.forkAt(await s.latestEntry());
 		s.write("newer\n");
-		const newer = await c.checkpoint(s.storage.tip);
+		const newer = await c.checkpoint();
 		const stash = sh(s.dir, "rev-parse", `${newer}^2`).trim();
 		s.freshCheckout();
 		await expect(s.continuity(fork).restore()).resolves.toContain(
@@ -222,7 +221,7 @@ describe("WorktreeContinuity", () => {
 	])("$name", async ({ spoil, message, files }) => {
 		const s = await setup();
 		s.write("pi's\n");
-		await s.continuity().checkpoint(s.storage.tip);
+		await s.continuity().checkpoint();
 		s.freshCheckout();
 		await spoil(s);
 		await expect(s.continuity().restore()).resolves.toContain(message);
@@ -236,8 +235,6 @@ describe("restoreMessage", () => {
 		stash: "a".repeat(40),
 		head: "b".repeat(40),
 		branch: "main",
-		threadTip: undefined,
-		threadEntry: undefined,
 		skipped: [{ path: "big.bin", reason: "over the limit" }],
 	};
 
