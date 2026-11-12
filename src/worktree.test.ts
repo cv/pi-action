@@ -238,7 +238,7 @@ describe("restoreMessage", () => {
 		branch: "main",
 		threadTip: undefined,
 		threadEntry: undefined,
-		skipped: [{ path: ".env", reason: "matches worktree_snapshot_exclude" }],
+		skipped: [{ path: "big.bin", reason: "over the limit" }],
 	};
 
 	it("lists conflicts, unstaged restores, and skipped files", () => {
@@ -257,7 +257,7 @@ describe("restoreMessage", () => {
 		expect(message).toContain("conflict markers");
 		expect(message).toContain("`a.txt`");
 		expect(message).toContain("merged onto it");
-		expect(message).toContain("`.env` (matches worktree_snapshot_exclude)");
+		expect(message).toContain("`big.bin` (over the limit)");
 	});
 
 	it.each([

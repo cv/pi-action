@@ -5,12 +5,11 @@
 // working tree are never touched, and `git stash show -p --include-untracked <W>` / `git stash apply --index <W>`
 // work on them. Snapshots are kept on `refs/pi/worktrees/<n>` as a chain of wrapper commits with parents
 // [previous wrapper, W], so every snapshot (and every local commit it builds on) stays reachable from one ref.
-import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { assertRefName, git, GitError } from "./git.ts";
+import { assertRefName, git } from "./git.ts";
 
 export const worktreeRef = (issueNumber: number): string =>
 	`refs/pi/worktrees/${issueNumber}`;
@@ -22,7 +21,6 @@ const AUTHOR = {
 } as const;
 const DETACHED = "(detached)";
 const TRAILER_PATTERN = /^([A-Za-z-]+): (.*)$/u;
-const GLOB_SPECIAL = /[.+^${}()|[\]\\]/gu;
 const NUL = "\0";
 
 /** What a snapshot leaves out of the untracked files (ignored files are never captured). */
@@ -31,7 +29,7 @@ export interface SnapshotLimits {
 	readonly maxFileBytes: number;
 	/** Untracked files past this total are skipped. */
 	readonly maxTotalBytes: number;
-	/** Globs of untracked files to skip: a pattern without `/` matches the file name, one with `/` the whole path. */
+	/** Globs of untracked files to skip, as in `.gitignore`. */
 	readonly exclude: readonly string[];
 }
 
@@ -71,50 +69,6 @@ export interface SnapshotRecord {
 	readonly skipped: readonly Skipped[];
 }
 
-interface RunOptions {
-	readonly env?: Readonly<Record<string, string>>;
-	readonly input?: string;
-}
-
-/** Run git with extra environment variables and stdin; resolves with stdout, rejects with a GitError. */
-async function run(
-	dir: string,
-	args: readonly string[],
-	options: RunOptions = {},
-): Promise<string> {
-	return new Promise((resolve, reject) => {
-		const child = spawn("git", ["-C", dir, ...args], {
-			env: { ...process.env, ...options.env },
-			stdio: ["pipe", "pipe", "pipe"],
-		});
-		const out: Buffer[] = [];
-		const err: Buffer[] = [];
-		child.stdout.on("data", (chunk: Buffer) => {
-			out.push(chunk);
-		});
-		child.stderr.on("data", (chunk: Buffer) => {
-			err.push(chunk);
-		});
-		child.on("error", reject);
-		child.on("close", (code) => {
-			const stdout = Buffer.concat(out).toString("utf8");
-			if (code === 0) {
-				resolve(stdout);
-			} else {
-				reject(
-					new GitError(
-						args,
-						Buffer.concat(err).toString("utf8") || stdout || `exit ${code}`,
-					),
-				);
-			}
-		});
-		// git may exit without reading its input (a command that takes none, or a failure).
-		child.stdin.on("error", () => undefined);
-		child.stdin.end(options.input ?? "");
-	});
-}
-
 const trim = async (promise: Promise<string>): Promise<string> =>
 	(await promise).trim();
 
@@ -149,34 +103,6 @@ const toplevel = async (cwd: string): Promise<string> =>
 const currentBranch = async (dir: string): Promise<string | undefined> =>
 	maybe(dir, ["symbolic-ref", "-q", "--short", "HEAD"]);
 
-/** `*` and `?` within a path segment, `**` across them. */
-function globPattern(glob: string): RegExp {
-	let source = "";
-	for (let i = 0; i < glob.length; i += 1) {
-		const ch = glob.charAt(i);
-		if (ch === "*" && glob.charAt(i + 1) === "*") {
-			source += ".*";
-			i += 1;
-		} else if (ch === "*") {
-			source += "[^/]*";
-		} else if (ch === "?") {
-			source += "[^/]";
-		} else {
-			source += ch.replaceAll(GLOB_SPECIAL, String.raw`\$&`);
-		}
-	}
-	return new RegExp(`^${source}$`, "u");
-}
-
-/** Whether `path` matches one of the `exclude` globs. */
-export function isExcluded(path: string, exclude: readonly string[]): boolean {
-	const name = path.slice(path.lastIndexOf("/") + 1);
-	return exclude.some((glob) => {
-		const pattern = globPattern(glob.trim());
-		return glob.includes("/") ? pattern.test(path) : pattern.test(name);
-	});
-}
-
 const megabytes = (bytes: number): string =>
 	`${Math.round((bytes / MB) * 10) / 10} MB`;
 
@@ -186,7 +112,13 @@ async function untrackedFiles(
 	limits: SnapshotLimits,
 ): Promise<{ keep: string[]; skipped: Skipped[] }> {
 	const listed = (
-		await git(top, ["ls-files", "--others", "--exclude-standard", "-z"])
+		await git(top, [
+			"ls-files",
+			"--others",
+			"--exclude-standard",
+			...limits.exclude.map((glob) => `--exclude=${glob}`),
+			"-z",
+		])
 	)
 		.split(NUL)
 		.filter(Boolean);
@@ -205,8 +137,6 @@ async function untrackedFiles(
 			skipped.push({ path, reason: "a nested git repository" });
 		} else if (stat === undefined) {
 			// deleted while we looked
-		} else if (isExcluded(path, limits.exclude)) {
-			skipped.push({ path, reason: "matches worktree_snapshot_exclude" });
 		} else if (size > limits.maxFileBytes) {
 			skipped.push({
 				path,
@@ -251,23 +181,23 @@ export async function captureState(
 			.then(() => true)
 			.catch(() => false);
 		if (!copied) {
-			await run(top, ["read-tree", head], { env });
+			await git(top, ["read-tree", head], { env });
 		}
-		const indexTree = await trim(run(top, ["write-tree"], { env })).catch(
+		const indexTree = await trim(git(top, ["write-tree"], { env })).catch(
 			async () => {
 				// Unmerged entries: keep HEAD's tree for the index, the files on disk still count.
-				await run(top, ["read-tree", head], { env });
+				await git(top, ["read-tree", head], { env });
 				return headTree;
 			},
 		);
 		// Without a pathspec, --update covers the whole working tree (and works in a repository with no files).
-		await run(top, ["add", "--update"], { env });
-		const worktreeTree = await trim(run(top, ["write-tree"], { env }));
+		await git(top, ["add", "--update"], { env });
+		const worktreeTree = await trim(git(top, ["write-tree"], { env }));
 		const { keep, skipped } = await untrackedFiles(top, limits);
 		let untrackedTree: string | undefined;
 		if (keep.length > 0) {
 			const uenv = { GIT_INDEX_FILE: join(tmp, "untracked") };
-			await run(
+			await git(
 				top,
 				[
 					"--literal-pathspecs",
@@ -277,7 +207,7 @@ export async function captureState(
 				],
 				{ env: uenv, input: keep.join(NUL) },
 			);
-			untrackedTree = await trim(run(top, ["write-tree"], { env: uenv }));
+			untrackedTree = await trim(git(top, ["write-tree"], { env: uenv }));
 		}
 		return {
 			head,
@@ -337,7 +267,7 @@ async function commitTree(
 	message: string,
 ): Promise<string> {
 	return trim(
-		run(dir, ["commit-tree", tree, ...parents.flatMap((p) => ["-p", p])], {
+		git(dir, ["commit-tree", tree, ...parents.flatMap((p) => ["-p", p])], {
 			env: COMMIT_ENV,
 			input: message,
 		}),

@@ -20,7 +20,6 @@ import {
 	DEFAULT_SNAPSHOT_LIMITS,
 	isCheckoutClean,
 	isClean,
-	isExcluded,
 	latestSnapshot,
 	readSnapshot,
 	recordSnapshot,
@@ -298,24 +297,27 @@ describe("working-tree snapshots", () => {
 		expect(status(fresh)).toBe("");
 	});
 
-	it("skips untracked files over the size limits or matching the exclude globs, and records them", async () => {
+	it("leaves out untracked files matching the exclude globs, and records those over the size limits", async () => {
 		const w = world();
 		const dir = w.clone();
 		write(dir, ".env.local", "SECRET=1\n");
 		write(dir, "certs/server.pem", "-----BEGIN-----\n");
+		write(dir, "docs/secrets/a.txt", "secret\n");
 		write(dir, "big.dat", Buffer.alloc(2048));
 		write(dir, "a.txt", Buffer.alloc(600));
 		write(dir, "b.txt", Buffer.alloc(600));
 		const record = await snapshot(
 			dir,
 			{},
-			{ maxFileBytes: 1024, maxTotalBytes: 1000, exclude: [".env*", "*.pem"] },
+			{
+				maxFileBytes: 1024,
+				maxTotalBytes: 1000,
+				exclude: [".env*", "*.pem", "docs/**/a.txt"],
+			},
 		);
 		expect(record.skipped.map((skip) => skip.path).toSorted()).toStrictEqual([
-			".env.local",
 			"b.txt",
 			"big.dat",
-			"certs/server.pem",
 		]);
 		expect(record.skipped.find((s) => s.path === "big.dat")?.reason).toContain(
 			"limit for a file",
@@ -344,21 +346,5 @@ describe("working-tree snapshots", () => {
 			second.stash,
 		);
 		expect(sh(dir, "show", `${REF}:keep.txt`)).toBe("2\n");
-	});
-});
-
-describe("isExcluded", () => {
-	it.each([
-		[".env", true],
-		["config/.env.production", true],
-		["keys/id_rsa.pub", true],
-		["server.key", true],
-		["src/env.ts", false],
-		["docs/secrets/a.txt", true],
-		["secrets/a.txt", false],
-	])("%s: %s", (path, excluded) => {
-		expect(
-			isExcluded(path, [".env*", "*.key", "id_rsa*", "docs/**/a.txt"]),
-		).toBe(excluded);
 	});
 });

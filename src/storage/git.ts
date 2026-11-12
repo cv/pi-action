@@ -91,16 +91,27 @@ export class GitError extends Error {
 	}
 }
 
+export interface GitOptions {
+	/** Variables on top of the process environment. */
+	readonly env?: Readonly<Record<string, string>> | undefined;
+	/** What git reads on stdin. */
+	readonly input?: string | undefined;
+}
+
 /** Run git in `dir`; resolves with stdout, rejects with a GitError on a nonzero exit. */
 export async function git(
 	dir: string,
 	args: readonly string[],
+	options: GitOptions = {},
 ): Promise<string> {
 	return new Promise((resolve, reject) => {
-		execFile(
+		const child = execFile(
 			"git",
 			["-C", dir, ...args],
-			{ maxBuffer: 64 * 1024 * 1024 },
+			{
+				maxBuffer: 64 * 1024 * 1024,
+				...(options.env ? { env: { ...process.env, ...options.env } } : {}),
+			},
 			(error, stdout, stderr) => {
 				if (error) {
 					reject(new GitError(args, stderr || error.message));
@@ -109,6 +120,11 @@ export async function git(
 				}
 			},
 		);
+		if (options.input !== undefined) {
+			// git may exit without reading its input (a failure).
+			child.stdin?.on("error", () => undefined);
+			child.stdin?.end(options.input);
+		}
 	});
 }
 
