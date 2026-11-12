@@ -52,8 +52,10 @@ export const WorktreeDoc = defineDoc<{ stash: string; wrapper: string }>({
 
 export interface WorktreeOptions {
 	readonly cwd: string;
-	/** `refs/pi/worktrees/<n>`. */
+	/** The local ref the snapshots are recorded on (`refs/pi-action/worktrees/<n>`, see `liveRef()`). */
 	readonly ref: string;
+	/** The ref's name on the remote, for the log (`refs/pi/worktrees/<n>`); default `ref`. */
+	readonly name?: string | undefined;
 	readonly limits: SnapshotLimits;
 	readonly log: Log;
 	readonly remote?: string | undefined;
@@ -204,7 +206,7 @@ export class WorktreeContinuity {
 		await this.point(record);
 		this.lastKey = key;
 		this.options.log.info(
-			`Saved the working tree as ${short(stash)} on ${ref}${state.skipped.length > 0 ? ` (skipped ${state.skipped.length} untracked file(s))` : ""}`,
+			`Saved the working tree as ${short(stash)} on ${this.options.name ?? ref}${state.skipped.length > 0 ? ` (skipped ${state.skipped.length} untracked file(s))` : ""}`,
 		);
 		return record.wrapper;
 	}
