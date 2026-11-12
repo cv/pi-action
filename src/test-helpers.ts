@@ -132,6 +132,8 @@ export function createActionInputs(
 		extensions: [],
 		trustProject: DEFAULTS.trustProject,
 		agentDir: undefined,
+		contextFiles: DEFAULTS.contextFiles,
+		contextFilesMaxBytes: DEFAULTS.contextFilesMaxBytes,
 		worktreeSnapshots: DEFAULTS.worktreeSnapshots,
 		worktreeLimits: DEFAULT_SNAPSHOT_LIMITS,
 		excludeTools: [],
