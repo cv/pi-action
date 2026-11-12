@@ -93,11 +93,21 @@ function describeUnanswered(
 	return `${record.reason}: ${detail}`;
 }
 
-/** An error's message with its cause's (pi-durable's SessionFailed carries the storage error as its cause). */
+/** How many causes `withCause()` follows. */
+const MAX_CAUSES = 5;
+
+/**
+ * An error's message with the messages of its causes: pi-durable's SessionFailed carries the storage error as its
+ * cause, which may have its own cause (a ref that moved, say).
+ */
 function withCause(error: unknown): string {
-	const message = getErrorMessage(error);
-	const cause: unknown = error instanceof Error ? error.cause : undefined;
-	return cause === undefined ? message : `${message} (${getErrorMessage(cause)})`;
+	const messages = [getErrorMessage(error)];
+	let cause: unknown = error instanceof Error ? error.cause : undefined;
+	while (cause !== undefined && messages.length <= MAX_CAUSES) {
+		messages.push(getErrorMessage(cause));
+		cause = cause instanceof Error ? cause.cause : undefined;
+	}
+	return messages.join(": ");
 }
 
 /**
