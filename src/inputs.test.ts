@@ -75,6 +75,8 @@ describe("readActionInputs", () => {
 				maxTotalBytes: 100 * 1024 * 1024,
 				exclude: [],
 			},
+			excludeTools: [],
+			modelToolsHidden: [],
 		});
 	});
 });
