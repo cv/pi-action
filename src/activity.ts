@@ -62,15 +62,16 @@ export function describeCall(
 	const edits = Array.isArray(args["edits"]) ? args["edits"].length : 0;
 	const main =
 		stringArg(args, "command", "label", "path", "file", "pattern", "query") ??
-		(typeof args["code"] === "string"
-			? args["code"].split("\n").find((line) => line.trim() !== "")
-			: undefined);
+		stringArg(args, "code");
 	if (main === undefined) {
 		const json = JSON.stringify(args);
 		return json === "{}" ? name : `${name} ${oneLine(json)}`;
 	}
+	// A script (a heredoc, a program) reads best as its first line and its length: the group shows the rest.
+	const lines = main.trim().split("\n");
+	const more = lines.length > 1 ? ` (+${lines.length - 1} lines)` : "";
 	const detail = edits > 0 ? ` (${edits} edit${edits === 1 ? "" : "s"})` : "";
-	return `${name}: ${oneLine(main)}${detail}`;
+	return `${name}: ${oneLine(lines[0] ?? "")}${more}${detail}`;
 }
 
 /** 1.2s, 41s, 3m12s. */

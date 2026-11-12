@@ -112,9 +112,12 @@ const call = (id: string, name: string, args: Record<string, unknown>) => ({
 
 describe("describeCall", () => {
 	it("shows the argument that says what the call does", () => {
-		expect(describeCall("bash", { command: "npm  test\n--run" })).toBe(
-			"bash: npm test --run",
+		expect(describeCall("bash", { command: "npm  test" })).toBe(
+			"bash: npm test",
 		);
+		expect(
+			describeCall("bash", { command: "python3 - <<'EOF'\nprint(1)\nEOF\n" }),
+		).toBe("bash: python3 - <<'EOF' (+2 lines)");
 		expect(describeCall("edit", { path: "src/a.ts", edits: [{}, {}] })).toBe(
 			"edit: src/a.ts (2 edits)",
 		);
@@ -126,7 +129,7 @@ describe("describeCall", () => {
 		);
 		expect(
 			describeCall("typescript", { code: "\n  async () => 1\nmore" }),
-		).toBe("typescript: async () => 1");
+		).toBe("typescript: async () => 1 (+1 lines)");
 		expect(describeCall("other", { a: 1 })).toBe('other {"a":1}');
 		expect(describeCall("other", {})).toBe("other");
 	});
