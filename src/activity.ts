@@ -54,6 +54,8 @@ const stringArg = (args: Record<string, unknown>, ...keys: string[]) => {
 	return undefined;
 };
 
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 /** The one thing that says what a tool call does: a command, a path, a label, a pattern. */
 export function describeCall(
 	name: string,
@@ -98,8 +100,6 @@ function formatCount(n: number): string {
 	}
 	return `${(n / 1_000_000).toFixed(1)}M`;
 }
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** `40 model responses · 39 tool calls (2 failed) · 8m24s · 1.2M tokens in, 40k out · $0.41`. */
 export function formatStats(stats: ActivityStats): string {
