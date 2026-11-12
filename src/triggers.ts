@@ -31,6 +31,10 @@ export interface Trigger {
 	answer?: UiAnswer;
 	/** Set when `task` is a prompt template's expanded body; `typed` is the task as written (`/name args`). */
 	template?: { name: string; source: string; typed: string };
+	/** Set when `task` is a skill's instructions (`/skill:<name>`); `typed` is the task as written. */
+	skill?: { name: string; source: string; typed: string };
+	/** Set when the request can't go to pi (an unknown `/skill:<name>`): the error to reply with. */
+	rejected?: string;
 }
 
 /** Who may run pi, and how they ask: the trigger_phrase and allowed_* inputs. */
