@@ -1,1 +1,1 @@
-{"format":1,"seq":476,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"arguments","code"],"\n\n\\`AGENTS.md\\` and \\`CLAUDE.md\\` go into the system prompt (see [Context files](prompts.md#context-files)). The system"]]}}]}
+{"format":1,"seq":477,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"arguments","code"]," prompt has"]]}}]}
