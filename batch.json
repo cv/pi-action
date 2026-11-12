@@ -1,1 +1,1 @@
-{"format":1,"seq":333,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":334,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"https://github.com/cv/pi-action/issues/52\n"]]}}]}
