@@ -8,7 +8,14 @@ import {
 } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import {
+	basename,
+	dirname,
+	isAbsolute,
+	join,
+	relative,
+	resolve,
+} from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Provider } from "@earendil-works/pi-ai/models";
@@ -19,6 +26,7 @@ import {
 	type ExtensionProviderConfig,
 	parseProviderConfig,
 } from "./extension-provider.ts";
+import type { PromptSource } from "./prompts.ts";
 import type { DurableHostOptions } from "./types.ts";
 import { field, getErrorMessage, isRecord } from "./utils.ts";
 
@@ -46,10 +54,12 @@ export interface DurableExtensionFactory {
 	create: (options: DurableHostOptions) => Promise<Extension>;
 }
 
-/** What the `extensions` input loaded: model providers, and pi-durable extensions for the conversation. */
+/** What the `extensions` input loaded: model providers, pi-durable extensions, and prompt templates. */
 export interface LoadedExtensions {
 	providers: ExtensionProvider[];
 	durable: DurableExtensionFactory[];
+	/** Each package's `pi.prompts`, in input order. */
+	prompts: PromptSource[];
 }
 
 export type NpmRunner = (
@@ -180,14 +190,17 @@ async function installPackages(
 	}));
 }
 
+/** A directory's package.json; undefined without one. */
+function readManifest(dir: string): unknown {
+	const path = join(dir, "package.json");
+	return existsSync(path)
+		? (JSON.parse(readFileSync(path, "utf8")) as unknown)
+		: undefined;
+}
+
 /** The `pi` field of a directory's package.json; undefined without one. */
 function readPiManifest(dir: string): unknown {
-	const path = join(dir, "package.json");
-	if (!existsSync(path)) {
-		return undefined;
-	}
-	const manifest: unknown = JSON.parse(readFileSync(path, "utf8"));
-	return field(manifest, "pi");
+	return field(readManifest(dir), "pi");
 }
 
 function readPiExtensions(dir: string): string[] | undefined {
@@ -201,8 +214,8 @@ function isDirectory(path: string): boolean {
 	return existsSync(path) && statSync(path).isDirectory();
 }
 
-/** pi's `pi.extensions` manifest entries: paths and globs, with `!` globs excluding matches. */
-function manifestEntries(dir: string, entries: string[]): string[] {
+/** pi's manifest entries (`pi.extensions`, `pi.prompts`): paths and globs, with `!` globs excluding matches. */
+function manifestPaths(dir: string, entries: string[]): string[] {
 	const excluded = new Set(
 		entries
 			.filter((entry) => entry.startsWith("!"))
@@ -216,10 +229,31 @@ function manifestEntries(dir: string, entries: string[]): string[] {
 				? globSync(entry, { cwd: dir }).map((path) => resolve(dir, path))
 				: [resolve(dir, entry)],
 		)
-		.filter((path) => !excluded.has(path) && existsSync(path))
-		.flatMap((path) =>
-			isDirectory(path) ? (directoryEntry(path) ?? []) : [path],
-		);
+		.filter((path) => !excluded.has(path) && existsSync(path));
+}
+
+/** The extension files of `pi.extensions` entries; a directory gives its own entries. */
+function manifestEntries(dir: string, entries: string[]): string[] {
+	return manifestPaths(dir, entries).flatMap((path) =>
+		isDirectory(path) ? (directoryEntry(path) ?? []) : [path],
+	);
+}
+
+/** A package's prompt templates (`pi.prompts`: files and directories), under its name; undefined without any. */
+export function findPromptSource(dir: string): PromptSource | undefined {
+	const manifest = readManifest(dir);
+	const prompts = field(field(manifest, "pi"), "prompts");
+	if (!Array.isArray(prompts)) {
+		return undefined;
+	}
+	const name = field(manifest, "name");
+	return {
+		source: typeof name === "string" && name !== "" ? name : basename(dir),
+		paths: manifestPaths(
+			dir,
+			prompts.filter((entry) => typeof entry === "string"),
+		),
+	};
 }
 
 /** A directory's declared entries (`pi.extensions`) or its index.ts / index.js. */
@@ -524,6 +558,10 @@ async function loadRoot(
 	log: ExtensionLog,
 	cwd: string,
 ): Promise<void> {
+	const prompts = findPromptSource(root.path);
+	if (prompts !== undefined) {
+		loaded.prompts.push(prompts);
+	}
 	const durable = findDurableEntry(root.path);
 	if (durable !== undefined) {
 		if ((readPiExtensions(root.path) ?? []).length > 0) {
@@ -557,7 +595,7 @@ export async function loadExtensions(
 	options: LoadExtensionsOptions,
 ): Promise<LoadedExtensions> {
 	const { specs, cwd, log } = options;
-	const loaded: LoadedExtensions = { providers: [], durable: [] };
+	const loaded: LoadedExtensions = { providers: [], durable: [], prompts: [] };
 	if (specs.length === 0) {
 		return loaded;
 	}
