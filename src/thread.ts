@@ -5,6 +5,7 @@ import {
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { Models } from "@earendil-works/pi-ai/models";
 import {
+	type AgentChange,
 	AssistantEntry,
 	type CommitResult,
 	type Conversation,
@@ -17,6 +18,7 @@ import {
 	type Storage,
 	type StorageWrite,
 	type Submission,
+	type ToolRegistration,
 	ToolResultEntry,
 } from "@earendil-works/pi-durable";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
@@ -26,6 +28,7 @@ import { GitStorage } from "./storage/git-storage.ts";
 import { git } from "./storage/git.ts";
 import { GitSync, isTurnBoundary, liveRef } from "./storage/sync.ts";
 import { type SnapshotLimits, worktreeRef } from "./storage/worktree.ts";
+import { planTools, type ToolSelection } from "./tool-filter.ts";
 import type { Log } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
 import { RESTORE_ENTRY_KIND, WorktreeContinuity } from "./worktree.ts";
@@ -50,6 +53,8 @@ export interface ThreadOptions {
 	remote?: string | undefined;
 	/** pi-durable extensions from the `extensions` input, installed after the coding tools. */
 	extensions?: readonly Extension[];
+	/** The `exclude_tools` and `model_tools_hidden` inputs; none when undefined. */
+	tools?: ToolSelection | undefined;
 	/** Variables the tools' shell gets on top of the process environment (see `toolEnv()`). */
 	toolEnv?: Readonly<Record<string, string>> | undefined;
 	/** Save and restore the working tree with the thread (stored threads only), with these limits; undefined: don't. */
@@ -224,15 +229,19 @@ export class Thread {
 	private readonly harness: Harness;
 	private readonly root: Conversation;
 	private readonly persistence: Persistence | undefined;
+	/** The names of the tools the model is offered. */
+	readonly modelTools: readonly string[];
 
 	private constructor(
 		harness: Harness,
 		root: Conversation,
 		persistence: Persistence | undefined,
+		modelTools: readonly string[],
 	) {
 		this.harness = harness;
 		this.root = root;
 		this.persistence = persistence;
+		this.modelTools = modelTools;
 	}
 
 	static async open(options: ThreadOptions): Promise<Thread> {
@@ -270,11 +279,18 @@ export class Thread {
 			model: { provider: options.model.provider, modelId: options.model.id },
 			cwd,
 		};
-		const root = await harness.root(context, { agent });
-		await root.configure(agent, context); // the model may differ from the last run's
+		let modelTools: string[];
+		let root: Conversation;
+		try {
+			root = await harness.root(context, { agent });
+			modelTools = await configureAgent(root, agent, options);
+		} catch (error) {
+			await harness.close(context);
+			throw error;
+		}
 		await restoreWorktree(persistence?.worktree, harness, root);
 		harness.resume(); // finish whatever a previous, interrupted run left
-		return new Thread(harness, root, persistence);
+		return new Thread(harness, root, persistence, modelTools);
 	}
 
 	/** The commit the thread's ref points at, undefined before its first commit or when it is not stored. */
@@ -417,6 +433,53 @@ export class Thread {
 		await this.harness.close(context);
 		await this.push();
 	}
+}
+
+/**
+ * Configure the conversation for this run (the model, the tools may differ from the last run's): clear the last run's
+ * tool filters, resolve the inputs against the tools there are now, and apply them. Returns the tools the model gets.
+ */
+async function configureAgent(
+	root: Conversation,
+	agent: AgentChange,
+	options: ThreadOptions,
+): Promise<string[]> {
+	await root.configure({ ...agent, tools: null, modelTools: null }, context);
+	const resolved = await root.agent(context);
+	const byName = new Map<string, ToolRegistration>();
+	for (const tool of [
+		...resolved.tools,
+		...resolved.callable,
+		...resolved.deferred,
+	]) {
+		byName.set(tool.name, tool);
+	}
+	const offered = resolved.tools.map((tool) => tool.name);
+	if (options.tools === undefined) {
+		return offered;
+	}
+	const plan = planTools(
+		options.tools,
+		[...byName.keys()],
+		offered,
+		options.log,
+	);
+	const pick = (names: readonly string[]) =>
+		names.flatMap((name) => byName.get(name) ?? []);
+	if (plan.exclude.length > 0 || plan.hide.length > 0) {
+		await root.configure(
+			{
+				...(plan.exclude.length > 0
+					? { tools: { remove: pick(plan.exclude) } }
+					: {}),
+				...(plan.hide.length > 0
+					? { modelTools: { remove: pick(plan.hide) } }
+					: {}),
+			},
+			context,
+		);
+	}
+	return plan.offered;
 }
 
 /**
