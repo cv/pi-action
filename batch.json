@@ -1,1 +1,1 @@
-{"format":1,"seq":287,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":288,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"  npm audit fix\n\nRun `npm audit` for details.\n"]]}}]}
