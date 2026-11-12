@@ -614,7 +614,10 @@ async function loadRoot(
 	}
 }
 
-type Root = { name: string; path: string };
+interface Root {
+	name: string;
+	path: string;
+}
 
 /** The packages and paths of specs: npm packages installed into a temp directory (`what` in the log), paths in place. */
 async function resolveRoots(

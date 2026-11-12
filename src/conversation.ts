@@ -183,20 +183,24 @@ export class ThreadConversation {
 
 	private async submitAll(triggers: Trigger[]): Promise<void> {
 		for (const trigger of triggers) {
-			if (this.handled.has(trigger.key)) {
-				continue;
+			if (!this.handled.has(trigger.key)) {
+				this.handled.add(trigger.key);
+				// oxlint-disable-next-line eslint/no-await-in-loop -- triggers are submitted in order
+				await this.submitOne(trigger);
 			}
-			this.handled.add(trigger.key);
-			if (trigger.rejected !== undefined) {
-				this.reject(trigger, trigger.rejected);
-				continue;
-			}
-			const first = this.options.thread.isNew && this.submitted === 0;
-			this.submitted += 1;
-			// oxlint-disable-next-line eslint/no-await-in-loop -- triggers are submitted in order
-			const content = await this.options.message(trigger, first);
-			this.track(trigger, this.answer(trigger, content));
 		}
+	}
+
+	/** Submit a trigger, or reply with its error when it is rejected. */
+	private async submitOne(trigger: Trigger): Promise<void> {
+		if (trigger.rejected !== undefined) {
+			this.reject(trigger, trigger.rejected);
+			return;
+		}
+		const first = this.options.thread.isNew && this.submitted === 0;
+		this.submitted += 1;
+		const content = await this.options.message(trigger, first);
+		this.track(trigger, this.answer(trigger, content));
 	}
 
 	/** A trigger pi does not get (an unknown skill, say): its error is the reply, posted once. */

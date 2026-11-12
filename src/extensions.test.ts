@@ -525,7 +525,7 @@ describe("loadExtensions: skills", () => {
 		const cwd = tempDir();
 		const runnerTemp = tempDir();
 		const runNpm = vi.fn<NpmRunner>(async (args) => {
-			const prefix = args[args.indexOf("--prefix") + 1] ?? "";
+			const prefix = String(args.at(-2)); // --prefix <dir> <spec>
 			write(
 				join(prefix, "package.json"),
 				JSON.stringify({ dependencies: { "xyz-skills": "1.0.0" } }),
