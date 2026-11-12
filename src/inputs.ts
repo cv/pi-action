@@ -40,6 +40,10 @@ export interface ActionInputs {
 	worktreeSnapshots: boolean;
 	/** What a snapshot leaves out of the untracked files. */
 	worktreeLimits: SnapshotLimits;
+	/** `exclude_tools`: tool name globs to disable completely. */
+	excludeTools: string[];
+	/** `model_tools_hidden`: tool name globs the model is not offered (other tools can still call them). */
+	modelToolsHidden: string[];
 }
 
 const TRUE_VALUES = new Set(["true", "1", "yes", "y", "on"]);
@@ -180,5 +184,7 @@ export function readActionInputs(
 			...DEFAULT_SNAPSHOT_LIMITS,
 			exclude: parseExtensionSpecs(readInput("worktree_snapshot_exclude")),
 		},
+		excludeTools: parseExtensionSpecs(readInput("exclude_tools")),
+		modelToolsHidden: parseExtensionSpecs(readInput("model_tools_hidden")),
 	};
 }

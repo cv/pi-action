@@ -134,6 +134,8 @@ export function createActionInputs(
 		agentDir: undefined,
 		worktreeSnapshots: DEFAULTS.worktreeSnapshots,
 		worktreeLimits: DEFAULT_SNAPSHOT_LIMITS,
+		excludeTools: [],
+		modelToolsHidden: [],
 		...overrides,
 	};
 }
