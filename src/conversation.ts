@@ -33,11 +33,6 @@ export interface ConversationOptions {
 	) => Promise<string | undefined>;
 	/** Triggers that arrived since the run started; omitted for one-off runs. */
 	poll?: () => Promise<Trigger[]>;
-	/**
-	 * Called when pi starts on a trigger: once it is submitted, unless an earlier run already settled it (a run
-	 * resubmits every trigger on the thread, and only the unsettled ones are news).
-	 */
-	started?: (trigger: Trigger) => void;
 	/** The URLs of the questions pi-durable extensions asked in this run so far (see github-ui.ts). */
 	asked?: () => readonly string[];
 }
@@ -345,12 +340,6 @@ export class ThreadConversation {
 					}
 				: {}),
 		});
-		if (key === trigger.key && this.options.started !== undefined) {
-			const { status } = await submission.status(BACKGROUND_CONTEXT);
-			if (status !== "done" && status !== "unanswered") {
-				this.options.started(trigger);
-			}
-		}
 		const record = await submission.wait(BACKGROUND_CONTEXT);
 		if (record.status === "done" && record.answer !== undefined) {
 			// An input submission always has its entry; without one, the range is just the answer.

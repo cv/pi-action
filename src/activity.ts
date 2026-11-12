@@ -1,7 +1,5 @@
 // What pi does, in the workflow log as it happens: one line for each model response and tool call, with the
 // details (the full text, a tool's arguments and output) in a collapsed group, and totals for each reply (#46).
-import { randomUUID } from "node:crypto";
-
 import type {
 	AssistantMessage,
 	ToolResultMessage,
@@ -36,28 +34,7 @@ const LINE_LENGTH = 120;
 /** How many lines of a tool's output its group shows: the last ones, where errors and results are. */
 const OUTPUT_LINES = 30;
 const OUTPUT_LINE_LENGTH = 300;
-const ARGUMENTS_LENGTH = 4000;
-/** A line the runner would take as a workflow command (`::error::`, `::add-mask::`, the old `##[error]`). */
-const WORKFLOW_COMMAND = /^\s*(?:::|##\[)/mu;
-
-/**
- * A tool call's arguments for people: `key: value`, and a multi-line string (a script, a file) on the lines after
- * its key, as it is, not as an escaped JSON string.
- */
-export function formatArguments(args: Record<string, unknown>): string {
-	const lines = Object.entries(args).map(([key, value]) => {
-		if (typeof value === "string") {
-			return value.includes("\n")
-				? `${key}:\n${value.replace(/\n$/u, "")}`
-				: `${key}: ${value}`;
-		}
-		return `${key}: ${JSON.stringify(value)}`;
-	});
-	const text = lines.join("\n");
-	return text.length > ARGUMENTS_LENGTH
-		? `${text.slice(0, ARGUMENTS_LENGTH - 1)}…`
-		: text;
-}
+const ARGUMENTS_LENGTH = 2000;
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
 
@@ -248,7 +225,7 @@ export class Activity {
 			this.stats.toolCalls += 1;
 			this.calls.set(call.id, {
 				label,
-				args: formatArguments(call.arguments),
+				args: JSON.stringify(call.arguments, undefined, 2),
 				parallel: calls.length > 1,
 			});
 			this.log.info(`🔧 ${label}`);
@@ -263,7 +240,7 @@ export class Activity {
 			return;
 		}
 		this.log.startGroup(`💬 ${first}`);
-		this.raw(text);
+		this.log.info(text);
 		this.log.endGroup();
 	}
 
@@ -286,25 +263,14 @@ export class Activity {
 		];
 		this.log.startGroup(`  ↳ ${status} ${parts.join(" · ")}`);
 		if (call !== undefined) {
-			this.raw(call.args);
+			this.log.info(
+				call.args.length > ARGUMENTS_LENGTH
+					? `${call.args.slice(0, ARGUMENTS_LENGTH - 1)}…`
+					: call.args,
+			);
 			this.log.info("──");
 		}
-		this.raw(lines === 0 ? "(no output)" : output.join("\n"));
+		this.log.info(lines === 0 ? "(no output)" : output.join("\n"));
 		this.log.endGroup();
-	}
-
-	/**
-	 * Log text that pi or a tool wrote, so the runner does not run the workflow commands in it: a tool's output with
-	 * `::error file=...::` (a linter's GitHub reporter) would otherwise annotate the run (#46).
-	 */
-	private raw(text: string): void {
-		if (!WORKFLOW_COMMAND.test(text)) {
-			this.log.info(text);
-			return;
-		}
-		const token = randomUUID();
-		this.log.info(`::stop-commands::${token}`);
-		this.log.info(text);
-		this.log.info(`::${token}::`);
 	}
 }
