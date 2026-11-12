@@ -329,6 +329,9 @@ export class ThreadConversation {
 				author: trigger.author.login,
 				source: trigger.source,
 				...(trigger.url ? { url: trigger.url } : {}),
+				...(trigger.template
+					? { template: trigger.template.name, typed: trigger.template.typed }
+					: {}),
 			},
 			...(answer
 				? {
