@@ -13,6 +13,15 @@ export class GitSyncConflictError extends Error {
 	}
 }
 
+/**
+ * Where a run keeps a ref locally while it works on it: `refs/pi/threads/42` lives on `refs/pi-action/threads/42`.
+ * A fetch into `refs/pi/*` (`git fetch origin '+refs/pi/*:refs/pi/*'`, or a `remote.origin.fetch` refspec, as
+ * docs/threads.md suggests for reading threads) would otherwise move the ref under the run's storage (#46).
+ */
+export function liveRef(ref: string): string {
+	return ref.replace(/^refs\/pi\//u, "refs/pi-action/");
+}
+
 /** Runs git in a directory and resolves with its stdout, like `git()`; tests replace it. */
 export type GitRunner = (
 	dir: string,
@@ -22,12 +31,17 @@ export type GitRunner = (
 export interface GitSyncOptions {
 	/** The work tree (or git dir) to run git in. */
 	readonly repo: string;
+	/** The ref on the remote. */
 	readonly ref: string;
+	/** The local ref that holds it (see `liveRef()`); default `ref`. */
+	readonly localRef?: string | undefined;
 	/**
 	 * A second ref that moves with `ref` (a thread's working-tree snapshots): fetched with it, and pushed with it in
 	 * one `git push --atomic`, so the remote never has one without the other.
 	 */
 	readonly companionRef?: string | undefined;
+	/** The local ref that holds the companion ref; default `companionRef`. */
+	readonly localCompanionRef?: string | undefined;
 	/** Default "origin". */
 	readonly remote?: string | undefined;
 	readonly log?: (message: string) => void;
@@ -68,6 +82,8 @@ export function isTurnBoundary(batches: readonly Batch[]): boolean {
 export class GitSync {
 	readonly ref: string;
 	readonly companionRef: string | undefined;
+	readonly localRef: string;
+	readonly localCompanionRef: string | undefined;
 	readonly remote: string;
 	private readonly repo: string;
 	private readonly log: (message: string) => void;
@@ -90,6 +106,15 @@ export class GitSync {
 		this.repo = options.repo;
 		this.ref = options.ref;
 		this.companionRef = options.companionRef;
+		this.localRef = options.localRef ?? options.ref;
+		this.localCompanionRef =
+			options.companionRef === undefined
+				? undefined
+				: (options.localCompanionRef ?? options.companionRef);
+		assertRefName(this.localRef);
+		if (this.localCompanionRef !== undefined) {
+			assertRefName(this.localCompanionRef);
+		}
 		this.remote = options.remote ?? "origin";
 		this.log = options.log ?? (() => undefined);
 		this.retryDelaysMs = options.retryDelaysMs ?? RETRY_DELAYS_MS;
@@ -97,26 +122,33 @@ export class GitSync {
 	}
 
 	/**
-	 * Make the local ref (and the companion ref) equal the remote one (creating, moving, or deleting it). Returns the
+	 * Make the local ref (and the local companion ref) equal the remote one (creating, moving, or deleting it). Returns the
 	 * remote tip of `ref`, undefined when the remote has no such ref yet.
 	 */
 	async fetch(): Promise<string | undefined> {
 		const tips = await this.remoteHeads();
 		const present: string[] = [];
-		for (const [ref, tip] of [
-			[this.ref, tips.tip],
-			...(this.companionRef === undefined
+		for (const [ref, local, tip] of [
+			[this.ref, this.localRef, tips.tip],
+			...(this.companionRef === undefined ||
+			this.localCompanionRef === undefined
 				? []
-				: [[this.companionRef, tips.companion] as const]),
+				: [
+						[
+							this.companionRef,
+							this.localCompanionRef,
+							tips.companion,
+						] as const,
+					]),
 		] as const) {
 			if (tip === undefined) {
 				// oxlint-disable-next-line eslint/no-await-in-loop -- at most two refs
-				await this.git(this.repo, ["update-ref", "-d", ref]).catch(
+				await this.git(this.repo, ["update-ref", "-d", local]).catch(
 					() => undefined,
 				);
 				this.log(`${ref}: new on ${this.remote}`);
 			} else {
-				present.push(ref);
+				present.push(`+${ref}:${local}`);
 				this.log(`${ref}: fetched ${tip.slice(0, 7)}`);
 			}
 		}
@@ -127,7 +159,7 @@ export class GitSync {
 				"--no-tags",
 				"--no-write-fetch-head",
 				this.remote,
-				...present.map((ref) => `+${ref}:${ref}`),
+				...present,
 			]);
 		}
 		return tips.tip;

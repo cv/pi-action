@@ -11,6 +11,7 @@ import {
 	GitSync,
 	GitSyncConflictError,
 	isTurnBoundary,
+	liveRef,
 } from "./sync.ts";
 
 const context = BACKGROUND_CONTEXT;
@@ -355,6 +356,32 @@ describe("GitSync with a companion ref", () => {
 		sh(dir, "push", "-q", "origin", `:${COMPANION}`);
 		await pusher.fetch();
 		expect(() => sh(dir, "rev-parse", "--verify", "-q", COMPANION)).toThrow(
+			"Command failed",
+		);
+	});
+
+	it("fetches into local refs of their own, and pushes from them to the remote names", async () => {
+		const { dir, first, second } = twoTips();
+		sh(dir, "push", "-q", "origin", `${first}:${REF}`, `${second}:${COMPANION}`);
+		const local = liveRef(REF);
+		const localCompanion = liveRef(COMPANION);
+		expect(local).toBe("refs/pi-action/threads/7");
+		const sync = new GitSync({
+			repo: dir,
+			ref: REF,
+			localRef: local,
+			companionRef: COMPANION,
+			localCompanionRef: localCompanion,
+		});
+		await expect(sync.fetch()).resolves.toBe(first);
+		expect(sh(dir, "rev-parse", local).trim()).toBe(first);
+		expect(sh(dir, "rev-parse", localCompanion).trim()).toBe(second);
+		expect(() => sh(dir, "rev-parse", "--verify", "-q", REF)).toThrow(
+			"Command failed",
+		);
+		sh(dir, "push", "-q", "origin", `:${REF}`, `:${COMPANION}`);
+		await expect(sync.fetch()).resolves.toBeUndefined();
+		expect(() => sh(dir, "rev-parse", "--verify", "-q", local)).toThrow(
 			"Command failed",
 		);
 	});
