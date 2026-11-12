@@ -21,7 +21,7 @@ import { CodingTools } from "@earendil-works/pi-durable/tools";
 
 import { GitStorage } from "./storage/git-storage.ts";
 import { git } from "./storage/git.ts";
-import { GitSync, isTurnBoundary } from "./storage/sync.ts";
+import { GitSync, isTurnBoundary, liveRef } from "./storage/sync.ts";
 import { type SnapshotLimits, worktreeRef } from "./storage/worktree.ts";
 import type { Log } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
@@ -132,12 +132,15 @@ async function openPersistence(
 ): Promise<Persistence> {
 	const { cwd, log } = options;
 	const ref = threadRef(issueNumber);
+	// The run works on local refs outside refs/pi/, where a fetch the agent runs can't move them (#46).
+	const local = liveRef(ref);
 	const worktree =
 		options.worktree === undefined
 			? undefined
 			: new WorktreeContinuity({
 					cwd,
-					ref: worktreeRef(issueNumber),
+					ref: liveRef(worktreeRef(issueNumber)),
+					name: worktreeRef(issueNumber),
 					limits: options.worktree,
 					log,
 					remote: options.remote,
@@ -145,7 +148,9 @@ async function openPersistence(
 	const sync = new GitSync({
 		repo: cwd,
 		ref,
-		companionRef: worktree?.ref,
+		localRef: local,
+		companionRef: worktree === undefined ? undefined : worktreeRef(issueNumber),
+		localCompanionRef: worktree?.ref,
 		log: log.info,
 		remote: options.remote,
 	});
@@ -153,7 +158,7 @@ async function openPersistence(
 	const saver = new ThreadSaver(cwd, sync, worktree);
 	const storage = await GitStorage.open({
 		repo: cwd,
-		ref,
+		ref: local,
 		author: {
 			name: "pi-action",
 			email: "pi-action@users.noreply.github.com",
@@ -173,7 +178,7 @@ async function openPersistence(
 		saver,
 		worktree,
 		isNew: remoteTip === undefined,
-		startedAt: remoteTip ? await rootCommitTime(cwd, ref) : undefined,
+		startedAt: remoteTip ? await rootCommitTime(cwd, local) : undefined,
 	};
 }
 
