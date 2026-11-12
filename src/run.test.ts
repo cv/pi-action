@@ -286,14 +286,14 @@ describe("run (durable)", () => {
 		});
 		write(join(trusted.cwd, ".pi/prompts/fix.md"), "Fix $ARGUMENTS.");
 		write(join(trusted.cwd, ".agent/prompts/fix.md"), "Ignored.");
-		write(join(trusted.cwd, ".agent/prompts/explain.md"), "Explain ${@:1}.");
+		write(join(trusted.cwd, ".agent/prompts/explain.md"), "Explain $1.");
 
 		await run(trusted);
 		const second = w.deps(w.comment("@pi /explain it"), {
 			trustProject: true,
 			agentDir: ".agent",
 		});
-		write(join(second.cwd, ".agent/prompts/explain.md"), "Explain ${@:1}.");
+		write(join(second.cwd, ".agent/prompts/explain.md"), "Explain $1.");
 		await run(second);
 
 		expect(seen[0]?.[0]).toContain("## Task\nFix the login.\n");
