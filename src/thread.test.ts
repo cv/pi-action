@@ -100,10 +100,12 @@ describe("Thread: the project_context section (pi-action-context)", () => {
 			projectContext: "# Project Context\n\nRepo rules.",
 		});
 		expect(sectionKeys(context)[0]).toStrictEqual(["project_context", "pit"]);
-		const [system] = context.messages;
-		expect(system?.role === "system" ? system.sections : {}).toMatchObject({
-			project_context:
-				"<project_context>\n# Project Context\n\nRepo rules.\n</project_context>",
+		expect(context.messages[0]).toMatchObject({
+			role: "system",
+			sections: {
+				project_context:
+					"<project_context>\n# Project Context\n\nRepo rules.\n</project_context>",
+			},
 		});
 	});
 
@@ -123,14 +125,17 @@ describe("Thread: the project_context section (pi-action-context)", () => {
 			log: createLogger(),
 		});
 		const { faux, models, model } = fauxModels();
-		let seen: ModelContext | undefined;
+		const seen: ModelContext[] = [];
 		faux.setResponses([
-			fauxAssistantMessage(
-				[fauxToolCall("write", { path: "AGENTS.md", content: "New rules." })],
-				{ stopReason: "toolUse" },
-			),
 			(context) => {
-				seen = context;
+				seen.push(context);
+				return fauxAssistantMessage(
+					[fauxToolCall("write", { path: "AGENTS.md", content: "New rules." })],
+					{ stopReason: "toolUse" },
+				);
+			},
+			(context) => {
+				seen.push(context);
 				return fauxAssistantMessage("ok");
 			},
 		]);
@@ -151,12 +156,14 @@ describe("Thread: the project_context section (pi-action-context)", () => {
 		} finally {
 			await thread.close();
 		}
-		if (seen === undefined) {
-			throw new Error("the model got no second request");
-		}
-		expect(sectionKeys(seen)).toStrictEqual([["project_context"]]);
-		expect(systemText(seen)).toContain("Old rules.");
-		expect(systemText(seen)).not.toContain("New rules.");
+		// One system message in both requests: no "Updated system prompt section" after the edit.
+		expect(seen.map((context) => sectionKeys(context))).toStrictEqual([
+			[["project_context"]],
+			[["project_context"]],
+		]);
+		const second = seen.map((context) => systemText(context)).at(-1);
+		expect(second).toContain("Old rules.");
+		expect(second).not.toContain("New rules.");
 	});
 });
 
