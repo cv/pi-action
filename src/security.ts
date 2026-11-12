@@ -42,10 +42,14 @@ export function validatePermissions(
 		.includes(normalizeAssociation(association));
 }
 
+/** Drop invisible characters (zero-width spaces and joiners, BOMs, soft hyphens), which can hide instructions. */
+export function removeInvisibleCharacters(text: string): string {
+	return text.replaceAll(INVISIBLE_CHARACTERS_PATTERN, "");
+}
+
 /** Drop HTML comments and invisible characters, which can hide instructions. */
 export function sanitizeInput(text: string): string {
-	return text
-		.replaceAll(HTML_COMMENT_PATTERN, "")
-		.replaceAll(INVISIBLE_CHARACTERS_PATTERN, "")
-		.trim();
+	return removeInvisibleCharacters(
+		text.replaceAll(HTML_COMMENT_PATTERN, ""),
+	).trim();
 }
