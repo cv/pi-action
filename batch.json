@@ -1,1 +1,1 @@
-{"format":1,"seq":539,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":540,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"remote: Create a pull request for 'fix/46-session-storage-failure' on GitHub by visiting:        \nremote:      https://github.com/cv/pi-action/pull/new/fix/46-session-storage-failure        \nremote: \n"]]}}]}
