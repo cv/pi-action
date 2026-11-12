@@ -1,8 +1,8 @@
 // Shared fixtures: inputs, a fake GitHub, faux models, and scratch git repositories.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import type { Api, Context, Model, Tool } from "@earendil-works/pi-ai";
 import { createModels } from "@earendil-works/pi-ai/models";
@@ -171,6 +171,13 @@ export function tempDir(prefix = "pi-action-"): string {
 		rmSync(dir, { recursive: true, force: true });
 	});
 	return dir;
+}
+
+/** Write a file, with its directories; returns its path. */
+export function write(path: string, content: string): string {
+	mkdirSync(dirname(path), { recursive: true });
+	writeFileSync(path, content);
+	return path;
 }
 
 /** A fresh, empty git repository. */

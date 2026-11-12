@@ -13,6 +13,9 @@
 		"durable": "./durable.ts",
 		"extensions": [
 			"./coding-agent.ts"
+		],
+		"prompts": [
+			"./prompts"
 		]
 	}
 }
