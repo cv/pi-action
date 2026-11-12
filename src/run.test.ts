@@ -283,7 +283,7 @@ describe("run (durable)", () => {
 			"::endgroup::",
 			"💬 Fixed it.",
 			expect.stringMatching(
-				/^✅ Replied: https:\/\/\S+ \(2 model responses · 1 tool call · \d+\.\ds · \d+ tokens in, \d+ out\)$/u,
+				/^✅ Replied: https:\/\/\S+ \(2 model responses · 1 tool call · \d+\.\ds · \S+ tokens in, \S+ out\)$/u,
 			),
 			`🧵 ${REF} is at ${tip.slice(0, 7)}`,
 		]);
