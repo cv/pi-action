@@ -1,1 +1,1 @@
-{"format":1,"seq":596,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":597,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"title=unicorn(no-unreadable-array-destructuring)::src/storage/worktree.ts:558:10: Array destructuring may not contain consecutive ignored values.\n"]]}}]}
