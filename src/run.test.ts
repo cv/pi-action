@@ -469,6 +469,59 @@ describe("pushThread (the always() step)", () => {
 	});
 });
 
+describe("run (durable) when the agent moves refs (#46)", () => {
+	const agentRuns = (command: string) => [
+		fauxAssistantMessage([fauxToolCall("bash", { command })], {
+			stopReason: "toolUse",
+		}),
+		fauxAssistantMessage("done"),
+	];
+
+	it("answers when the agent fetches or deletes refs/pi/* mid-run", async () => {
+		const w = world();
+		w.faux.setResponses(agentRuns("git fetch -q origin '+refs/pi/*:refs/pi/*'; git update-ref -d " + REF));
+		const deps = w.deps(w.comment("@pi go"));
+		await run(deps);
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain("### 🤖 pi Response\n\ndone");
+		expect(deps.log.setFailed).not.toHaveBeenCalled();
+		expect(git(w.remote, "rev-parse", REF).trim()).toBe(
+			git(deps.cwd, "rev-parse", LIVE).trim(),
+		);
+	});
+
+	it("reports a session that failed in storage on the comment, and fails the step", async () => {
+		const w = world();
+		w.faux.setResponses(agentRuns(`git update-ref -d ${LIVE}`));
+		const trigger = w.comment("@pi go");
+		const deps = w.deps(trigger);
+		await run(deps);
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain("### ❌ pi Error");
+		expect(w.gh.posted[0]).toContain("Session failed after a storage error");
+		expect(w.gh.posted[0]).toContain(`Ref ${LIVE} moved`);
+		expect(w.reacted("confused")).toContain(trigger.id);
+		expect(deps.log.setFailed).toHaveBeenCalledWith(
+			expect.stringContaining("pi could not answer 1 comment(s)"),
+		);
+	});
+
+	it("leaves a remote that is ahead of the local ref alone, in the always() step", async () => {
+		const w = world();
+		w.faux.setResponses([fauxAssistantMessage("ok")]);
+		const deps = w.deps(w.comment("@pi go"));
+		await run(deps);
+		const tip = git(w.remote, "rev-parse", REF).trim();
+		git(deps.cwd, "update-ref", LIVE, `${LIVE}~2`);
+		const log = { info: vi.fn(), warning: vi.fn() };
+		await expect(pushThread(deps.payload, deps.cwd, log)).resolves.toBe(
+			"up-to-date",
+		);
+		expect(log.warning).not.toHaveBeenCalled();
+		expect(git(w.remote, "rev-parse", REF).trim()).toBe(tip);
+	});
+});
+
 describe("run (durable) with main's modes", () => {
 	const outputs = (deps: ActionDependencies) =>
 		Object.fromEntries(vi.mocked(deps.log.setOutput).mock.calls);
