@@ -181,7 +181,12 @@ describe("loadExtensions", () => {
 				log: createLogger(),
 				runNpm,
 			}),
-		).resolves.toStrictEqual({ providers: [], durable: [], prompts: [] });
+		).resolves.toStrictEqual({
+			providers: [],
+			durable: [],
+			prompts: [],
+			skills: [],
+		});
 		expect(runNpm).not.toHaveBeenCalled();
 	});
 
@@ -261,7 +266,12 @@ describe("loadExtensions", () => {
 				env: { RUNNER_TEMP: tempDir(), INPUT_API_KEY: "secret", PATH: "/bin" },
 				runNpm,
 			}),
-		).resolves.toStrictEqual({ providers: [], durable: [], prompts: [] });
+		).resolves.toStrictEqual({
+			providers: [],
+			durable: [],
+			prompts: [],
+			skills: [],
+		});
 		const [call] = runNpm.mock.calls;
 		expect(call?.[0]).toStrictEqual(
 			expect.arrayContaining([
@@ -472,5 +482,78 @@ describe("loadExtensions: prompt templates", () => {
 		]);
 		expect(loaded.durable).toStrictEqual([]);
 		expect(warnings(log)).toStrictEqual([]);
+	});
+});
+
+describe("loadExtensions: skills", () => {
+	it("takes pi.skills, else a skills/ directory, from extensions, then the skills input", async () => {
+		const cwd = tempDir();
+		write(
+			join(cwd, "declared/package.json"),
+			JSON.stringify({
+				name: "@acme/xyz-skills",
+				pi: { skills: ["./custom", "./gone"] },
+			}),
+		);
+		write(join(cwd, "declared/custom/a/SKILL.md"), "a");
+		write(join(cwd, "conventional/skills/b/SKILL.md"), "b");
+		write(join(cwd, "conventional/package.json"), JSON.stringify({}));
+		write(join(cwd, "only/skills/c/SKILL.md"), "c");
+		write(join(cwd, "only/index.ts"), "throw new Error('not run');");
+		write(join(cwd, "empty/package.json"), JSON.stringify({ name: "empty" }));
+		const log = createLogger();
+
+		const loaded = await loadExtensions({
+			specs: ["./declared", "./conventional"],
+			skillSpecs: ["./only", "./empty"],
+			cwd,
+			log,
+		});
+
+		expect(loaded.skills).toStrictEqual([
+			{ source: "@acme/xyz-skills", paths: [join(cwd, "declared/custom")] },
+			{ source: "conventional", paths: [join(cwd, "conventional/skills")] },
+			{ source: "only", paths: [join(cwd, "only/skills")] },
+		]);
+		expect(loaded.providers).toStrictEqual([]);
+		expect(warnings(log)).toStrictEqual([
+			`${join(cwd, "empty")} (in the skills input) has no skills: no pi.skills in its package.json, and no skills/ directory`,
+		]);
+	});
+
+	it("installs skill packages from npm into their own directory", async () => {
+		const cwd = tempDir();
+		const runnerTemp = tempDir();
+		const runNpm = vi.fn<NpmRunner>(async (args) => {
+			const prefix = String(args.at(-2)); // --prefix <dir> <spec>
+			write(
+				join(prefix, "package.json"),
+				JSON.stringify({ dependencies: { "xyz-skills": "1.0.0" } }),
+			);
+			write(
+				join(prefix, "node_modules/xyz-skills/skills/changelog/SKILL.md"),
+				"x",
+			);
+		});
+		const log = createLogger();
+
+		const loaded = await loadExtensions({
+			specs: [],
+			skillSpecs: ["github:acme/xyz-skills#v1"],
+			cwd,
+			log,
+			env: { RUNNER_TEMP: runnerTemp },
+			runNpm,
+		});
+
+		expect(runNpm.mock.calls[0]?.[0].at(-1)).toBe("github:acme/xyz-skills#v1");
+		expect(loaded.skills).toHaveLength(1);
+		expect(loaded.skills[0]?.source).toBe("xyz-skills");
+		expect(loaded.skills[0]?.paths[0]).toContain(
+			join(runnerTemp, "pi-action-extensions-"),
+		);
+		expect(log.info).toHaveBeenCalledWith(
+			"Installing skill packages: github:acme/xyz-skills#v1",
+		);
 	});
 });
