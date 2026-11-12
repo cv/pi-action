@@ -273,7 +273,7 @@ describe("run (durable)", () => {
 				`This conversation is stored in git on ${REF}. To read it:\n  git fetch origin '${REF}:${REF}'\n`,
 			),
 			"::endgroup::",
-			`▶ Request from @${trigger.user.login} (${trigger.html_url}): please fix the thing`,
+			`▶ Request from @${trigger.user?.login ?? ""} (${trigger.html_url}): please fix the thing`,
 			"💬 Looking.",
 			"🔧 bash: echo hi",
 			expect.stringMatching(/^::group::  ↳ ✓ \d+\.\ds · 1 line$/u),
