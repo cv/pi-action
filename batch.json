@@ -1,1 +1,1 @@
-{"format":1,"seq":761,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"arguments","content"]," entry to fork at\");\n\t\t}\n\t\tconst fork = await s.root.fork(\n\t\t\tforkPoint,\n\t\t\t{ ownership: { kind: \"ownerless"]]}}]}
+{"format":1,"seq":762,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"arguments","content"],"\" } },\n\t\t\tcontext,"]]}}]}
