@@ -200,6 +200,14 @@ describe("WorktreeContinuity", () => {
 			files: "someone else's\n",
 		},
 		{
+			name: "doesn't restore into a checkout with untracked files",
+			spoil: (s: World) => {
+				writeFileSync(join(s.dir, "other.txt"), "someone else's\n");
+			},
+			message: "already had uncommitted changes or untracked files",
+			files: "base\n",
+		},
+		{
 			name: "reports a restore failure and starts clean",
 			// The snapshot's commits are gone (say, a bad ref): the restore fails and the run starts clean.
 			spoil: async (s: World) => {

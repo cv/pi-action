@@ -293,6 +293,11 @@ export async function captureState(
 	}
 }
 
+/** No changes and no untracked files (ignored files aside): a failed restore can then simply clean up. */
+export async function isCheckoutClean(cwd: string): Promise<boolean> {
+	return (await git(cwd, ["status", "--porcelain"])).trim() === "";
+}
+
 /** What tells two states apart: the commit, the branch, and the three trees. */
 export function stateKey(
 	state: Pick<
@@ -639,41 +644,10 @@ const unmergedFiles = async (cwd: string): Promise<string[]> =>
 		.split(NUL)
 		.filter(Boolean);
 
-/** The untracked files a stash holds that are not on disk yet: those a failed restore must remove. */
-async function newUntracked(cwd: string, stash: string): Promise<string[]> {
-	const untracked = await maybe(cwd, [
-		"rev-parse",
-		"-q",
-		"--verify",
-		`${stash}^3`,
-	]);
-	if (untracked === undefined) {
-		return [];
-	}
-	const top = await toplevel(cwd);
-	const paths = (
-		await git(cwd, ["ls-tree", "-r", "-z", "--name-only", untracked])
-	)
-		.split(NUL)
-		.filter(Boolean);
-	const present = await Promise.all(
-		paths.map(async (path) =>
-			fs
-				.lstat(join(top, path))
-				.then(() => true)
-				.catch(() => false),
-		),
-	);
-	return paths
-		.filter((_path, i) => present[i] !== true)
-		.map((path) => join(top, path));
-}
-
-/** Back to the checkout the run started with: the original HEAD, no changes, the files the restore added gone. */
+/** Back to the checkout the run started with: the original HEAD, no changes, no untracked files (ignored ones stay). */
 async function startClean(
 	cwd: string,
 	original: { head: string; branch: string | undefined },
-	added: readonly string[],
 ): Promise<void> {
 	await git(cwd, ["reset", "--quiet", "--hard"]).catch(() => undefined);
 	await git(cwd, [
@@ -682,11 +656,7 @@ async function startClean(
 		"--force",
 		original.branch ?? original.head,
 	]).catch(() => undefined);
-	await Promise.all(
-		added.map(async (path) =>
-			fs.rm(path, { force: true }).catch(() => undefined),
-		),
-	);
+	await git(cwd, ["clean", "--quiet", "-fd"]).catch(() => undefined);
 }
 
 /**
@@ -725,8 +695,8 @@ async function applyStash(
 }
 
 /**
- * Restore a snapshot into the checkout at `cwd` (which should be clean): put HEAD on the snapshot's branch (recreate a
- * local-only branch, follow a remote branch that moved ahead, refuse one that diverged), then apply the stash like
+ * Restore a snapshot into the checkout at `cwd`, which must be clean (see `isCheckoutClean`): put HEAD on the
+ * snapshot's branch (recreate a local-only branch, follow a remote branch that moved ahead, refuse one that diverged), then apply the stash like
  * `git stash apply --index`, without the index if that fails, leaving conflict markers. Never throws: a failure
  * puts the checkout back as it was.
  */
@@ -739,7 +709,6 @@ export async function restoreSnapshot(
 		head: await trim(git(cwd, ["rev-parse", "HEAD"])),
 		branch: await currentBranch(cwd),
 	};
-	const added = await newUntracked(cwd, record.stash).catch(() => []);
 	try {
 		const placed = await placeHead(cwd, record, remote);
 		if (placed.kind === "diverged") {
@@ -759,7 +728,7 @@ export async function restoreSnapshot(
 			moved: placed.moved,
 		};
 	} catch (error) {
-		await startClean(cwd, original, added);
+		await startClean(cwd, original);
 		return {
 			status: "failed",
 			error: error instanceof Error ? error.message : String(error),

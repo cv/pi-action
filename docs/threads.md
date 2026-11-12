@@ -98,7 +98,7 @@ At the start of a run, before pi continues any work, pi-action restores the snap
 2. **The files.** pi-action applies the snapshot as `git stash apply --index` does. If the staged changes do not apply, pi-action applies all changes as unstaged changes. If a file has conflicts, pi-action keeps the conflict markers in the file.
 3. **The message.** pi-action tells pi in one message how the restore went: restored, restored without the staged changes, conflicts in these files, or not restored (with the stash commit, so that pi can apply it).
 
-If the restore fails, pi-action resets the checkout, and pi starts from the clean checkout. A failed restore does not make the run fail. If the checkout has uncommitted changes to tracked files before the restore, pi-action does not restore the snapshot.
+If the restore fails, pi-action resets the checkout and removes the untracked files of the restore, and pi starts from the clean checkout. A failed restore does not make the run fail. If the checkout has uncommitted changes or untracked files (that git does not ignore) before the restore, pi-action does not restore the snapshot.
 
 ### Rewinds and forks
 

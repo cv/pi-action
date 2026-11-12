@@ -18,6 +18,7 @@ import { git as sh, tempRemote } from "../test-helpers.ts";
 import {
 	captureState,
 	DEFAULT_SNAPSHOT_LIMITS,
+	isCheckoutClean,
 	isClean,
 	isExcluded,
 	latestSnapshot,
@@ -277,7 +278,7 @@ describe("working-tree snapshots", () => {
 		expect(read(fresh, "keep.txt")).toBe("detached, again\n");
 	});
 
-	it("starts clean when the restore fails, keeping files that were already there", async () => {
+	it("starts clean when the restore fails, keeping ignored files", async () => {
 		const w = world();
 		const dir = w.clone();
 		write(dir, "keep.txt", "changed\n");
@@ -285,14 +286,16 @@ describe("working-tree snapshots", () => {
 		write(dir, "also-untracked.txt", "pi's too\n");
 		const record = await snapshot(dir);
 		const fresh = freshCheckout(w, dir);
-		// A file the snapshot would create is already there: git refuses to overwrite it.
+		// An ignored file is where the snapshot would create one: git refuses to overwrite it.
+		write(fresh, ".git/info/exclude", "untracked.txt\n");
 		write(fresh, "untracked.txt", "already here\n");
+		await expect(isCheckoutClean(fresh)).resolves.toBe(true);
 		const outcome = await restoreSnapshot(fresh, record);
 		expect(outcome.status).toBe("failed");
 		expect(read(fresh, "keep.txt")).toBe("keep\n");
 		expect(read(fresh, "untracked.txt")).toBe("already here\n");
 		expect(existsSync(join(fresh, "also-untracked.txt"))).toBe(false);
-		expect(status(fresh)).toBe("?? untracked.txt\n");
+		expect(status(fresh)).toBe("");
 	});
 
 	it("skips untracked files over the size limits or matching the exclude globs, and records them", async () => {

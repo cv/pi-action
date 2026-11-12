@@ -16,6 +16,7 @@ import {
 
 import {
 	captureState,
+	isCheckoutClean,
 	isClean,
 	latestSnapshot,
 	readSnapshot,
@@ -263,16 +264,12 @@ export class WorktreeContinuity {
 					? undefined
 					: `[pi-action] This run started from a clean checkout: the conversation has no working-tree snapshot as of this point.${note}`;
 			}
-			const before = await captureState(cwd, limits);
-			if (
-				before.indexTree !== before.headTree ||
-				before.worktreeTree !== before.headTree
-			) {
+			if (!(await isCheckoutClean(cwd))) {
 				log.warning(
-					`The checkout has uncommitted changes; not restoring ${short(target.stash)}`,
+					`The checkout has uncommitted changes or untracked files; not restoring ${short(target.stash)}`,
 				);
-				this.lastKey = stateKey(before);
-				return `[pi-action] The checkout already had uncommitted changes when this run started, so pi-action did not restore the files the earlier run left uncommitted. ${applyHint(target)}`;
+				this.lastKey = stateKey(await captureState(cwd, limits));
+				return `[pi-action] The checkout already had uncommitted changes or untracked files when this run started, so pi-action did not restore the files the earlier run left uncommitted. ${applyHint(target)}`;
 			}
 			const outcome = await restoreSnapshot(cwd, target, remote);
 			log.info(
