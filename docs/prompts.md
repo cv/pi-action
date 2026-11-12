@@ -57,7 +57,7 @@ Before pi-action finds the task, it removes HTML comments and invisible characte
 
 For a `pr_number` run, the task is `prompt`, or `Please review this pull request` when `prompt` is empty. For a direct prompt, the task is `prompt`.
 
-A task that starts with `/<name>` can be a [prompt template](#prompt-templates).
+A task that starts with `/<name>` can be a [prompt template](#prompt-templates). A task that starts with `/skill:<name>` uses a [skill](skills.md#use-a-skill-explicitly).
 
 ## Prompt templates
 
