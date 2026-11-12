@@ -44,6 +44,7 @@ jobs:
           permission-actions: read
           permission-checks: read
           permission-statuses: read
+          permission-workflows: write
 
       - name: Commit as the App's bot user
         env:
