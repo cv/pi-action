@@ -401,7 +401,9 @@ describe("run (durable)", () => {
 			"Not loading the skills in .pi/skills: trust_project is off",
 		);
 		// A later run does not post the error again.
-		const respond2 = vi.fn<FauxResponseStep>(() => fauxAssistantMessage("Done."));
+		const respond2 = vi.fn<FauxResponseStep>(() =>
+			fauxAssistantMessage("Done."),
+		);
 		w.faux.setResponses([respond2]);
 		await run(w.deps(w.comment("@pi fix it")));
 		expect(respond2).toHaveBeenCalledTimes(1);
