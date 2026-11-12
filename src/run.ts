@@ -488,8 +488,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		} finally {
 			log.endGroup();
 		}
-		const { models, extensions, tools, ui, templates, context, skills } =
-			setup;
+		const { models, extensions, tools, ui, templates, context, skills } = setup;
 		// `/skill:<name>` first, so a template can't take a skill's command.
 		const expand = (triggers: Trigger[]) =>
 			triggers.map((trigger) => {
