@@ -109,4 +109,31 @@ describe("createDurableExtensions", () => {
 			),
 		).rejects.toThrow(FAILED);
 	});
+
+	it("lets a tool replace one of the same name, and says so", async () => {
+		const opts = options();
+		const tool = (name: string) => ({
+			name,
+			description: "",
+			parameters: {},
+			execute: vi.fn(),
+		});
+		const a = factory("a.ts", async () => ({
+			name: "a",
+			tools: [tool("bash"), tool("t")],
+		}));
+		const b = factory("b.ts", async () => ({ name: "b", tools: [tool("t")] }));
+
+		await expect(createDurableExtensions([a, b], opts)).resolves.toHaveLength(
+			2,
+		);
+
+		expect(vi.mocked(opts.log.info).mock.calls.flat()).toStrictEqual(
+			expect.arrayContaining([
+				"pi-durable extension a replaces tool bash from coding-tools",
+				"pi-durable extension b replaces tool t from a",
+			]),
+		);
+		expect(opts.log.warning).not.toHaveBeenCalled();
+	});
 });
