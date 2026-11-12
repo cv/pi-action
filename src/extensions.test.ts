@@ -187,7 +187,7 @@ describe("loadExtensions", () => {
 				log: createLogger(),
 				runNpm,
 			}),
-		).resolves.toStrictEqual({ providers: [], durable: [] });
+		).resolves.toStrictEqual({ providers: [], durable: [], prompts: [] });
 		expect(runNpm).not.toHaveBeenCalled();
 	});
 
@@ -267,7 +267,7 @@ describe("loadExtensions", () => {
 				env: { RUNNER_TEMP: tempDir(), INPUT_API_KEY: "secret", PATH: "/bin" },
 				runNpm,
 			}),
-		).resolves.toStrictEqual({ providers: [], durable: [] });
+		).resolves.toStrictEqual({ providers: [], durable: [], prompts: [] });
 		const [call] = runNpm.mock.calls;
 		expect(call?.[0]).toStrictEqual(
 			expect.arrayContaining([
