@@ -1,5 +1,5 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import type { Context as ModelContext, Tool } from "@earendil-works/pi-ai";
+import type { Context as ModelContext } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai/providers/faux";
 import {
 	defineExtension,
@@ -13,7 +13,12 @@ import {
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { describe, expect, it } from "vitest";
 
-import { createLogger, fauxModels, tempDir } from "./test-helpers.ts";
+import {
+	createLogger,
+	fauxModels,
+	tempDir,
+	toolsOf,
+} from "./test-helpers.ts";
 import { Thread, type ThreadOptions } from "./thread.ts";
 
 const bash = (CodingTools.tools ?? []).find((tool) => tool.name === "bash");
@@ -71,22 +76,6 @@ async function firstRequest(
 		throw new Error("the model got no request");
 	}
 	return seen;
-}
-
-/** The tools the model is offered: the system messages' tools, added and removed in order. */
-function toolsOf(context: ModelContext): Tool[] {
-	const tools = new Map<string, Tool>();
-	for (const message of context.messages) {
-		if (message.role === "system") {
-			for (const { name } of message.toolsRemoved ?? []) {
-				tools.delete(name);
-			}
-			for (const added of message.toolsAdded ?? []) {
-				tools.set(added.name, added);
-			}
-		}
-	}
-	return [...tools.values()];
 }
 
 const toolNames = (context: ModelContext) =>
@@ -155,5 +144,48 @@ describe("Thread: extension overrides", () => {
 		const context = await firstRequest([replacement]);
 		expect(toolNames(context)).toStrictEqual(["read", "write", "edit", "bash"]);
 		expect(descriptionOf(context, "bash")).toBe("a sandboxed bash");
+	});
+});
+
+describe("Thread: the tools the model sees", () => {
+	it("hides tools from the model and disables excluded ones, by glob", async () => {
+		const log = createLogger();
+		const context = await firstRequest([pit], {
+			log,
+			tools: { exclude: ["bash"], hidden: ["*e*", "nothing*"] },
+		});
+		expect(toolNames(context)).toStrictEqual(["read", "typescript"]);
+		expect(log.warning).toHaveBeenCalledExactlyOnceWith(
+			'model_tools_hidden: "nothing*" matches no tool',
+		);
+	});
+
+	it("reports the tools the model gets", async () => {
+		const { models, model } = fauxModels();
+		const thread = await Thread.open({
+			cwd: tempDir(),
+			models,
+			model,
+			log: createLogger(),
+			extensions: [pit],
+			tools: { exclude: [], hidden: ["read", "write", "edit", "bash"] },
+		});
+		await thread.close();
+		expect(thread.modelTools).toStrictEqual(["typescript"]);
+	});
+
+	it("fails when the model would get no tools", async () => {
+		const { models, model } = fauxModels();
+		await expect(
+			Thread.open({
+				cwd: tempDir(),
+				models,
+				model,
+				log: createLogger(),
+				tools: { exclude: ["bash"], hidden: ["*"] },
+			}),
+		).rejects.toThrow(
+			"exclude_tools and model_tools_hidden leave the model with no tools (it would have read, write, edit, bash)",
+		);
 	});
 });
