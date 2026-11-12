@@ -53,7 +53,7 @@ The log of the `Run pi-action` step shows what pi does while it works, one line 
 | `🧵 Thread` | The thread ref, and if the thread is new or continues | The git commands that read the thread ([Read a thread](threads.md#read-a-thread)) |
 | `▶` | A request that pi gets: who asked, where, and its first line | |
 | `💬` | The text of a model response (its first line, if it is longer) | The full text |
-| `🔧` | A tool call, when it starts: the tool and its main argument (the command, the path, or the label) | |
+| `🔧` | A tool call, when it starts: the tool and its main argument (the command, the path, or the label). For a script of more than one line, the first line and the number of other lines | |
 | `↳ ✓` or `↳ ✗ failed` | The end of a tool call: how long it took, and how many lines of output it gave | The arguments, and the last 30 lines of output |
 | `✅ Replied` or `❌ Reported the error` | The comment, and totals for the reply: model responses, tool calls, time, tokens, and cost if the provider reports it | |
 | `🧵 … is at` | The commit of the thread ref after the last push | |
