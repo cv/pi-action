@@ -1,1 +1,1 @@
-{"format":1,"seq":580,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":581,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"npm run coverage.........................................................Passed\nremote: \nremote: Create a pull request for 'feat/53-agents-md-context' on GitHub by visiting:        \nremote:      https://github.com/cv/pi-action/pull/new/feat/53-agents-md-context        \nremote: \n"]]}}]}
