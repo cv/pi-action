@@ -5,7 +5,7 @@ import { context } from "@actions/github";
 
 import { parsePositiveInteger } from "./inputs.ts";
 import { git } from "./storage/git.ts";
-import { GitSync } from "./storage/sync.ts";
+import { GitSync, liveRef } from "./storage/sync.ts";
 import { worktreeRef } from "./storage/worktree.ts";
 import { threadRef } from "./thread.ts";
 import type { Log } from "./types.ts";
@@ -24,6 +24,22 @@ function threadNumber(payload: Record<string, unknown>): number | undefined {
 	return typeof number === "number" ? number : undefined;
 }
 
+/** Whether the remote's `remoteTip` already has `tip` in its history (the main step pushed past it). */
+async function contains(
+	cwd: string,
+	remoteTip: string | undefined,
+	tip: string,
+): Promise<boolean> {
+	if (remoteTip === undefined) {
+		return false;
+	}
+	// A remote tip this clone doesn't have is not one it pushed: an error, so false.
+	return git(cwd, ["merge-base", "--is-ancestor", tip, remoteTip]).then(
+		() => true,
+		() => false,
+	);
+}
+
 export async function pushThread(
 	payload: Record<string, unknown>,
 	cwd: string,
@@ -36,28 +52,40 @@ export async function pushThread(
 		return "nothing";
 	}
 	const ref = threadRef(number);
+	// The main step keeps the refs it works on outside refs/pi/ (see liveRef()).
+	const localRef = liveRef(ref);
 	let tip: string;
 	try {
-		tip = (await git(cwd, ["rev-parse", "--verify", "-q", ref])).trim();
+		tip = (await git(cwd, ["rev-parse", "--verify", "-q", localRef])).trim();
 	} catch {
 		log.info(`${ref}: nothing to push`);
 		return "nothing";
 	}
 	// The working-tree snapshots, when the main step saved any.
 	const companionRef = worktreeRef(number);
+	const localCompanionRef = liveRef(companionRef);
 	const companion = (
-		await git(cwd, ["rev-parse", "--verify", "-q", companionRef]).catch(
+		await git(cwd, ["rev-parse", "--verify", "-q", localCompanionRef]).catch(
 			() => "",
 		)
 	).trim();
 	try {
-		const sync = new GitSync({ repo: cwd, ref, companionRef, log: log.info });
+		const sync = new GitSync({
+			repo: cwd,
+			ref,
+			localRef,
+			companionRef,
+			localCompanionRef,
+			log: log.info,
+		});
 		const remote = await sync.remoteHeads();
 		if (
-			remote.tip === tip &&
-			(companion === "" || remote.companion === companion)
+			(remote.tip === tip || (await contains(cwd, remote.tip, tip))) &&
+			(companion === "" ||
+				remote.companion === companion ||
+				(await contains(cwd, remote.companion, companion)))
 		) {
-			log.info(`${ref} is already saved at ${tip.slice(0, 7)}`);
+			log.info(`${ref} is already saved at ${(remote.tip ?? tip).slice(0, 7)}`);
 			return "up-to-date";
 		}
 		await sync.flush(tip, companion || undefined);

@@ -34,6 +34,8 @@ import {
 import type { GitHubComment, GitHubReaction } from "./types.ts";
 
 const REF = "refs/pi/threads/42";
+/** Where a run keeps REF locally (liveRef()). */
+const LIVE = "refs/pi-action/threads/42";
 const FIRST_COMMIT = /pi-durable: seq 1 /u;
 const COMMIT_ID = /^[0-9a-f]{40}$/u;
 const CONTINUE = "Your last response hit the output token limit (max_tokens)";
@@ -251,7 +253,7 @@ describe("run (durable)", () => {
 			),
 		);
 		expect(deps.log.endGroup).toHaveBeenCalledExactlyOnceWith();
-		expect(tipWhenShown).toBe(git(deps.cwd, "rev-parse", REF).trim());
+		expect(tipWhenShown).toBe(git(deps.cwd, "rev-parse", LIVE).trim());
 		expect(deps.summary).toHaveBeenCalledExactlyOnceWith(
 			expect.stringContaining(`git log --oneline ${REF}`),
 		);
@@ -435,8 +437,8 @@ describe("pushThread (the always() step)", () => {
 		const { payload } = deps;
 
 		// Simulate a step killed before its final push: rewind the remote ref.
-		const tip = git(deps.cwd, "rev-parse", REF).trim();
-		const parent = git(deps.cwd, "rev-parse", `${REF}~3`).trim();
+		const tip = git(deps.cwd, "rev-parse", LIVE).trim();
+		const parent = git(deps.cwd, "rev-parse", `${LIVE}~3`).trim();
 		git(w.remote, "update-ref", REF, parent);
 
 		await expect(pushThread(payload, deps.cwd, log)).resolves.toBe("pushed");
@@ -464,6 +466,63 @@ describe("pushThread (the always() step)", () => {
 		expect(log.warning).toHaveBeenCalledWith(
 			expect.stringContaining("was rejected"),
 		);
+	});
+});
+
+describe("run (durable) when the agent moves refs (#46)", () => {
+	const agentRuns = (command: string) => [
+		fauxAssistantMessage([fauxToolCall("bash", { command })], {
+			stopReason: "toolUse",
+		}),
+		fauxAssistantMessage("done"),
+	];
+
+	it("answers when the agent fetches or deletes refs/pi/* mid-run", async () => {
+		const w = world();
+		w.faux.setResponses(
+			agentRuns(
+				"git fetch -q origin '+refs/pi/*:refs/pi/*'; git update-ref -d " + REF,
+			),
+		);
+		const deps = w.deps(w.comment("@pi go"));
+		await run(deps);
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain("### 🤖 pi Response\n\ndone");
+		expect(deps.log.setFailed).not.toHaveBeenCalled();
+		expect(git(w.remote, "rev-parse", REF).trim()).toBe(
+			git(deps.cwd, "rev-parse", LIVE).trim(),
+		);
+	});
+
+	it("reports a session that failed in storage on the comment, and fails the step", async () => {
+		const w = world();
+		w.faux.setResponses(agentRuns(`git update-ref -d ${LIVE}`));
+		const trigger = w.comment("@pi go");
+		const deps = w.deps(trigger);
+		await run(deps);
+		expect(w.gh.posted).toHaveLength(1);
+		expect(w.gh.posted[0]).toContain("### ❌ pi Error");
+		expect(w.gh.posted[0]).toContain("Session failed after a storage error");
+		expect(w.gh.posted[0]).toContain(`Ref ${LIVE} moved`);
+		expect(w.reacted("confused")).toContain(trigger.id);
+		expect(deps.log.setFailed).toHaveBeenCalledWith(
+			expect.stringContaining("pi could not answer 1 comment(s)"),
+		);
+	});
+
+	it("leaves a remote that is ahead of the local ref alone, in the always() step", async () => {
+		const w = world();
+		w.faux.setResponses([fauxAssistantMessage("ok")]);
+		const deps = w.deps(w.comment("@pi go"));
+		await run(deps);
+		const tip = git(w.remote, "rev-parse", REF).trim();
+		git(deps.cwd, "update-ref", LIVE, `${LIVE}~2`);
+		const log = { info: vi.fn(), warning: vi.fn() };
+		await expect(pushThread(deps.payload, deps.cwd, log)).resolves.toBe(
+			"up-to-date",
+		);
+		expect(log.warning).not.toHaveBeenCalled();
+		expect(git(w.remote, "rev-parse", REF).trim()).toBe(tip);
 	});
 });
 
@@ -1015,7 +1074,11 @@ describe("run (durable) with working-tree continuity", () => {
 		);
 		expect(log.warning).not.toHaveBeenCalled();
 		expect(git(w.remote, "rev-parse", WORKTREES).trim()).toBe(
-			git(deps.cwd, "rev-parse", WORKTREES).trim(),
+			git(
+				deps.cwd,
+				"rev-parse",
+				WORKTREES.replace("refs/pi/", "refs/pi-action/"),
+			).trim(),
 		);
 		await expect(pushThread(deps.payload, deps.cwd, log)).resolves.toBe(
 			"up-to-date",
