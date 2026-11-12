@@ -204,16 +204,38 @@ describe("working-tree snapshot inputs", () => {
 		});
 	});
 
-	it("falls back to the defaults for values that are not valid", () => {
-		const inputs = readActionInputs(
-			reader({
-				worktree_snapshots: "maybe",
-				worktree_snapshot_max_file_mb: "-1",
-			}),
-			{},
-		);
-		expect(inputs.worktreeSnapshots).toBe(true);
-		expect(inputs.worktreeLimits.maxFileBytes).toBe(10 * 1024 * 1024);
-		expect(inputs.worktreeLimits.exclude).toStrictEqual([]);
+	it.each([
+		...["true", "on", "", "maybe"].map((v) => [v, true] as const),
+		...["false", "off", "0"].map((v) => [v, false] as const),
+	])("reads worktree_snapshots %o as %s", (value, expected) => {
+		expect(
+			readActionInputs(reader({ worktree_snapshots: value }), {})
+				.worktreeSnapshots,
+		).toBe(expected);
+	});
+
+	it.each(
+		(
+			[
+				[
+					"worktree_snapshot_max_file_mb",
+					"maxFileBytes",
+					DEFAULTS.worktreeSnapshotMaxFileMb,
+				],
+				[
+					"worktree_snapshot_max_total_mb",
+					"maxTotalBytes",
+					DEFAULTS.worktreeSnapshotMaxTotalMb,
+				],
+			] as const
+		).flatMap(([name, key, mb]) =>
+			["", "0", "-1", "1.5", "abc"].map(
+				(value) => [name, value, key, mb] as const,
+			),
+		),
+	)("falls back to the default of %s for %o", (name, value, key, mb) => {
+		const { worktreeLimits } = readActionInputs(reader({ [name]: value }), {});
+		expect(worktreeLimits[key]).toBe(mb * 1024 * 1024);
+		expect(worktreeLimits.exclude).toStrictEqual([]);
 	});
 });

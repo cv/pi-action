@@ -313,15 +313,18 @@ describe("createGitHubClient", () => {
 });
 
 describe("isForkPullRequest", () => {
-	it("tells a pull request from a fork by its head repository", () => {
-		const pr = (head: string) => ({
-			pull_request: {
-				head: { repo: { full_name: head } },
-				base: { repo: { full_name: "o/r" } },
-			},
-		});
-		expect(isForkPullRequest(pr("fork/r"))).toBe(true);
-		expect(isForkPullRequest(pr("o/r"))).toBe(false);
-		expect(isForkPullRequest({ issue: { number: 1 } })).toBe(false);
+	const pr = (head: string) => ({
+		pull_request: {
+			head: { repo: { full_name: head } },
+			base: { repo: { full_name: "o/r" } },
+		},
+	});
+
+	it.each([
+		["a pull request from a fork", pr("fork/r"), true],
+		["a pull request from the same repository", pr("o/r"), false],
+		["an issue", { issue: { number: 1 } }, false],
+	])("%s: %s", (_name, payload, expected) => {
+		expect(isForkPullRequest(payload)).toBe(expected);
 	});
 });

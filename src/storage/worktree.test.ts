@@ -187,42 +187,45 @@ describe("working-tree snapshots", () => {
 		expect(read(fresh, "feature.txt")).toBe("committed, then edited\n");
 	});
 
-	it("merges the snapshot onto a remote branch that moved ahead", async () => {
+	it.each([
+		{
+			name: "merges the snapshot onto a remote branch that moved ahead",
+			ours: ["keep.txt", "keep, changed\n"],
+			theirs: ["other.txt", "someone else\n"],
+			outcome: { status: "restored", moved: true, conflicts: [] },
+			files: {
+				"keep.txt": "keep, changed\n",
+				"other.txt": "someone else\n",
+			},
+		},
+		{
+			name: "leaves conflict markers when the moved branch changed the same lines",
+			ours: ["conflict.txt", "pi's\n"],
+			theirs: ["conflict.txt", "theirs\n"],
+			outcome: {
+				status: "restored",
+				moved: true,
+				staged: false,
+				conflicts: ["conflict.txt"],
+			},
+			files: { "conflict.txt": expect.stringContaining("<<<<<<<") },
+		},
+	] as const)("$name", async ({ ours, theirs, outcome, files }) => {
 		const w = world();
 		const dir = w.clone();
-		write(dir, "keep.txt", "keep, changed\n");
+		write(dir, ours[0], ours[1]);
 		const record = await snapshot(dir);
-		write(w.seed, "other.txt", "someone else\n");
-		sh(w.seed, "add", "other.txt");
-		sh(w.seed, "commit", "-q", "-m", "other");
+		write(w.seed, theirs[0], theirs[1]);
+		sh(w.seed, "add", theirs[0]);
+		sh(w.seed, "commit", "-q", "-m", "theirs");
 		sh(w.seed, "push", "-q", "origin", "main");
 		const fresh = freshCheckout(w, dir);
-		const outcome = await restoreSnapshot(fresh, record);
-		expect(outcome).toMatchObject({
-			status: "restored",
-			moved: true,
-			conflicts: [],
-		});
-		expect(read(fresh, "keep.txt")).toBe("keep, changed\n");
-		expect(read(fresh, "other.txt")).toBe("someone else\n");
-	});
-
-	it("leaves conflict markers when the moved branch changed the same lines", async () => {
-		const w = world();
-		const dir = w.clone();
-		write(dir, "conflict.txt", "pi's\n");
-		const record = await snapshot(dir);
-		write(w.seed, "conflict.txt", "theirs\n");
-		sh(w.seed, "commit", "-q", "-am", "theirs");
-		sh(w.seed, "push", "-q", "origin", "main");
-		const fresh = freshCheckout(w, dir);
-		const outcome = await restoreSnapshot(fresh, record);
-		expect(outcome).toMatchObject({
-			status: "restored",
-			staged: false,
-			conflicts: ["conflict.txt"],
-		});
-		expect(read(fresh, "conflict.txt")).toContain("<<<<<<<");
+		await expect(restoreSnapshot(fresh, record)).resolves.toMatchObject(
+			outcome,
+		);
+		for (const [path, content] of Object.entries(files)) {
+			expect(read(fresh, path)).toStrictEqual(content);
+		}
 	});
 
 	it("reports a diverged branch and leaves the checkout alone", async () => {

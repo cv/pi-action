@@ -117,6 +117,8 @@ async function setup() {
 	};
 }
 
+type World = Awaited<ReturnType<typeof setup>>;
+
 type Ask = (question: UiQuestion) => Promise<{ url?: string }>;
 
 /** The question the guard asked. */
@@ -236,16 +238,21 @@ describe("WorktreeContinuity", () => {
 			expect(doc?.wrapper).toBe(sh(s.dir, "rev-parse", REF).trim());
 		});
 
-		it("asks, without touching the files, when the newer snapshot has work that exists nowhere else", async () => {
+		/** The guard's question, asked: a newer snapshot on the root has work only it has. */
+		async function asked() {
 			const { s, fork } = await rewound();
 			s.write("newer, unique\n");
-			await s.continuity().checkpoint(s.storage.tip);
+			const newer = await s.continuity().checkpoint(s.storage.tip);
 			s.freshCheckout();
 			const ask = vi.fn<Ask>(async () => ({ url: "https://q" }));
-			await expect(s.continuity(fork).restore({ ask })).resolves.toStrictEqual({
-				kind: "asked",
-				url: "https://q",
-			});
+			const result = await s.continuity(fork).restore({ ask });
+			const answer = (choice: string) => answerTo(askedQuestion(ask), choice);
+			return { s, fork, ask, result, newer, answer };
+		}
+
+		it("asks, without touching the files, when the newer snapshot has work that exists nowhere else", async () => {
+			const { s, ask, result } = await asked();
+			expect(result).toStrictEqual({ kind: "asked", url: "https://q" });
 			expect(s.read()).toBe("base\n");
 			const question = askedQuestion(ask);
 			expect(question).toMatchObject({
@@ -253,36 +260,25 @@ describe("WorktreeContinuity", () => {
 				options: [REWIND_OPTION, KEEP_OPTION, CANCEL_OPTION],
 			});
 			expect(question.title).toContain("`file.txt`");
-			const answer = (choice: string) => answerTo(question, choice);
-
-			// Cancel: nothing happens.
-			const cancelled = s.continuity(fork);
-			await expect(
-				cancelled.restore({ ask, answer: answer(CANCEL_OPTION) }),
-			).resolves.toStrictEqual({ kind: "cancelled" });
-			expect(cancelled.answered).toBe(true);
-			expect(s.read()).toBe("base\n");
-
-			// Keep the latest files.
-			const kept = s.continuity(fork);
-			await kept.restore({ ask, answer: answer(KEEP_OPTION) });
-			expect(s.read()).toBe("newer, unique\n");
 		});
 
-		it("rewinds the files when asked to, keeping the newer snapshot on the ref", async () => {
-			const { s, fork } = await rewound();
-			s.write("newer, unique\n");
-			const newer = await s.continuity().checkpoint(s.storage.tip);
-			s.freshCheckout();
-			const ask = vi.fn<Ask>(async () => ({ url: "https://q" }));
-			await s.continuity(fork).restore({ ask });
+		it.each([
+			[CANCEL_OPTION, "base\n", { kind: "cancelled" }],
+			[KEEP_OPTION, "newer, unique\n", { kind: "ready" }],
+			[REWIND_OPTION, "older\n", { kind: "ready" }],
+		])("answered %o: the files are %o", async (choice, files, kind) => {
+			const { s, fork, ask, answer } = await asked();
 			const c = s.continuity(fork);
-			const result = await c.restore({
-				ask,
-				answer: answerTo(askedQuestion(ask), REWIND_OPTION),
-			});
-			expect(result.kind).toBe("ready");
-			expect(s.read()).toBe("older\n");
+			await expect(
+				c.restore({ ask, answer: answer(choice) }),
+			).resolves.toMatchObject(kind);
+			expect(c.answered).toBe(true);
+			expect(s.read()).toBe(files);
+		});
+
+		it("keeps the newer snapshot on the ref after a rewind, and doesn't ask again", async () => {
+			const { s, fork, ask, newer, answer } = await asked();
+			await s.continuity(fork).restore({ ask, answer: answer(REWIND_OPTION) });
 			expect(s.previousWrapper()).toBe(newer);
 			// Next run: the conversation and the newest snapshot agree, so nothing is asked.
 			s.freshCheckout();
@@ -307,32 +303,42 @@ describe("WorktreeContinuity", () => {
 		});
 	});
 
-	it("doesn't restore into a checkout with uncommitted changes", async () => {
+	it.each<{
+		name: string;
+		spoil: (s: World) => Promise<void> | void;
+		message: string;
+		files: string;
+	}>([
+		{
+			name: "doesn't restore into a checkout with uncommitted changes",
+			spoil: (s: World) => {
+				s.write("someone else's\n");
+			},
+			message: "already had uncommitted changes",
+			files: "someone else's\n",
+		},
+		{
+			name: "reports a restore failure and starts clean",
+			// The snapshot's commits are gone (say, a bad ref): the restore fails and the run starts clean.
+			spoil: async (s: World) => {
+				sh(s.dir, "update-ref", "-d", REF);
+				await s.root.commit(async (tx) => {
+					(await tx.doc(WorktreeDoc, s.root.id)).wrapper = "0".repeat(40);
+				}, context);
+			},
+			message: "started from a clean checkout",
+			files: "base\n",
+		},
+	])("$name", async ({ spoil, message, files }) => {
 		const s = await setup();
 		s.write("pi's\n");
 		await s.continuity().checkpoint(s.storage.tip);
 		s.freshCheckout();
-		s.write("someone else's\n");
+		await spoil(s);
 		await expect(s.continuity().restore()).resolves.toMatchObject({
-			message: expect.stringContaining("already had uncommitted changes"),
+			message: expect.stringContaining(message),
 		});
-		expect(s.read()).toBe("someone else's\n");
-	});
-
-	it("reports a restore failure and starts clean", async () => {
-		const s = await setup();
-		s.write("pi's\n");
-		await s.continuity().checkpoint(s.storage.tip);
-		s.freshCheckout();
-		// The snapshot's commits are gone (say, a bad ref): the restore fails and the run starts clean.
-		sh(s.dir, "update-ref", "-d", REF);
-		await s.root.commit(async (tx) => {
-			(await tx.doc(WorktreeDoc, s.root.id)).wrapper = "0".repeat(40);
-		}, context);
-		await expect(s.continuity().restore()).resolves.toMatchObject({
-			message: expect.stringContaining("started from a clean checkout"),
-		});
-		expect(s.read()).toBe("base\n");
+		expect(s.read()).toBe(files);
 	});
 });
 
@@ -366,20 +372,24 @@ describe("restoreMessage", () => {
 		expect(message).toContain("`.env` (matches worktree_snapshot_exclude)");
 	});
 
-	it("explains a diverged branch and a failure, with the snapshot's sha", () => {
-		expect(
-			restoreMessage(
-				{
-					status: "diverged",
-					branch: "main",
-					head: "b".repeat(40),
-					remoteHead: "d".repeat(40),
-				},
-				record,
-			),
-		).toContain(`git stash apply --index aaaaaaa`);
-		expect(
-			restoreMessage({ status: "failed", error: "boom" }, record),
-		).toContain("failed (boom)");
-	});
+	it.each([
+		[
+			"a diverged branch",
+			{
+				status: "diverged",
+				branch: "main",
+				head: "b".repeat(40),
+				remoteHead: "d".repeat(40),
+			},
+			"git stash apply --index aaaaaaa",
+		],
+		["a failure", { status: "failed", error: "boom" }, "failed (boom)"],
+	] as const)(
+		"explains %s, with the snapshot's sha",
+		(_name, outcome, text) => {
+			const message = restoreMessage(outcome, record);
+			expect(message).toContain(text);
+			expect(message).toContain("a".repeat(40));
+		},
+	);
 });
