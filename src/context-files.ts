@@ -64,14 +64,14 @@ interface Source {
 }
 
 /** Whether `child` is `parent` or inside it. */
-function isInside(parent: string, child: string): boolean {
+export function isInside(parent: string, child: string): boolean {
 	const rel = relative(parent, child);
 	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
 const toPosix = (path: string): string => path.split(sep).join("/");
 
-async function readOptional(path: string): Promise<string | undefined> {
+export async function readOptional(path: string): Promise<string | undefined> {
 	try {
 		return await readFile(path, "utf8");
 	} catch {
@@ -196,7 +196,7 @@ function nestedFiles(paths: readonly string[]): string[] {
 }
 
 /** At most `max` bytes of `text`, cut between characters. */
-function cutUtf8(text: string, max: number): string {
+export function cutUtf8(text: string, max: number): string {
 	let bytes = 0;
 	let end = 0;
 	for (const char of text) {

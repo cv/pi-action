@@ -135,6 +135,7 @@ export function createActionInputs(
 		agentDir: undefined,
 		contextFiles: DEFAULTS.contextFiles,
 		contextFilesMaxBytes: DEFAULTS.contextFilesMaxBytes,
+		systemPromptFiles: DEFAULTS.systemPromptFiles,
 		worktreeSnapshots: DEFAULTS.worktreeSnapshots,
 		worktreeLimits: DEFAULT_SNAPSHOT_LIMITS,
 		excludeTools: [],
