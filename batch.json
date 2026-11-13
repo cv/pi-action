@@ -1,1 +1,1 @@
-{"format":1,"seq":700,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"feat/53-agents-md-context 61 MERGED\nfeat/65-base-system-prompt 70 MERGED\nfeat/67-system-prompt-files 72 MERGED\n"]]}}]}
+{"format":1,"seq":701,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"feat/customizable-prompt-templates 16 MERGED\nfeat/extension-prompts-and-tools 56 MERGED\nfeat/pre-commit-hook 14 MERGED\n"]]}}]}
