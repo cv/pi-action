@@ -2,7 +2,10 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import type { Context as ModelContext } from "@earendil-works/pi-ai";
+import {
+	getSystemMessageText,
+	type Context as ModelContext,
+} from "@earendil-works/pi-ai";
 import {
 	fauxAssistantMessage,
 	fauxToolCall,
@@ -19,6 +22,7 @@ import {
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { describe, expect, it } from "vitest";
 
+import { createBuiltinExtension } from "./builtin-extension.ts";
 import { loadProjectContext } from "./context-files.ts";
 import { createLogger, fauxModels, tempDir, toolsOf } from "./test-helpers.ts";
 import { Thread, type ThreadOptions } from "./thread.ts";
@@ -94,27 +98,118 @@ const sectionKeys = (context: ModelContext) =>
 		m.role === "system" ? [Object.keys(m.sections ?? {})] : [],
 	);
 
-describe("Thread: the project_context section (pi-action-context)", () => {
-	it("comes before the extensions' sections", async () => {
-		const context = await firstRequest([pit], {
-			projectContext: "# Project Context\n\nRepo rules.",
-		});
-		expect(sectionKeys(context)[0]).toStrictEqual(["project_context", "pit"]);
-		expect(context.messages[0]).toMatchObject({
-			role: "system",
-			sections: {
-				project_context:
-					"<project_context>\n# Project Context\n\nRepo rules.\n</project_context>",
-			},
-		});
+/** The built-in `pi-action` extension, with these context files and no skills. */
+const builtin = (projectContext?: string) =>
+	createBuiltinExtension({ projectContext, skills: new Map() });
+
+/** pit 0.36: its `typescript` tool, with the coding tools hidden from the model. */
+const pitOnly = defineExtension({
+	...pit,
+	name: "pit-only",
+	wraps: (CodingTools.tools ?? []).map((coding) =>
+		wrapTool(coding, (t) => ({ ...t, callers: ["tools"] })),
+	),
+});
+
+const PREAMBLE =
+	"You are a coding assistant running inside pi, a coding agent harness. Help users inspect files, run commands, and modify code.";
+const DEFAULT_TOOLS = [
+	"<tools>",
+	"- read: Read file contents",
+	"- write: Create or overwrite files",
+	"- edit: Make precise file edits with exact text replacement, including multiple disjoint edits in one call",
+	"- bash: Execute bash commands (ls, grep, find, etc.)",
+	"",
+	"Additional tools may be available.",
+	"</tools>",
+].join("\n");
+const DEFAULT_RULES = [
+	"<rules>",
+	"- Use bash for file operations like ls, rg, find",
+	"- Use read to examine files instead of cat or sed.",
+	"- Use write only for new files or complete rewrites.",
+	"- Use edit for targeted changes. Batch changes to one file in a single call.",
+	"- Each edits[].oldText must exactly and uniquely match the original file. Keep matches short and non-overlapping; merge nearby changes without including large unchanged regions.",
+	"- Be concise in your responses",
+	"- Show file paths clearly when working with files",
+	"</rules>",
+].join("\n");
+const PI_RULES =
+	"- Be concise in your responses\n- Show file paths clearly when working with files";
+
+/** The sections of the first system message. */
+const sectionsOf = (context: ModelContext) => {
+	const [first] = context.messages;
+	return first?.role === "system" ? (first.sections ?? {}) : {};
+};
+
+describe("Thread: pi's system prompt sections (the built-in pi-action extension)", () => {
+	it("renders pi's sections in pi's order, then the extensions' sections", async () => {
+		const cwd = tempDir();
+		const context = await firstRequest(
+			[builtin("# Project Context\n\nRepo rules."), pit],
+			{ cwd },
+		);
+		expect(sectionKeys(context)).toStrictEqual([
+			["preamble", "tools", "rules", "project_context", "cwd", "pit"],
+		]);
+		const [system] = context.messages;
+		expect(system?.role === "system" && getSystemMessageText(system)).toBe(
+			[
+				PREAMBLE,
+				DEFAULT_TOOLS,
+				DEFAULT_RULES,
+				"<project_context>\n# Project Context\n\nRepo rules.\n</project_context>",
+				`<cwd>\n${cwd}\n</cwd>`,
+				"<pit>\npit's instructions\n</pit>",
+			].join("\n\n"),
+		);
+		expect(system).toMatchObject({ role: "system", content: "" });
 	});
 
-	it("is left out without context files", async () => {
-		const context = await firstRequest([pit]);
-		expect(sectionKeys(context)[0]).toStrictEqual(["pit"]);
+	it("lists the default tools and pi's rules for them", async () => {
+		const sections = sectionsOf(await firstRequest([builtin()]));
+		expect(sections["preamble"]).toBe(PREAMBLE);
+		expect(sections["tools"]).toBe(DEFAULT_TOOLS);
+		expect(sections["rules"]).toBe(DEFAULT_RULES);
+		expect(sections["project_context"]).toBeUndefined();
 	});
 
-	it("does not change when the agent edits AGENTS.md during the run", async () => {
+	it("lists only pit's typescript tool when pit hides the coding tools, without pit's guidelines", async () => {
+		const context = await firstRequest([builtin(), pitOnly]);
+		expect(toolNames(context)).toStrictEqual(["typescript"]);
+		const sections = sectionsOf(context);
+		expect(sections["tools"]).toBe(
+			"<tools>\n- typescript: Execute TypeScript with explicit function dependencies\n\nAdditional tools may be available.\n</tools>",
+		);
+		expect(sections["rules"]).toBe(`<rules>\n${PI_RULES}\n</rules>`);
+	});
+
+	it("leaves out the tools of exclude_tools, and bash's rule without bash", async () => {
+		const sections = sectionsOf(
+			await firstRequest([builtin()], {
+				tools: { exclude: ["bash"], hidden: [] },
+			}),
+		);
+		expect(sections["tools"]).not.toContain("bash");
+		expect(sections["tools"]).toContain("- edit: ");
+		expect(sections["rules"]).not.toContain("Use bash");
+		expect(sections["rules"]).toContain("Use read to examine files");
+	});
+
+	it("says (none) without tools", async () => {
+		const sections = sectionsOf(
+			await firstRequest([builtin()], {
+				tools: { exclude: ["read", "write", "edit", "bash"], hidden: [] },
+			}),
+		);
+		expect(sections["tools"]).toBe(
+			"<tools>\n(none)\n\nAdditional tools may be available.\n</tools>",
+		);
+		expect(sections["rules"]).toBe(`<rules>\n${PI_RULES}\n</rules>`);
+	});
+
+	it("does not change during a run, also when the agent edits AGENTS.md", async () => {
 		const cwd = tempDir();
 		writeFileSync(join(cwd, "AGENTS.md"), "Old rules.");
 		const { text } = await loadProjectContext({
@@ -144,7 +239,7 @@ describe("Thread: the project_context section (pi-action-context)", () => {
 			models,
 			model,
 			log: createLogger(),
-			projectContext: text,
+			extensions: [builtin(text), pit],
 		});
 		try {
 			const submission = await thread.submit({
@@ -157,13 +252,33 @@ describe("Thread: the project_context section (pi-action-context)", () => {
 			await thread.close();
 		}
 		// One system message in both requests: no "Updated system prompt section" after the edit.
+		const keys = [
+			"preamble",
+			"tools",
+			"rules",
+			"project_context",
+			"cwd",
+			"pit",
+		];
 		expect(seen.map((context) => sectionKeys(context))).toStrictEqual([
-			[["project_context"]],
-			[["project_context"]],
+			[keys],
+			[keys],
 		]);
-		const second = seen.map((context) => systemText(context)).at(-1);
+		const [first, second] = seen.map((context) => systemText(context));
+		expect(second).toBe(first);
 		expect(second).toContain("Old rules.");
 		expect(second).not.toContain("New rules.");
+	});
+
+	it("lets an extension wrap a built-in section", async () => {
+		const wrapper = defineExtension({
+			name: "wrapper",
+			wraps: [
+				wrapSection("rules", (s) => ({ ...s, render: () => "my rules" })),
+			],
+		});
+		const sections = sectionsOf(await firstRequest([builtin(), wrapper]));
+		expect(sections["rules"]).toBe("<rules>\nmy rules\n</rules>");
 	});
 });
 
