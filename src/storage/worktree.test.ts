@@ -92,6 +92,24 @@ function freshCheckout(w: ReturnType<typeof world>, from: string) {
 	return dir;
 }
 
+describe("captureState", () => {
+	it("sees a change of the same size and mtime right after the index was written (racy git)", async () => {
+		const w = world();
+		const dir = w.clone();
+		// On a fast runner, all of this happens in one tick of the clock: only the mtimes tell git to look.
+		sh(dir, "config", "core.trustctime", "false");
+		const t = new Date("2024-01-01T00:00:00Z");
+		utimesSync(join(dir, "keep.txt"), t, t);
+		sh(dir, "update-index", "-q", "--refresh");
+		utimesSync(join(dir, ".git", "index"), t, t);
+		write(dir, "keep.txt", "KEEP\n");
+		utimesSync(join(dir, "keep.txt"), t, t);
+		expect(status(dir)).toContain("keep.txt");
+		expect(isClean(await captureState(dir))).toBe(false);
+	});
+});
+
+
 describe("working-tree snapshots", () => {
 	it("round-trips every kind of change, staged vs unstaged included", async () => {
 		const w = world();
