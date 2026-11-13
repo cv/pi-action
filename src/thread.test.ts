@@ -113,16 +113,18 @@ const pitOnly = defineExtension({
 
 const PREAMBLE =
 	"You are a coding assistant running inside pi, a coding agent harness. Help users inspect files, run commands, and modify code.";
-const DEFAULT_TOOLS = [
-	"<tools>",
+const DEFAULT_TOOL_LINES = [
 	"- read: Read file contents",
 	"- write: Create or overwrite files",
 	"- edit: Make precise file edits with exact text replacement, including multiple disjoint edits in one call",
 	"- bash: Execute bash commands (ls, grep, find, etc.)",
-	"",
-	"Additional tools may be available.",
-	"</tools>",
-].join("\n");
+];
+const PIT_TOOL_LINE =
+	"- typescript: Execute TypeScript with explicit function dependencies";
+/** The `tools` section with these lines. */
+const toolsSection = (lines: readonly string[]) =>
+	`<tools>\n${lines.join("\n")}\n\nAdditional tools may be available.\n</tools>`;
+const DEFAULT_TOOLS = toolsSection(DEFAULT_TOOL_LINES);
 const DEFAULT_RULES = [
 	"<rules>",
 	"- Use bash for file operations like ls, rg, find",
@@ -162,10 +164,7 @@ describe("Thread: pi's system prompt sections (the built-in pi-action extension)
 		expect(systemPromptText(context)).toBe(
 			[
 				PREAMBLE,
-				DEFAULT_TOOLS.replace(
-					"</tools>",
-					"- typescript: Execute TypeScript with explicit function dependencies\n\nAdditional tools may be available.\n</tools>",
-				).replace("etc.)\n\nAdditional tools may be available.\n", "etc.)\n"),
+				toolsSection([...DEFAULT_TOOL_LINES, PIT_TOOL_LINE]),
 				DEFAULT_RULES,
 				"<project_context>\n# Project Context\n\nRepo rules.\n</project_context>",
 				`<cwd>\n${cwd}\n</cwd>`,
@@ -188,7 +187,7 @@ describe("Thread: pi's system prompt sections (the built-in pi-action extension)
 		expect(toolNames(context)).toStrictEqual(["typescript"]);
 		const sections = sectionsOf(context);
 		expect(sections["tools"]).toBe(
-			"<tools>\n- typescript: Execute TypeScript with explicit function dependencies\n\nAdditional tools may be available.\n</tools>",
+			toolsSection([PIT_TOOL_LINE]),
 		);
 		expect(sections["rules"]).toBe(`<rules>\n${PI_RULES}\n</rules>`);
 	});
@@ -213,7 +212,7 @@ describe("Thread: pi's system prompt sections (the built-in pi-action extension)
 		expect(toolNames(context)).toStrictEqual(["custom"]);
 		const sections = sectionsOf(context);
 		expect(sections["tools"]).toBe(
-			"<tools>\n(none)\n\nAdditional tools may be available.\n</tools>",
+			toolsSection(["(none)"]),
 		);
 		expect(sections["rules"]).toBe(`<rules>\n${PI_RULES}\n</rules>`);
 	});
