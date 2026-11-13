@@ -68,7 +68,8 @@ describe("createDurableExtensions", () => {
 		const [[host]] = a.create.mock.calls as [[DurableHostOptions]];
 		expect(host).toMatchObject({ cwd: opts.cwd, trustProject: true, ui });
 		expect(host.images.prepare).toBeTypeOf("function");
-		expect(b.create.mock.calls[0]?.[0].images).toBe(host.images);
+		const [[hostB]] = b.create.mock.calls as [[DurableHostOptions]];
+		expect(hostB.images).toBe(host.images);
 		const prefix = join(String(opts.env["RUNNER_TEMP"]), "pi-action-agent-");
 		expect(host.agentDir.startsWith(prefix)).toBe(true);
 		expect(existsSync(host.agentDir)).toBe(true);
