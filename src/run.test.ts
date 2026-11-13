@@ -436,7 +436,10 @@ describe("run (durable)", () => {
 		expect(lines[0]).toBe("::group::Setup");
 		expect(lines.slice(setupEnd + 1)).toStrictEqual([
 			expect.stringMatching(
-				/^🤖 faux\S*\/\S+ · tools: read, write, edit, bash$/u,
+				/^thinking_level: faux\S*\/\S+ has no reasoning support; using off$/u,
+			),
+			expect.stringMatching(
+				/^🤖 faux\S*\/\S+ · thinking off · tools: read, write, edit, bash$/u,
 			),
 			`::group::🧵 Thread ${REF}: new`,
 			expect.stringContaining(

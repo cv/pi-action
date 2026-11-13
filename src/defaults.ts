@@ -10,6 +10,8 @@ export const DEFAULTS = {
 	pollInterval: 15,
 	provider: "anthropic",
 	model: "claude-sonnet-5-5",
+	/** pi's DEFAULT_THINKING_LEVEL. */
+	thinkingLevel: "medium",
 	customProviderApi: "openai-completions",
 	customProviderAuthHeader: false,
 	customModelReasoning: false,

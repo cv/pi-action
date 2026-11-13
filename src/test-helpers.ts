@@ -120,6 +120,7 @@ export function createActionInputs(
 		allowedAssociations: [...DEFAULTS.allowedAssociations],
 		provider: DEFAULTS.provider,
 		model: DEFAULTS.model,
+		thinkingLevel: DEFAULTS.thinkingLevel,
 		timeout: DEFAULTS.timeout,
 		githubToken: "test-token",
 		apiKey: undefined,
@@ -144,14 +145,19 @@ export function createActionInputs(
 	};
 }
 
-/** A faux provider in a fresh model registry, and the pi-durable agent config that uses its model. */
-export function fauxModels(): {
+/**
+ * A faux provider in a fresh model registry, and the pi-durable agent config that uses its model; a model with
+ * reasoning support when `reasoning`.
+ */
+export function fauxModels({ reasoning = false } = {}): {
 	faux: ReturnType<typeof fauxProvider>;
 	models: ReturnType<typeof createModels>;
 	model: Model<Api>;
 	agent: { model: { provider: string; modelId: string } };
 } {
-	const faux = fauxProvider();
+	const faux = fauxProvider(
+		reasoning ? { models: [{ id: "faux-reasoning", reasoning: true }] } : {},
+	);
 	const models = createModels();
 	models.setProvider(faux.provider);
 	const model = faux.getModel();

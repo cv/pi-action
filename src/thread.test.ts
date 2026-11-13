@@ -5,6 +5,8 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
 	getSystemMessageText,
 	type Context as ModelContext,
+	type ModelThinkingLevel,
+	type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import {
 	fauxAssistantMessage,
@@ -24,7 +26,13 @@ import { describe, expect, it } from "vitest";
 
 import { createBuiltinExtension } from "./builtin-extension.ts";
 import { loadProjectContext } from "./context-files.ts";
-import { createLogger, fauxModels, tempDir, toolsOf } from "./test-helpers.ts";
+import {
+	createLogger,
+	fauxModels,
+	tempDir,
+	tempRemote,
+	toolsOf,
+} from "./test-helpers.ts";
 import { Thread, type ThreadOptions } from "./thread.ts";
 
 const bash = (CodingTools.tools ?? []).find((tool) => tool.name === "bash");
@@ -387,5 +395,111 @@ describe("Thread: the tools the model sees", () => {
 		).rejects.toThrow(
 			"exclude_tools and model_tools_hidden leave the model with no tools (it would have read, write, edit, bash)",
 		);
+	});
+});
+
+/** The `reasoning` option of each request the faux provider gets while `thread` answers one input. */
+async function ask(
+	thread: Thread,
+	faux: ReturnType<typeof fauxModels>["faux"],
+	key: string,
+): Promise<SimpleStreamOptions["reasoning"]> {
+	let seen: SimpleStreamOptions | undefined;
+	faux.setResponses([
+		(_context, options) => {
+			seen = options;
+			return fauxAssistantMessage("ok");
+		},
+	]);
+	const submission = await thread.submit({ key, content: "hi", data: {} });
+	await submission.wait(BACKGROUND_CONTEXT);
+	return seen?.reasoning;
+}
+
+describe("Thread: the thinking level", () => {
+	async function oneRequest(
+		thinkingLevel: ModelThinkingLevel | undefined,
+		reasoning: boolean,
+	) {
+		const { faux, models, model } = fauxModels({ reasoning });
+		const log = createLogger();
+		const thread = await Thread.open({
+			cwd: tempDir(),
+			models,
+			model,
+			thinkingLevel,
+			log,
+		});
+		try {
+			return {
+				reasoning: await ask(thread, faux, "k"),
+				thinkingLevel: thread.thinkingLevel,
+				log,
+			};
+		} finally {
+			await thread.close();
+		}
+	}
+
+	it("sends the level in the request options of a model with reasoning", async () => {
+		const result = await oneRequest("high", true);
+		expect(result.reasoning).toBe("high");
+		expect(result.thinkingLevel).toBe("high");
+		expect(result.log.info).not.toHaveBeenCalledWith(
+			expect.stringContaining("thinking_level"),
+		);
+	});
+
+	it("sends off to a model without reasoning, with a log line", async () => {
+		const result = await oneRequest("medium", false);
+		expect(result.reasoning).toBeUndefined();
+		expect(result.thinkingLevel).toBe("off");
+		expect(result.log.info).toHaveBeenCalledWith(
+			expect.stringMatching(
+				/^thinking_level: faux\S*\/\S+ has no reasoning support; using off$/u,
+			),
+		);
+	});
+
+	it("caps a level the model does not support, as pi does", async () => {
+		// Without a thinkingLevelMap entry, xhigh is unsupported; the nearest level below it is high.
+		const result = await oneRequest("xhigh", true);
+		expect(result.reasoning).toBe("high");
+		expect(result.log.info).toHaveBeenCalledWith(
+			expect.stringMatching(
+				/^thinking_level: faux\S*\/faux-reasoning does not support thinking level xhigh; using high$/u,
+			),
+		);
+	});
+
+	it("leaves the conversation's level (off) when none is given", async () => {
+		const result = await oneRequest(undefined, true);
+		expect(result.reasoning).toBeUndefined();
+		expect(result.thinkingLevel).toBeUndefined();
+	});
+
+	it("switches a continuing thread to the level of the new run", async () => {
+		const { faux, models, model } = fauxModels({ reasoning: true });
+		const w = tempRemote();
+		const open = async (cwd: string, thinkingLevel: ModelThinkingLevel) =>
+			Thread.open({
+				cwd,
+				issueNumber: 7,
+				models,
+				model,
+				thinkingLevel,
+				log: createLogger(),
+			});
+		const first = await open(w.clone(), "low");
+		const before = await ask(first, faux, "first");
+		await first.close();
+		const second = await open(w.clone(), "high");
+		try {
+			expect(second.isNew).toBe(false);
+			expect(before).toBe("low");
+			await expect(ask(second, faux, "second")).resolves.toBe("high");
+		} finally {
+			await second.close();
+		}
 	});
 });
