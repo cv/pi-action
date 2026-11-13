@@ -530,12 +530,14 @@ describe("run (durable)", () => {
 		expect(lines.slice(0, setupEnd)).toContain(
 			"System prompt: .pi/SYSTEM.md (15 B, replaces pi's base prompt)",
 		);
-		expect(seen[1]).toContain("You are a coding assistant");
-		expect(seen[1]).not.toContain("You are my bot.");
+		// The untrusted run on the same thread updates the sections back to pi's.
+		expect(seen[1]).toContain('"addendum":null');
+		expect(seen[1].slice(seen[1].lastIndexOf('"role":"system"'))).toContain(
+			"You are a coding assistant",
+		);
 		expect(untrusted.log.info).toHaveBeenCalledWith(
 			"System prompt: not loading .pi/SYSTEM.md: trust_project is off",
 		);
-		expect(seen[2]).not.toContain("Also this.");
 		expect(off.log.info).toHaveBeenCalledWith(
 			"System prompt files: off (system_prompt_files)",
 		);
