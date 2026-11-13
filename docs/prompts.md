@@ -12,13 +12,52 @@ A follow-up does not repeat the issue or the diff, because the thread already ha
 
 ## The system prompt
 
-The system prompt has these sections, in this sequence:
+pi-action sends the system prompt of pi's coding agent (pi 1.5.2, `buildSystemPromptSections`), in pi's order. The built-in `pi-action` extension makes the sections 1 to 6. Each section is tagged as `<key>…</key>`, except `preamble`:
 
-1. `project_context`: the context files of the repository, from the built-in `pi-action-context` extension. Set `context_files: false` to remove it.
-2. `available_skills`: the [skills](skills.md#the-system-prompt) that pi can use, from the built-in `pi-action` extension. It is not there when no skill is listed.
-3. The sections of the pi-durable extensions, in the order of `extensions` (for example pit's guidelines). See [Extensions](extensions.md#pi-durable-extensions).
+1. `preamble`: `You are a coding assistant running inside pi, a coding agent harness. Help users inspect files, run commands, and modify code.`
+2. `tools`: one line for each tool that the model is offered and that has a prompt snippet, then `Additional tools may be available.` If no tool has a snippet: `(none)`.
+3. `rules`: pi's rules for the offered tools, then `Be concise in your responses` and `Show file paths clearly when working with files`.
+4. `project_context`: the [context files](#context-files) of the repository. Set `context_files: false` to remove it.
+5. `available_skills`: the [skills](skills.md#the-system-prompt) that pi can use. It is not there when no skill is listed.
+6. `cwd`: the working directory of the agent, such as `/home/runner/work/xyz/xyz`.
+7. The sections of the pi-durable extensions, in the order of `extensions` (for example pit's guidelines). See [Extensions](extensions.md#pi-durable-extensions).
 
-Without context files, skills, and extensions, the system prompt is empty.
+pi-action leaves out pi's `docs` section, because it has no pi documentation. Extensions can change each section with `wrapSection(key, …)` (see [Override tools and sections](extensions.md#override-tools-and-sections)).
+
+### Tools and rules
+
+The `tools` and `rules` sections show the tools that the model is offered: after `exclude_tools`, `model_tools_hidden`, and the wraps of the extensions (see [Tools the model sees](extensions.md#tools-the-model-sees)). With the default tools, they are:
+
+```text
+<tools>
+- read: Read file contents
+- write: Create or overwrite files
+- edit: Make precise file edits with exact text replacement, including multiple disjoint edits in one call
+- bash: Execute bash commands (ls, grep, find, etc.)
+
+Additional tools may be available.
+</tools>
+
+<rules>
+- Use bash for file operations like ls, rg, find
+- Use read to examine files instead of cat or sed.
+- Use write only for new files or complete rewrites.
+- Use edit for targeted changes. Batch changes to one file in a single call.
+- Each edits[].oldText must exactly and uniquely match the original file. Keep matches short and non-overlapping; merge nearby changes without including large unchanged regions.
+- Be concise in your responses
+- Show file paths clearly when working with files
+</rules>
+```
+
+- **Snippets and guidelines.** pi-action has pi's text for `read`, `write`, `edit`, and `bash`, and pit's snippet for `typescript`. pi's bash guideline about `PI_*` variables is not there, because pi-action does not set them. pit's guidelines are in its own `pit_guidelines` section, so `rules` does not repeat them. A tool of an extension can set `promptSnippet` (a string) and `promptGuidelines` (a list of strings), as pi's tools do. These replace pi-action's text for the tool.
+- **The bash rule.** `Use bash for file operations like ls, rg, find` is there only when the model has `bash` and no `grep`, `find`, or `ls` tool.
+- **pit only.** When pit hides the coding tools, `tools` lists only `typescript`, and `rules` has only pi's two general rules.
+
+### The prompt cache
+
+The tools of a run do not change, and pi-action reads the context files and skills one time for each run. Thus, each section has the same text in all requests of a run, and the prompt cache of the provider stays valid.
+
+A thread from an earlier version of pi-action gets the new sections in its next request. Because the new sections come before the sections that the thread already has, pi-durable removes the sections and adds them again in the new order, one time.
 
 ### Context files
 

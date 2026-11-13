@@ -504,8 +504,10 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			model: findModel(models, inputs.provider, inputs.model),
 			log,
 			remote: deps.remote,
-			projectContext: context,
-			extensions: [createBuiltinExtension({ skills }), ...extensions],
+			extensions: [
+				createBuiltinExtension({ projectContext: context, skills }),
+				...extensions,
+			],
 			tools: { exclude: inputs.excludeTools, hidden: inputs.modelToolsHidden },
 			toolEnv: tools,
 			worktree: worktreeLimits(deps),
