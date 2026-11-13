@@ -247,6 +247,7 @@ describe("loadProjectContext on a pull request from a fork", () => {
 		write(join(seed, "pkg", "AGENTS.MD"), "Pkg rules, upper case.");
 		write(join(seed, "lib", "CLAUDE.MD"), "Lib rules.");
 		write(join(seed, "docs", "AGENTS.md", "notes.txt"), "Not a context file.");
+		write(join(seed, "docs", "CLAUDE.md"), "Docs rules.");
 		git(seed, "add", ".");
 		git(seed, "commit", "-q", "-m", "base");
 		const base = git(seed, "rev-parse", "HEAD").trim();
@@ -259,19 +260,29 @@ describe("loadProjectContext on a pull request from a fork", () => {
 	it("reads the files from the base commit, fetching it when the clone is shallow", async () => {
 		const { cwd, base } = forkCheckout();
 		const log = createLogger();
+		// In the workspace, agent_dir's file comes from the base commit too; its AGENTS.md is a directory.
+		const agentDir = join(cwd, "docs");
 		const context = await loadProjectContext(
-			options({ cwd, base: { sha: base, remote: "origin" }, log }),
+			options({ cwd, agentDir, base: { sha: base, remote: "origin" }, log }),
 		);
 		expect(context.base).toBe(base);
 		expect(
 			context.files.map((file) => [file.label, file.content]),
-		).toStrictEqual([["AGENTS.override.md", "Override rules."]]);
-		expect(context.nested).toStrictEqual(["lib/CLAUDE.MD", "pkg/AGENTS.md"]);
+		).toStrictEqual([
+			["agent_dir/CLAUDE.md", "Docs rules."],
+			["AGENTS.override.md", "Override rules."],
+		]);
+		expect(context.nested).toStrictEqual([
+			"docs/CLAUDE.md",
+			"lib/CLAUDE.MD",
+			"pkg/AGENTS.md",
+		]);
 		expect(context.text).toBe(
 			[
 				"Project-specific instructions and guidelines:",
+				`<project_instructions path="${join(agentDir, "CLAUDE.md")}">\nDocs rules.\n</project_instructions>`,
 				`<project_instructions path="${join(cwd, "AGENTS.override.md")}">\nOverride rules.\n</project_instructions>`,
-				"More context files: lib/CLAUDE.MD, pkg/AGENTS.md. Read the one for the directory you work in.",
+				"More context files: docs/CLAUDE.md, lib/CLAUDE.MD, pkg/AGENTS.md. Read the one for the directory you work in.",
 				`This pull request comes from a fork, so the repository's files above are from its base commit ${base.slice(0, 7)}, not from the pull request.`,
 			].join("\n\n"),
 		);
