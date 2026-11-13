@@ -137,6 +137,12 @@ const DEFAULT_RULES = [
 const PI_RULES =
 	"- Be concise in your responses\n- Show file paths clearly when working with files";
 
+/** The text of the first system message, as the model gets it. */
+const systemPromptText = (context: ModelContext) => {
+	const [first] = context.messages;
+	return first?.role === "system" ? getSystemMessageText(first) : undefined;
+};
+
 /** The sections of the first system message. */
 const sectionsOf = (context: ModelContext) => {
 	const [first] = context.messages;
@@ -153,8 +159,7 @@ describe("Thread: pi's system prompt sections (the built-in pi-action extension)
 		expect(sectionKeys(context)).toStrictEqual([
 			["preamble", "tools", "rules", "project_context", "cwd", "pit"],
 		]);
-		const [system] = context.messages;
-		expect(system?.role === "system" && getSystemMessageText(system)).toBe(
+		expect(systemPromptText(context)).toBe(
 			[
 				PREAMBLE,
 				DEFAULT_TOOLS,
@@ -164,7 +169,7 @@ describe("Thread: pi's system prompt sections (the built-in pi-action extension)
 				"<pit>\npit's instructions\n</pit>",
 			].join("\n\n"),
 		);
-		expect(system).toMatchObject({ role: "system", content: "" });
+		expect(context.messages[0]).toMatchObject({ role: "system", content: "" });
 	});
 
 	it("lists the default tools and pi's rules for them", async () => {
