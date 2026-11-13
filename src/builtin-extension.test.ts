@@ -117,7 +117,11 @@ describe("createBuiltinExtension", () => {
 		const extension = createBuiltinExtension(options);
 		expect(extension.name).toBe(BUILTIN_EXTENSION);
 		const sections = extension.sections ?? [];
-		expect(sections.map((s) => s.key)).toStrictEqual([...BUILTIN_SECTIONS]);
+		const keys: readonly string[] =
+			options.systemPrompt === undefined
+				? BUILTIN_SECTIONS
+				: BUILTIN_SECTIONS.filter((key) => key !== "tools" && key !== "rules");
+		expect(sections.map((s) => s.key)).toStrictEqual(keys);
 		const input = { agent: { tools: [], ...agent } } as unknown as PromptInput;
 		const rendered = await Promise.all(
 			sections.map(async (s) => {
@@ -146,6 +150,42 @@ describe("createBuiltinExtension", () => {
 	it("leaves out the context files and the cwd when there are none", async () => {
 		const sections = await render({ skills: new Map() }, {});
 		expect(sections.get("project_context")?.text).toBeUndefined();
+		expect(sections.get("addendum")?.text).toBeUndefined();
 		expect(sections.get("cwd")?.text).toBeUndefined();
+	});
+
+	it("puts APPEND_SYSTEM.md in the tagged addendum section, after rules", async () => {
+		const sections = await render(
+			{ skills: new Map(), appendSystemPrompt: "Also this." },
+			{},
+		);
+		expect(sections.get("addendum")).toStrictEqual({
+			text: "Also this.",
+			tag: undefined,
+		});
+		expect([...sections.keys()].indexOf("addendum")).toBe(
+			[...sections.keys()].indexOf("rules") + 1,
+		);
+	});
+
+	it("replaces only preamble, tools, and rules with SYSTEM.md", async () => {
+		const sections = await render(
+			{
+				projectContext: "context",
+				skills: new Map(),
+				systemPrompt: "You are my bot.",
+				appendSystemPrompt: "Also this.",
+			},
+			{ cwd: "/work" },
+		);
+		expect(sections.get("preamble")).toStrictEqual({
+			text: "You are my bot.",
+			tag: false,
+		});
+		expect(sections.has("tools")).toBe(false);
+		expect(sections.has("rules")).toBe(false);
+		expect(sections.get("addendum")?.text).toBe("Also this.");
+		expect(sections.get("project_context")?.text).toBe("context");
+		expect(sections.get("cwd")?.text).toBe("/work");
 	});
 });
