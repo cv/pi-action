@@ -111,7 +111,6 @@ describe("captureState", () => {
 	});
 });
 
-
 describe("working-tree snapshots", () => {
 	it("round-trips every kind of change, staged vs unstaged included", async () => {
 		const w = world();
