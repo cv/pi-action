@@ -2,19 +2,12 @@
 import { readFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 
-import {
-	defineExtension,
-	type Extension,
-	section,
-} from "@earendil-works/pi-durable";
-
 import { removeInvisibleCharacters } from "./security.ts";
 import { git } from "./storage/git.ts";
 import type { Log } from "./types.ts";
 import { getErrorMessage } from "./utils.ts";
 
-/** The built-in pi-durable extension with the `project_context` section; installed right after the coding tools. */
-export const CONTEXT_EXTENSION = "pi-action-context";
+/** The key of the section with the context files, in the built-in `pi-action` extension (builtin-extension.ts). */
 export const PROJECT_CONTEXT_SECTION = "project_context";
 /** In each directory, the first of these that exists is loaded. */
 const CONTEXT_FILE_NAMES = ["AGENTS.md", "CLAUDE.md"] as const;
@@ -423,16 +416,4 @@ export async function loadProjectContext(
 	const context = { files, skipped, nested: nestedFiles(nested), base };
 	logContext(context, maxBytes, log);
 	return { ...context, text: renderProjectContext(context, maxBytes) };
-}
-
-/**
- * The `pi-action-context` extension: the `project_context` section with `text`, read once for the run, so that the
- * agent's edits of AGENTS.md during the run don't change the prompt (and its cache). No section when `text` is
- * undefined.
- */
-export function contextExtension(text: string | undefined): Extension {
-	return defineExtension({
-		name: CONTEXT_EXTENSION,
-		sections: [section(PROJECT_CONTEXT_SECTION, () => text)],
-	});
 }
