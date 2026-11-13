@@ -140,7 +140,7 @@ pit 0.36.0 and later hide the coding tools from the model themselves. The model 
 - pi-action resolves the names against the tools after it installs the extensions, and after the [overrides](#override-tools-and-sections). For a name that matches no tool, pi-action writes a warning.
 - If the inputs leave the model with no tools, the run fails.
 - pi-action applies the inputs on each run. When an input is empty, pi-action clears the setting of an earlier run on the thread.
-- The `🤖` line of the log shows the tools that the model gets, for example `🤖 anthropic/claude-sonnet-5-5 · tools: typescript · extensions: pit (typescript)`.
+- The `🤖` line of the log shows the tools that the model gets, for example `🤖 anthropic/claude-sonnet-5-5 · thinking medium · tools: typescript · extensions: pit (typescript)`.
 
 An extension can also hide a tool itself, with a wrap that sets `callers: ["tools"]` (see [Override tools and sections](#override-tools-and-sections)). The inputs apply after the wraps, and they only remove tools. Thus, an input cannot give the model a tool that a wrap hid.
 

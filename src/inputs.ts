@@ -1,4 +1,7 @@
-// Reading the action's inputs (see action.yml) into ActionInputs. Empty or invalid values fall back to DEFAULTS.
+// Reading the action's inputs (see action.yml) into ActionInputs. Empty or invalid values fall back to DEFAULTS,
+// except thinking_level: an invalid value fails the run.
+import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
+
 import type {
 	CustomProviderConfig,
 	ModelInputMode,
@@ -18,6 +21,8 @@ export interface ActionInputs {
 	allowedAssociations: string[];
 	provider: string;
 	model: string;
+	/** `thinking_level`: the requested level; models that support less get less (see `Thread.open`). */
+	thinkingLevel: ModelThinkingLevel;
 	/** Seconds before the run is aborted. */
 	timeout: number;
 	githubToken: string | undefined;
@@ -60,6 +65,16 @@ const MODEL_INPUT_MODES: ReadonlySet<string> = new Set<ModelInputMode>([
 	"text",
 	"image",
 ]);
+/** pi-ai's ModelThinkingLevel values, from least to most. */
+const THINKING_LEVELS: readonly ModelThinkingLevel[] = [
+	"off",
+	"minimal",
+	"low",
+	"medium",
+	"high",
+	"xhigh",
+	"max",
+];
 const INTEGER_PATTERN = /^\d+$/u;
 const LINE_BREAK = /\r?\n/u;
 /** A `#` at the start of a line or after whitespace starts a comment; `github:owner/repo#ref` keeps its `#`. */
@@ -104,6 +119,24 @@ export function parsePositiveInteger(value: string): number | undefined {
 		? Number.parseInt(normalized, 10)
 		: 0;
 	return parsed > 0 ? parsed : undefined;
+}
+
+function isThinkingLevel(value: string): value is ModelThinkingLevel {
+	return THINKING_LEVELS.some((level) => level === value);
+}
+
+/** A thinking level, in any case; the default when empty. Throws for anything else. */
+export function parseThinkingLevel(value: string): ModelThinkingLevel {
+	const normalized = value.trim().toLowerCase();
+	if (normalized === "") {
+		return DEFAULTS.thinkingLevel;
+	}
+	if (!isThinkingLevel(normalized)) {
+		throw new Error(
+			`Invalid thinking_level "${value.trim()}" (one of: ${THINKING_LEVELS.join(", ")})`,
+		);
+	}
+	return normalized;
 }
 
 function parseModelInputModes(value: string): ModelInputMode[] {
@@ -170,6 +203,7 @@ export function readActionInputs(
 		),
 		provider: readInput("provider") || DEFAULTS.provider,
 		model: readInput("model") || DEFAULTS.model,
+		thinkingLevel: parseThinkingLevel(readInput("thinking_level")),
 		timeout: parsePositiveInteger(readInput("timeout")) ?? DEFAULTS.timeout,
 		githubToken: readInput("github_token") || env["GITHUB_TOKEN"],
 		apiKey: readInput("api_key") || undefined,

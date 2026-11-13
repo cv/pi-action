@@ -95,6 +95,25 @@ The runner sends the requests. A `localhost` or LAN address must be reachable fr
 
 For Anthropic-compatible endpoints (`provider_api: anthropic-messages`) with Claude Opus 4.6+ or Sonnet 4.6+, set `compat_force_adaptive_thinking: true`.
 
+## Thinking
+
+`thinking_level` sets how much the model thinks (reasons) before it answers. The default is `medium`, as in pi. A higher level can give better answers to difficult tasks, but it uses more tokens and more time. To turn thinking off, set `off`:
+
+```yaml
+with:
+  thinking_level: off   # or minimal, low, medium, high, xhigh, max
+```
+
+- **Every run.** pi-action sets the level at the start of each run. A thread that started with a different level uses the new level from the next run, as it does for `model`.
+- **Models that support less.** pi-action caps the level as pi does (pi-ai's `clampThinkingLevel`), and writes a log line, for example `thinking_level: openai/gpt-4o has no reasoning support; using off`:
+  - A model without reasoning support gets `off`. pi knows this for its built-in models. For a custom model, set `model_reasoning: true` when the model supports reasoning.
+  - `xhigh` and `max` apply only to the models that pi maps to them. Other reasoning models get `high`.
+  - For other levels that a model does not support, it gets the next level up that it supports, else the next level down.
+- **How the level gets to the model.** The provider API changes the level into its own option. For example, Anthropic models with adaptive thinking get an effort (for a custom model, set `compat_force_adaptive_thinking`), and older Anthropic models get a thinking budget. OpenAI-compatible APIs get a reasoning effort when the provider supports it (`compat_supports_reasoning_effort`).
+- **Output tokens.** Thinking counts toward the output tokens of the model (`model_max_tokens` for a custom model).
+
+The `🤖` line of the log shows the level of the run, for example `🤖 anthropic/claude-sonnet-5-5 · thinking medium · tools: read, write, edit, bash`.
+
 ## Providers from pi extensions
 
 A [pi extension](https://github.com/earendil-works/pi) can register a provider with `pi.registerProvider()`. Load the extension with `extensions`, then select its provider with `provider` and `model`:

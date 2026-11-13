@@ -2,8 +2,8 @@ import {
 	BACKGROUND_CONTEXT,
 	type Context,
 } from "@earendil-works/chord/context";
-import type { Api, Model } from "@earendil-works/pi-ai";
-import type { Models } from "@earendil-works/pi-ai/models";
+import type { Api, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
+import { clampThinkingLevel, type Models } from "@earendil-works/pi-ai/models";
 import {
 	type AgentChange,
 	AssistantEntry,
@@ -49,6 +49,8 @@ export interface ThreadOptions {
 	issueNumber?: number | undefined;
 	models: Models;
 	model: Model<Api>;
+	/** The `thinking_level` input, capped to what `model` supports; the conversation's own level when undefined. */
+	thinkingLevel?: ModelThinkingLevel | undefined;
 	log: Log;
 	remote?: string | undefined;
 	/** pi-durable extensions, installed after the coding tools: the built-in `pi-action`, then the `extensions` input's. */
@@ -231,17 +233,23 @@ export class Thread {
 	private readonly persistence: Persistence | undefined;
 	/** The names of the tools the model is offered. */
 	readonly modelTools: readonly string[];
+	/** The thinking level of this run's requests; undefined when `thinkingLevel` was not given. */
+	readonly thinkingLevel: ModelThinkingLevel | undefined;
 
 	private constructor(
 		harness: Harness,
 		root: Conversation,
 		persistence: Persistence | undefined,
-		modelTools: readonly string[],
+		agent: {
+			modelTools: readonly string[];
+			thinkingLevel: ModelThinkingLevel | undefined;
+		},
 	) {
 		this.harness = harness;
 		this.root = root;
 		this.persistence = persistence;
-		this.modelTools = modelTools;
+		this.modelTools = agent.modelTools;
+		this.thinkingLevel = agent.thinkingLevel;
 	}
 
 	static async open(options: ThreadOptions): Promise<Thread> {
@@ -275,8 +283,18 @@ export class Thread {
 			},
 			context,
 		);
+		const thinkingLevel =
+			options.thinkingLevel === undefined
+				? undefined
+				: supportedThinkingLevel(
+						options.model,
+						options.thinkingLevel,
+						options.log,
+					);
+		// Set on every run, as the model is: a thread started under another level switches to this one.
 		const agent = {
 			model: { provider: options.model.provider, modelId: options.model.id },
+			...(thinkingLevel === undefined ? {} : { thinkingLevel }),
 			cwd,
 		};
 		let modelTools: string[];
@@ -290,7 +308,10 @@ export class Thread {
 		}
 		await restoreWorktree(persistence?.worktree, harness, root);
 		harness.resume(); // finish whatever a previous, interrupted run left
-		return new Thread(harness, root, persistence, modelTools);
+		return new Thread(harness, root, persistence, {
+			modelTools,
+			thinkingLevel,
+		});
 	}
 
 	/** The commit the thread's ref points at, undefined before its first commit or when it is not stored. */
@@ -433,6 +454,27 @@ export class Thread {
 		await this.harness.close(context);
 		await this.push();
 	}
+}
+
+/**
+ * `requested`, capped as pi caps it to what the model supports (pi-ai's `clampThinkingLevel`): `off` for a model
+ * without reasoning, else the nearest level it supports. pi-durable sends the level as it is, so pi-action caps it.
+ */
+function supportedThinkingLevel(
+	model: Model<Api>,
+	requested: ModelThinkingLevel,
+	log: Pick<Log, "info">,
+): ModelThinkingLevel {
+	const level = clampThinkingLevel(model, requested);
+	if (level !== requested) {
+		const why = model.reasoning
+			? `does not support thinking level ${requested}`
+			: "has no reasoning support";
+		log.info(
+			`thinking_level: ${model.provider}/${model.id} ${why}; using ${level}`,
+		);
+	}
+	return level;
 }
 
 /**
