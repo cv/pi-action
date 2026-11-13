@@ -109,7 +109,7 @@ with:
   - A model without reasoning support gets `off`. pi knows this for its built-in models. For a custom model, set `model_reasoning: true` when the model supports reasoning.
   - `xhigh` and `max` apply only to the models that pi maps to them. Other reasoning models get `high`.
   - For other levels that a model does not support, it gets the next level up that it supports, else the next level down.
-- **How the level gets to the model.** The provider API changes the level into its own option. For example, Anthropic gets a thinking budget, or an effort with `compat_force_adaptive_thinking`. OpenAI-compatible APIs get a reasoning effort when the provider supports it (`compat_supports_reasoning_effort`).
+- **How the level gets to the model.** The provider API changes the level into its own option. For example, Anthropic models with adaptive thinking get an effort (for a custom model, set `compat_force_adaptive_thinking`), and older Anthropic models get a thinking budget. OpenAI-compatible APIs get a reasoning effort when the provider supports it (`compat_supports_reasoning_effort`).
 - **Output tokens.** Thinking counts toward the output tokens of the model (`model_max_tokens` for a custom model).
 
 The `🤖` line of the log shows the level of the run, for example `🤖 anthropic/claude-sonnet-5-5 · thinking medium · tools: read, write, edit, bash`.
