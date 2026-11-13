@@ -495,6 +495,55 @@ describe("run (durable)", () => {
 		);
 	});
 
+	it("sends .pi/SYSTEM.md and APPEND_SYSTEM.md with trust_project, read once for the run", async () => {
+		const w = world();
+		const seen: string[] = [];
+		const record: FauxResponseStep = (context) => {
+			seen.push(
+				JSON.stringify(context.messages.filter((m) => m.role === "system")),
+			);
+			return fauxAssistantMessage("ok");
+		};
+		w.faux.setResponses([record, record, record]);
+		const files = (cwd: string) => {
+			write(join(cwd, ".pi/SYSTEM.md"), "You are my bot.");
+			write(join(cwd, ".pi/APPEND_SYSTEM.md"), "Also this.");
+		};
+		const on = w.deps(w.comment("@pi one"), { trustProject: true });
+		files(on.cwd);
+		const lines = logLines(on.log);
+		await run(on);
+		const untrusted = w.deps(w.comment("@pi two"));
+		files(untrusted.cwd);
+		await run(untrusted);
+		const off = w.deps(w.comment("@pi three"), {
+			trustProject: true,
+			systemPromptFiles: false,
+		});
+		files(off.cwd);
+		await run(off);
+
+		expect(seen[0]).toContain("You are my bot.");
+		expect(seen[0]).toContain("Also this.");
+		expect(seen[0]).not.toContain("You are a coding assistant");
+		const setupEnd = lines.indexOf("::endgroup::");
+		expect(lines.slice(0, setupEnd)).toContain(
+			"System prompt: .pi/SYSTEM.md (15 B, replaces pi's base prompt)",
+		);
+		// The untrusted run on the same thread updates the sections back to pi's.
+		const second = String(seen[1]);
+		expect(second).toContain('"addendum":null');
+		expect(second.slice(second.lastIndexOf('"role":"system"'))).toContain(
+			"You are a coding assistant",
+		);
+		expect(untrusted.log.info).toHaveBeenCalledWith(
+			"System prompt: not loading .pi/SYSTEM.md: trust_project is off",
+		);
+		expect(off.log.info).toHaveBeenCalledWith(
+			"System prompt files: off (system_prompt_files)",
+		);
+	});
+
 	it("reads AGENTS.md from the base commit on a pull request from a fork", async () => {
 		const w = world();
 		w.faux.setResponses([fauxAssistantMessage("ok")]);

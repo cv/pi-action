@@ -48,6 +48,7 @@ describe("readActionInputs", () => {
 				agent_dir: " .pi/agent ",
 				context_files: "off",
 				context_files_max_bytes: "1024",
+				system_prompt_files: "false",
 			}),
 			{ GITHUB_TOKEN: "env-token" },
 		);
@@ -75,6 +76,7 @@ describe("readActionInputs", () => {
 			agentDir: ".pi/agent",
 			contextFiles: false,
 			contextFilesMaxBytes: 1024,
+			systemPromptFiles: false,
 			worktreeSnapshots: true,
 			worktreeLimits: {
 				maxFileBytes: 10 * 1024 * 1024,
