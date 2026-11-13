@@ -1,1 +1,1 @@
-{"format":1,"seq":443,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"\n> pi-action@2.4.0 coverage\n> vitest run --coverage\n\n\n RUN  v4.1.10 /home/runner/work/pi-action/pi-action\n      Coverage enabled with v8\n\n ✓ src/extension-provider.test.ts (22 tests) 145ms\n"]]}}]}
+{"format":1,"seq":444,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"]," ✓ src/thread.test.ts (14 tests) 115ms\n ✓ src/extensions.test.ts (20 tests) 1455ms\n"]]}}]}
