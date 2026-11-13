@@ -84,6 +84,7 @@ pi-action is TypeScript on [pi-durable](https://www.npmjs.com/package/@earendil-
 |------|----------|
 | [`src/index.ts`](src/index.ts) | Entry point: creates the dependencies and calls `run()` |
 | [`src/run.ts`](src/run.ts) | Orchestration of a run |
+| [`src/nested-run.ts`](src/nested-run.ts) | `PI_ACTION_RUNNING`: stops a run that the agent's tools start inside a run |
 | [`src/run-context.ts`](src/run-context.ts) | What a run works on: an event, `pr_number`, or a direct prompt |
 | [`src/inputs.ts`](src/inputs.ts) | Reads the action inputs into `ActionInputs`, with the defaults for empty or invalid values |
 | [`src/defaults.ts`](src/defaults.ts) | The default values of the inputs |
