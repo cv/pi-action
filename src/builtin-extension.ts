@@ -16,11 +16,15 @@ export const BUILTIN_EXTENSION = "pi-action";
 /** The pi version whose prompt text pi-action copies (`buildSystemPromptSections` in pi-coding-agent). */
 export const PI_PROMPT_VERSION = "1.5.2";
 
-/** The section keys of the built-in extension, in order, for `wrapSection`. */
+/**
+ * The section keys of the built-in extension, in order, for `wrapSection`. With a `SYSTEM.md`, `tools` and `rules`
+ * are not there (see `createBuiltinExtension`).
+ */
 export const BUILTIN_SECTIONS = [
 	"preamble",
 	"tools",
 	"rules",
+	"addendum",
 	PROJECT_CONTEXT_SECTION,
 	"available_skills",
 	"cwd",
@@ -135,6 +139,10 @@ export interface BuiltinExtensionOptions {
 	projectContext?: string | undefined;
 	/** The run's skills, listed in the `available_skills` section. */
 	skills: Skills;
+	/** `SYSTEM.md` (see system-prompt-files.ts): replaces the `preamble`, `tools`, and `rules` sections. */
+	systemPrompt?: string | undefined;
+	/** `APPEND_SYSTEM.md`: the `addendum` section, after `rules`; none when undefined. */
+	appendSystemPrompt?: string | undefined;
 }
 
 /**
@@ -142,15 +150,24 @@ export interface BuiltinExtensionOptions {
  * The `tools` and `rules` sections follow the tools the request offers (after `exclude_tools`, `model_tools_hidden`,
  * and the wraps), so they match the tools the model is declared. The text is the same for every request of a run, so
  * the prompt cache holds. It is installed after the coding tools and before the extensions of the `extensions` input,
- * so their wraps (`wrapSection("rules", ...)`) apply to it.
+ * so their wraps (`wrapSection("rules", ...)`) apply to it. A `SYSTEM.md` replaces pi's own sections (`preamble`,
+ * `tools`, `rules`) with one untagged `preamble` that has its text, as pi's `customPrompt`; the others stay.
  */
 export function createBuiltinExtension(
 	options: BuiltinExtensionOptions,
 ): Extension {
+	const { systemPrompt, appendSystemPrompt } = options;
+	const base: PromptSection[] =
+		systemPrompt === undefined
+			? [
+					section("preamble", () => PREAMBLE, { tag: false }),
+					section("tools", (input) => formatToolsSection(input.agent.tools)),
+					section("rules", (input) => formatRulesSection(input.agent.tools)),
+				]
+			: [section("preamble", () => systemPrompt, { tag: false })];
 	const sections: PromptSection[] = [
-		section("preamble", () => PREAMBLE, { tag: false }),
-		section("tools", (input) => formatToolsSection(input.agent.tools)),
-		section("rules", (input) => formatRulesSection(input.agent.tools)),
+		...base,
+		section("addendum", () => appendSystemPrompt),
 		section(PROJECT_CONTEXT_SECTION, () => options.projectContext),
 		skillsSection(options.skills),
 		section("cwd", (input) => input.agent.cwd?.replaceAll("\\", "/")),
