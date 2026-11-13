@@ -21,4 +21,5 @@ export const DEFAULTS = {
 	worktreeSnapshots: true,
 	contextFiles: true,
 	contextFilesMaxBytes: 65_536,
+	systemPromptFiles: true,
 } as const;
