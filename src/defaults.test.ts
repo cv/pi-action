@@ -28,6 +28,7 @@ const DEFAULT_CASES = [
 	["worktree_snapshots", String(DEFAULTS.worktreeSnapshots)],
 	["context_files", String(DEFAULTS.contextFiles)],
 	["context_files_max_bytes", String(DEFAULTS.contextFilesMaxBytes)],
+	["system_prompt_files", String(DEFAULTS.systemPromptFiles)],
 ] as const;
 
 function getActionInputDefault(inputName: string): string {
