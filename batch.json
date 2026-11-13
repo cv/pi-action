@@ -1,1 +1,1 @@
-{"format":1,"seq":130,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"\n RUN  v4.1.10 /home/runner/work/pi-action/pi-action\n      Coverage enabled with v8\n\n"]]}}]}
+{"format":1,"seq":131,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"]," ✓ src/thread.test.ts (19 tests) 606ms\n     ✓ switches a continuing thread to the level of the new run  390ms\n ✓ src/extension-provider.test.ts (22 tests) 223ms\n"]]}}]}
