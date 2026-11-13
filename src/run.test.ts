@@ -531,8 +531,9 @@ describe("run (durable)", () => {
 			"System prompt: .pi/SYSTEM.md (15 B, replaces pi's base prompt)",
 		);
 		// The untrusted run on the same thread updates the sections back to pi's.
-		expect(seen[1]).toContain('"addendum":null');
-		expect(seen[1].slice(seen[1].lastIndexOf('"role":"system"'))).toContain(
+		const second = seen[1] ?? "";
+		expect(second).toContain('"addendum":null');
+		expect(second.slice(second.lastIndexOf('"role":"system"'))).toContain(
 			"You are a coding assistant",
 		);
 		expect(untrusted.log.info).toHaveBeenCalledWith(
