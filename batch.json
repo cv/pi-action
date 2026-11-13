@@ -1,1 +1,1 @@
-{"format":1,"seq":924,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"Found 0 warnings and 0 errors.\nCHECK=0\n"]]}}]}
+{"format":1,"seq":925,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"]," Test Files  126 passed (126)\n      Tests  1834 passed (1834)\n"]]}}]}
