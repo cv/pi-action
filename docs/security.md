@@ -80,10 +80,10 @@ A [prompt template](prompts.md#prompt-templates) becomes the request of the user
 
 ## Context files from the repository
 
-`AGENTS.md` and `CLAUDE.md` go into the system prompt (see [Context files](prompts.md#context-files)). The system prompt has more weight for the model than a file that it reads. pi-action reads these files from the checkout, so their content is the content of the checked-out ref:
+The context files (`AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`, and the other names that pi uses) go into the system prompt (see [Context files](prompts.md#context-files)). The system prompt has more weight for the model than a file that it reads. pi-action reads these files from the checkout, so their content is the content of the checked-out ref:
 
 - **Pull requests from forks** (`pull_request` events whose head is in another repository): pi-action reads the files from the base commit of the pull request (`pull_request.base.sha`), and fetches it if the clone does not have it. If it cannot read the base commit, it loads no workspace files and writes a warning. The author of the fork cannot change the system prompt.
-- **Pull requests from branches of the same repository:** pi-action uses the `AGENTS.md` of the branch. People who can push a branch can already change the code that your workflow runs.
+- **Pull requests from branches of the same repository:** pi-action uses the context files of the branch. People who can push a branch can already change the code that your workflow runs.
 - pi-action removes invisible characters from the files, but keeps HTML comments, because `AGENTS.md` files use them.
 - Set `context_files: false` to load no files.
 
