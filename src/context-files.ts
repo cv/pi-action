@@ -1,5 +1,5 @@
-// The repository's context files (AGENTS.md, else CLAUDE.md) in the system prompt, as pi's coding agent loads them.
-import { readFile } from "node:fs/promises";
+// The repository's context files (AGENTS.override.md, AGENTS.md, AGENTS.MD, CLAUDE.md, CLAUDE.MD) in the system prompt, as pi's coding agent loads them.
+import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 
 import { removeInvisibleCharacters } from "./security.ts";
@@ -9,8 +9,17 @@ import { getErrorMessage } from "./utils.ts";
 
 /** The key of the section with the context files, in the built-in `pi-action` extension (builtin-extension.ts). */
 export const PROJECT_CONTEXT_SECTION = "project_context";
-/** In each directory, the first of these that exists is loaded. */
-const CONTEXT_FILE_NAMES = ["AGENTS.md", "CLAUDE.md"] as const;
+/**
+ * In each directory, the first of these that is a file is loaded: pi's `loadContextFileFromDir`, in its order. Git
+ * matches names case-sensitively (a fork's base commit), so `AGENTS.MD` and `CLAUDE.MD` are entries of their own.
+ */
+const CONTEXT_FILE_NAMES: readonly string[] = [
+	"AGENTS.override.md",
+	"AGENTS.md",
+	"AGENTS.MD",
+	"CLAUDE.md",
+	"CLAUDE.MD",
+];
 /** At most this many nested files are listed by name. */
 const MAX_LISTED = 20;
 const NUL = "\0";
@@ -79,11 +88,21 @@ export async function readOptional(path: string): Promise<string | undefined> {
 	}
 }
 
+/** Whether `path` is a file (following symlinks), as pi's `isFile()` check. */
+async function isFile(path: string): Promise<boolean> {
+	try {
+		return (await stat(path)).isFile();
+	} catch {
+		return false;
+	}
+}
+
 const splitNul = (out: string): string[] => out.split(NUL).filter(Boolean);
 
 /** The files in the checkout, and the context files git knows below a directory (tracked, or untracked and not ignored). */
 function checkoutSource(root: string): Source {
 	return {
+		// A directory named like a context file is skipped: readFile fails on it.
 		read: async (rel) => readOptional(join(root, rel)),
 		list: async (dir) => {
 			const out = await git(join(root, dir), [
@@ -95,7 +114,13 @@ function checkoutSource(root: string): Source {
 				"--",
 				...CONTEXT_FILE_NAMES.map((name) => `:(glob)**/${name}`),
 			]).catch(() => "");
-			return splitNul(out);
+			const paths = splitNul(out).filter((path) =>
+				CONTEXT_FILE_NAMES.includes(basename(path)),
+			);
+			const files = await Promise.all(
+				paths.map(async (path) => isFile(join(root, dir, path))),
+			);
+			return paths.filter((_, index) => files[index] === true);
 		},
 	};
 }
@@ -138,23 +163,29 @@ async function commitSource(
 	}
 	return {
 		read: async (rel) =>
-			git(root, ["show", `${sha}:./${rel}`]).catch(() => undefined),
+			// cat-file blob fails on a tree: a directory named like a context file is skipped.
+			git(root, ["cat-file", "blob", `${sha}:./${rel}`]).catch(() => undefined),
 		list: async (dir) => {
 			const out = await git(join(root, dir), [
 				"ls-tree",
 				"-r",
 				"-z",
-				"--name-only",
 				sha,
 			]).catch(() => "");
-			return splitNul(out).filter((path) =>
-				(CONTEXT_FILE_NAMES as readonly string[]).includes(basename(path)),
-			);
+			// `<mode> <type> <object>\t<path>`: only blobs, not submodules.
+			return splitNul(out).flatMap((entry) => {
+				const tab = entry.indexOf("\t");
+				const path = entry.slice(tab + 1);
+				return entry.split(" ")[1] === "blob" &&
+					CONTEXT_FILE_NAMES.includes(basename(path))
+					? [path]
+					: [];
+			});
 		},
 	};
 }
 
-/** The first context file of `dir` (relative to the root) that `read` finds: AGENTS.md, else CLAUDE.md. */
+/** The first context file of `dir` (relative to the root) that `read` finds, in the order of `CONTEXT_FILE_NAMES`. */
 async function firstContextFile(
 	read: Source["read"],
 	dir: string,
@@ -177,7 +208,7 @@ function directoriesDown(root: string, cwd: string): string[] {
 	return ["", ...parts.map((_, index) => parts.slice(0, index + 1).join("/"))];
 }
 
-/** Of the nested files, one per directory (AGENTS.md before CLAUDE.md), without those of `cwd` itself; sorted. */
+/** Of the nested files, one per directory (the first in `CONTEXT_FILE_NAMES`), without those of `cwd` itself; sorted. */
 function nestedFiles(paths: readonly string[]): string[] {
 	const byDir = new Map<string, string>();
 	for (const path of paths) {
@@ -186,8 +217,10 @@ function nestedFiles(paths: readonly string[]): string[] {
 		const current = byDir.get(dir);
 		if (
 			dir !== "." &&
-			(CONTEXT_FILE_NAMES as readonly string[]).includes(name) &&
-			(current === undefined || name === CONTEXT_FILE_NAMES[0])
+			CONTEXT_FILE_NAMES.includes(name) &&
+			(current === undefined ||
+				CONTEXT_FILE_NAMES.indexOf(name) <
+					CONTEXT_FILE_NAMES.indexOf(basename(current)))
 		) {
 			byDir.set(dir, path);
 		}
@@ -214,7 +247,10 @@ export function formatBytes(bytes: number): string {
 	return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KiB`;
 }
 
-/** The `project_context` section text, as pi's `# Project Context` block. */
+/**
+ * The `project_context` section text, as pi renders it: a `<project_instructions>` block for each file. pi-action's
+ * notes (nested files, the size limit, a fork's base commit) come after the files.
+ */
 function renderProjectContext(
 	context: Omit<ProjectContext, "text">,
 	maxBytes: number,
@@ -224,27 +260,12 @@ function renderProjectContext(
 		return undefined;
 	}
 	const parts = [
-		"# Project Context",
 		"Project-specific instructions and guidelines:",
+		...files.map(
+			(file) =>
+				`<project_instructions path="${file.path}">\n${file.content.trim()}\n</project_instructions>`,
+		),
 	];
-	if (base !== undefined) {
-		parts.push(
-			`This pull request comes from a fork, so the repository's files below are from its base commit ${base.slice(0, 7)}, not from the pull request.`,
-		);
-	}
-	for (const file of files) {
-		parts.push(`## ${file.path}`, file.content.trim());
-		if (file.cut) {
-			parts.push(
-				`[pi-action: this file was cut at the context_files_max_bytes limit of ${maxBytes} bytes; read it for the rest.]`,
-			);
-		}
-	}
-	if (skipped.length > 0) {
-		parts.push(
-			`[pi-action: not loaded, at the context_files_max_bytes limit: ${skipped.join(", ")}. Read them with your tools.]`,
-		);
-	}
 	if (nested.length > 0) {
 		const listed = nested.slice(0, MAX_LISTED).join(", ");
 		const more =
@@ -253,6 +274,21 @@ function renderProjectContext(
 				: "";
 		parts.push(
 			`More context files: ${listed}${more}. Read the one for the directory you work in.`,
+		);
+	}
+	for (const file of files.filter((f) => f.cut)) {
+		parts.push(
+			`[pi-action: ${file.path} was cut at the context_files_max_bytes limit of ${maxBytes} bytes; read it for the rest.]`,
+		);
+	}
+	if (skipped.length > 0) {
+		parts.push(
+			`[pi-action: not loaded, at the context_files_max_bytes limit: ${skipped.join(", ")}. Read them with your tools.]`,
+		);
+	}
+	if (base !== undefined) {
+		parts.push(
+			`This pull request comes from a fork, so the repository's files above are from its base commit ${base.slice(0, 7)}, not from the pull request.`,
 		);
 	}
 	return parts.join("\n\n");
@@ -270,7 +306,7 @@ async function openSource(
 	const source = await commitSource(root, base.sha, base.remote, log);
 	if (source === undefined) {
 		log.warning(
-			"Context files: not loading the repository's AGENTS.md or CLAUDE.md, because this pull request comes from a fork and its base commit is not available",
+			"Context files: not loading the repository's context files, because this pull request comes from a fork and its base commit is not available",
 		);
 		return { source, base: undefined };
 	}
