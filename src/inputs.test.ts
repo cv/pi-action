@@ -37,7 +37,7 @@ describe("readActionInputs", () => {
 				timeout: "60",
 				poll_interval: "5",
 				provider: "nvidia",
-			thinkingLevel: "high",
+				thinkingLevel: "high",
 				model: "openai/openai/gpt-5.5",
 				thinking_level: " High ",
 				provider_base_url: "https://inference-api.nvidia.com",
