@@ -162,7 +162,10 @@ describe("Thread: pi's system prompt sections (the built-in pi-action extension)
 		expect(systemPromptText(context)).toBe(
 			[
 				PREAMBLE,
-				DEFAULT_TOOLS,
+				DEFAULT_TOOLS.replace(
+					"</tools>",
+					"- typescript: Execute TypeScript with explicit function dependencies\n\nAdditional tools may be available.\n</tools>",
+				).replace("etc.)\n\nAdditional tools may be available.\n", "etc.)\n"),
 				DEFAULT_RULES,
 				"<project_context>\n# Project Context\n\nRepo rules.\n</project_context>",
 				`<cwd>\n${cwd}\n</cwd>`,
@@ -202,12 +205,13 @@ describe("Thread: pi's system prompt sections (the built-in pi-action extension)
 		expect(sections["rules"]).toContain("Use read to examine files");
 	});
 
-	it("says (none) without tools", async () => {
-		const sections = sectionsOf(
-			await firstRequest([builtin()], {
-				tools: { exclude: ["read", "write", "edit", "bash"], hidden: [] },
-			}),
-		);
+	it("says (none) when no offered tool has a snippet", async () => {
+		const custom = defineExtension({ name: "custom", tools: [tool("custom")] });
+		const context = await firstRequest([builtin(), custom], {
+			tools: { exclude: ["read", "write", "edit", "bash"], hidden: [] },
+		});
+		expect(toolNames(context)).toStrictEqual(["custom"]);
+		const sections = sectionsOf(context);
 		expect(sections["tools"]).toBe(
 			"<tools>\n(none)\n\nAdditional tools may be available.\n</tools>",
 		);
