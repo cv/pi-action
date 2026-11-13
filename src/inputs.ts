@@ -42,6 +42,8 @@ export interface ActionInputs {
 	contextFiles: boolean;
 	/** `context_files_max_bytes`: the limit of all context files together. */
 	contextFilesMaxBytes: number;
+	/** `system_prompt_files`: whether SYSTEM.md and APPEND_SYSTEM.md change the system prompt. */
+	systemPromptFiles: boolean;
 	/** Whether a thread saves and restores the files pi left uncommitted (`worktree_snapshots`). */
 	worktreeSnapshots: boolean;
 	/** What a snapshot leaves out of the untracked files. */
@@ -189,6 +191,9 @@ export function readActionInputs(
 		contextFilesMaxBytes:
 			parsePositiveInteger(readInput("context_files_max_bytes")) ??
 			DEFAULTS.contextFilesMaxBytes,
+		systemPromptFiles:
+			parseBoolean(readInput("system_prompt_files")) ??
+			DEFAULTS.systemPromptFiles,
 		worktreeSnapshots:
 			parseBoolean(readInput("worktree_snapshots")) ??
 			DEFAULTS.worktreeSnapshots,

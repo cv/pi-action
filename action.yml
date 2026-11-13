@@ -102,6 +102,10 @@ inputs:
     description: 'Maximum size of all context files together, in bytes; a file past it is cut, with a note to the model and a warning in the log'
     required: false
     default: '65536'
+  system_prompt_files:
+    description: 'Let SYSTEM.md replace pi''s base system prompt and APPEND_SYSTEM.md add to it: .pi/SYSTEM.md with trust_project (not on a pull request from a fork), else the one in agent_dir (when set)'
+    required: false
+    default: 'true'
   exclude_tools:
     description: 'Tools to disable completely, one per line or comma-separated; * matches any characters (for example bash). Neither the model nor other tools can call them'
     required: false
@@ -200,6 +204,7 @@ runs:
         INPUT_AGENT_DIR: ${{ inputs.agent_dir }}
         INPUT_CONTEXT_FILES: ${{ inputs.context_files }}
         INPUT_CONTEXT_FILES_MAX_BYTES: ${{ inputs.context_files_max_bytes }}
+        INPUT_SYSTEM_PROMPT_FILES: ${{ inputs.system_prompt_files }}
         INPUT_EXCLUDE_TOOLS: ${{ inputs.exclude_tools }}
         INPUT_MODEL_TOOLS_HIDDEN: ${{ inputs.model_tools_hidden }}
         INPUT_WORKTREE_SNAPSHOTS: ${{ inputs.worktree_snapshots }}

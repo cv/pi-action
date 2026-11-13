@@ -46,6 +46,10 @@ import {
 } from "./skills.ts";
 import { GitSyncConflictError } from "./storage/sync.ts";
 import type { SnapshotLimits } from "./storage/worktree.ts";
+import {
+	loadSystemPromptFiles,
+	type SystemPromptFiles,
+} from "./system-prompt-files.ts";
 import { Thread } from "./thread.ts";
 import { toolEnv } from "./tool-env.ts";
 import { collectTriggers, type Trigger, triggerFromInfo } from "./triggers.ts";
@@ -189,6 +193,7 @@ async function setUp(
 	templates: PromptTemplates;
 	context: string | undefined;
 	skills: Skills;
+	systemPrompt: SystemPromptFiles;
 }> {
 	const { inputs, log, cwd } = deps;
 	const env = deps.env ?? process.env;
@@ -233,6 +238,7 @@ async function setUp(
 		templates: promptTemplates(deps, loaded.prompts),
 		context: await projectContext(deps, env),
 		skills: runSkills(deps, loaded.skills),
+		systemPrompt: await systemPromptFiles(deps, env),
 	};
 }
 
@@ -269,6 +275,27 @@ async function projectContext(
 		log,
 	});
 	return loaded.text;
+}
+
+/** `SYSTEM.md` and `APPEND_SYSTEM.md` of the run (the `system_prompt_files` input), read once. */
+async function systemPromptFiles(
+	deps: ActionDependencies,
+	env: Env,
+): Promise<SystemPromptFiles> {
+	const { inputs, log, cwd } = deps;
+	if (!inputs.systemPromptFiles) {
+		log.info("System prompt files: off (system_prompt_files)");
+		return {};
+	}
+	return loadSystemPromptFiles({
+		cwd,
+		workspace: env["GITHUB_WORKSPACE"] || undefined,
+		agentDir: inputs.agentDir ? resolve(cwd, inputs.agentDir) : undefined,
+		trustProject: inputs.trustProject,
+		fork: isForkPullRequest(deps.payload),
+		maxBytes: inputs.contextFilesMaxBytes,
+		log,
+	});
 }
 
 /** On cancellation (SIGINT, then SIGTERM), push what the thread has so far before the runner kills us. */
@@ -488,7 +515,16 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		} finally {
 			log.endGroup();
 		}
-		const { models, extensions, tools, ui, templates, context, skills } = setup;
+		const {
+			models,
+			extensions,
+			tools,
+			ui,
+			templates,
+			context,
+			skills,
+			systemPrompt,
+		} = setup;
 		// `/skill:<name>` first, so a template can't take a skill's command.
 		const expand = (triggers: Trigger[]) =>
 			triggers.map((trigger) => {
@@ -505,7 +541,12 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			log,
 			remote: deps.remote,
 			extensions: [
-				createBuiltinExtension({ projectContext: context, skills }),
+				createBuiltinExtension({
+					projectContext: context,
+					skills,
+					systemPrompt: systemPrompt.system?.content,
+					appendSystemPrompt: systemPrompt.append?.content,
+				}),
 				...extensions,
 			],
 			tools: { exclude: inputs.excludeTools, hidden: inputs.modelToolsHidden },
