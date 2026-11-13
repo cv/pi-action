@@ -240,7 +240,10 @@ export class Thread {
 		harness: Harness,
 		root: Conversation,
 		persistence: Persistence | undefined,
-		agent: { modelTools: readonly string[]; thinkingLevel: ModelThinkingLevel | undefined },
+		agent: {
+			modelTools: readonly string[];
+			thinkingLevel: ModelThinkingLevel | undefined;
+		},
 	) {
 		this.harness = harness;
 		this.root = root;
@@ -283,7 +286,11 @@ export class Thread {
 		const thinkingLevel =
 			options.thinkingLevel === undefined
 				? undefined
-				: supportedThinkingLevel(options.model, options.thinkingLevel, options.log);
+				: supportedThinkingLevel(
+						options.model,
+						options.thinkingLevel,
+						options.log,
+					);
 		// Set on every run, as the model is: a thread started under another level switches to this one.
 		const agent = {
 			model: { provider: options.model.provider, modelId: options.model.id },
@@ -301,7 +308,10 @@ export class Thread {
 		}
 		await restoreWorktree(persistence?.worktree, harness, root);
 		harness.resume(); // finish whatever a previous, interrupted run left
-		return new Thread(harness, root, persistence, { modelTools, thinkingLevel });
+		return new Thread(harness, root, persistence, {
+			modelTools,
+			thinkingLevel,
+		});
 	}
 
 	/** The commit the thread's ref points at, undefined before its first commit or when it is not stored. */

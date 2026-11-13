@@ -331,7 +331,8 @@ function describeSetup(
 		(extension) =>
 			`${extension.name} (${(extension.tools ?? []).map((tool) => tool.name).join(", ") || "no tools"})`,
 	);
-	const thinking = thinkingLevel === undefined ? "" : ` · thinking ${thinkingLevel}`;
+	const thinking =
+		thinkingLevel === undefined ? "" : ` · thinking ${thinkingLevel}`;
 	return `🤖 ${inputs.provider}/${inputs.model}${thinking} · tools: ${modelTools.join(", ")}${loaded.length > 0 ? ` · extensions: ${loaded.join(", ")}` : ""}`;
 }
 
