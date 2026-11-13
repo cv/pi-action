@@ -93,7 +93,7 @@ An extension can change the tools and prompt sections of pi-action and of other 
 
 The order is: the coding tools of pi-action (`coding-tools`) first, then its built-in extension `pi-action`, then the extensions in the order of the `extensions` input. Extensions cannot use the names `coding-tools` and `pi-action`. pi-durable applies the wraps of all extensions in this order. Thus, the last wrap wins.
 
-The `pi-action` extension has pi's system prompt sections. Use these keys with `wrapSection`: `preamble`, `tools`, `rules`, `project_context`, `available_skills`, and `cwd` (see [The system prompt](prompts.md#the-system-prompt)). For example, `wrapSection("rules", (s) => ({ ...s, render: () => "- My rule" }))` replaces pi's rules.
+The `pi-action` extension has pi's system prompt sections. Use these keys with `wrapSection`: `preamble`, `tools`, `rules`, `addendum`, `project_context`, `available_skills`, and `cwd` (see [The system prompt](prompts.md#the-system-prompt)). For example, `wrapSection("rules", (s) => ({ ...s, render: () => "- My rule" }))` replaces pi's rules.
 
 ### Host options
 
@@ -111,7 +111,7 @@ pi-durable extensions run in the process of pi-action. Thus, pi-action also sets
 
 ### `trust_project`
 
-`trust_project` (default `false`) tells the extension that it can load and run the configuration of the repository. For pit, this is `.pi/pit.json` and `.pi/functions`. pi-action uses it too: for the prompt templates in `.pi/prompts` and the skills in `.pi/skills` and `.agents/skills` (see [Security](security.md#skills-from-the-repository)).
+`trust_project` (default `false`) tells the extension that it can load and run the configuration of the repository. For pit, this is `.pi/pit.json` and `.pi/functions`. pi-action uses it too: for the prompt templates in `.pi/prompts`, the skills in `.pi/skills` and `.agents/skills`, and `.pi/SYSTEM.md` and `.pi/APPEND_SYSTEM.md` (see [Security](security.md#skills-from-the-repository)).
 
 Anyone who can push a branch or open a pull request can change those files. Set `trust_project: true` only for repositories whose code you already run. Do not set it in workflows that run on pull requests from people you do not trust.
 

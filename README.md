@@ -97,7 +97,7 @@ Only `github_token` is necessary. All other inputs have a default or are optiona
 | `compat_force_adaptive_thinking` | Use adaptive thinking for an Anthropic-compatible custom model (`provider_api: anthropic-messages`). Claude Opus 4.6+ and Sonnet 4.6+ need it | No | - |
 | `extensions` | pi extensions and pi-durable extensions to load: npm package specs or workspace paths, one per line or comma-separated (see [Extensions](docs/extensions.md)) | No | - |
 | `skills` | Packages to load for their skills only, with the syntax of `extensions` (see [Skills](docs/skills.md#the-skills-input)) | No | - |
-| `trust_project` | Let pi-durable extensions load and run the configuration of the repository, and load its prompt templates and skills (see [Extensions](docs/extensions.md#trust_project)) | No | `false` |
+| `trust_project` | Let pi-durable extensions load and run the configuration of the repository, and load its prompt templates, skills, and system prompt files (see [Extensions](docs/extensions.md#trust_project)) | No | `false` |
 | `agent_dir` | Agent directory (user-level state) for pi-durable extensions, relative to the workspace | No | (a new temporary directory in `RUNNER_TEMP`) |
 | `context_files` | Put `AGENTS.md` (or `CLAUDE.md`) into the system prompt: the one in `agent_dir`, then one for each directory from the workspace root down to the working directory. On a pull request from a fork, they come from its base commit (see [The system prompt](docs/prompts.md#the-system-prompt)) | No | `true` |
 | `context_files_max_bytes` | Maximum size of all context files together, in bytes. pi-action cuts a file at the limit, tells the model, and writes a warning. `SYSTEM.md` and `APPEND_SYSTEM.md` each have this limit too | No | `65536` |

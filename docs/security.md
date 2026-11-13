@@ -87,6 +87,14 @@ A [prompt template](prompts.md#prompt-templates) becomes the request of the user
 - pi-action removes invisible characters from the files, but keeps HTML comments, because `AGENTS.md` files use them.
 - Set `context_files: false` to load no files.
 
+## System prompt files from the repository
+
+`.pi/SYSTEM.md` replaces pi's base system prompt, and `.pi/APPEND_SYSTEM.md` adds to it (see [System prompt files](prompts.md#system-prompt-files)). Anyone who can push a branch can change these files. Thus, pi-action loads them only with `trust_project: true`. Without it, pi-action writes `System prompt: not loading .pi/SYSTEM.md: trust_project is off` to the log.
+
+- **Pull requests from forks:** pi-action never loads the files of the repository, also with `trust_project: true`, and writes `System prompt: not loading .pi/SYSTEM.md: this pull request comes from a fork`. It also skips the files of `agent_dir` when `agent_dir` is in the workspace.
+- The files in `agent_dir` load in all other cases.
+- Set `system_prompt_files: false` to load no files.
+
 ## Skills from the repository
 
 A [skill](skills.md) is instructions that pi follows, and it can tell pi to run its scripts. Anyone who can push a branch can change the files in `.pi/skills` and `.agents/skills`. Thus, pi-action loads them only with `trust_project: true`. Without it, pi-action writes `Not loading the skills in .pi/skills: trust_project is off` to the log (with the directories that exist). Skills from `extensions`, `skills`, and `agent_dir` load in all cases. Pin the packages, as for [extensions](#extensions).
