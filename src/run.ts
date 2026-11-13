@@ -45,11 +45,11 @@ import {
 	type Skills,
 } from "./skills.ts";
 import { GitSyncConflictError } from "./storage/sync.ts";
+import type { SnapshotLimits } from "./storage/worktree.ts";
 import {
 	loadSystemPromptFiles,
 	type SystemPromptFiles,
 } from "./system-prompt-files.ts";
-import type { SnapshotLimits } from "./storage/worktree.ts";
 import { Thread } from "./thread.ts";
 import { toolEnv } from "./tool-env.ts";
 import { collectTriggers, type Trigger, triggerFromInfo } from "./triggers.ts";
