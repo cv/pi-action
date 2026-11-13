@@ -100,10 +100,10 @@ describe("createDurableExtensions", () => {
 		).rejects.toThrow(TAKEN);
 		await expect(
 			createDurableExtensions(
-				[factory("a.ts", async () => ({ name: "pi-action-context" }))],
+				[factory("a.ts", async () => ({ name: "pi-action" }))],
 				options(),
 			),
-		).rejects.toThrow('named "pi-action-context", which is already taken');
+		).rejects.toThrow('named "pi-action", which is already taken');
 		await expect(
 			createDurableExtensions(
 				[
