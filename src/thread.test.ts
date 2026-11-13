@@ -155,7 +155,10 @@ describe("Thread: pi's system prompt sections (the built-in pi-action extension)
 	it("renders pi's sections in pi's order, then the extensions' sections", async () => {
 		const cwd = tempDir();
 		const context = await firstRequest(
-			[builtin("Project-specific instructions and guidelines:\n\nRepo rules."), pit],
+			[
+				builtin("Project-specific instructions and guidelines:\n\nRepo rules."),
+				pit,
+			],
 			{ cwd },
 		);
 		expect(sectionKeys(context)).toStrictEqual([

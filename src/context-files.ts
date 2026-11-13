@@ -120,7 +120,7 @@ function checkoutSource(root: string): Source {
 			const files = await Promise.all(
 				paths.map(async (path) => isFile(join(root, dir, path))),
 			);
-			return paths.filter((_, index) => files[index]);
+			return paths.filter((_, index) => files[index] === true);
 		},
 	};
 }
@@ -164,9 +164,7 @@ async function commitSource(
 	return {
 		read: async (rel) =>
 			// cat-file blob fails on a tree: a directory named like a context file is skipped.
-			git(root, ["cat-file", "blob", `${sha}:./${rel}`]).catch(
-				() => undefined,
-			),
+			git(root, ["cat-file", "blob", `${sha}:./${rel}`]).catch(() => undefined),
 		list: async (dir) => {
 			const out = await git(join(root, dir), [
 				"ls-tree",

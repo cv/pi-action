@@ -92,30 +92,26 @@ describe("loadProjectContext", () => {
 		expect(text).not.toContain("Claude rules.");
 	});
 
-	it("takes the first of pi's names in each directory", async () => {
-		const names = [
-			"AGENTS.override.md",
-			"AGENTS.md",
-			"AGENTS.MD",
-			"CLAUDE.md",
-			"CLAUDE.MD",
-		];
+	const names = [
+		"AGENTS.override.md",
+		"AGENTS.md",
+		"AGENTS.MD",
+		"CLAUDE.md",
+		"CLAUDE.MD",
+	];
+	// Each name, next to the name after it, which loses (CLAUDE.MD, the last, is alone).
+	it.each(
+		names.map((name, index) => [name, names.slice(index + 1, index + 2)]),
+	)("takes %s before %j, in pi's order of names", async (name, after) => {
 		const root = tempDir();
-		// Directory ${index}: the name at `index`, and the next one, which loses.
-		for (const [index, name] of names.entries()) {
-			write(join(root, String(index), name), name);
-			const next = names[index + 1];
-			if (next !== undefined) {
-				write(join(root, String(index), next), "next");
-			}
+		write(join(root, name), name);
+		for (const other of after) {
+			write(join(root, other), "loses");
 		}
-		for (const [index, name] of names.entries()) {
-			const cwd = join(root, String(index));
-			const context = await loadProjectContext(options({ cwd, workspace: cwd }));
-			expect(context.files.map((file) => [file.label, file.content])).toStrictEqual(
-				[[name, name]],
-			);
-		}
+		const context = await loadProjectContext(options({ cwd: root }));
+		expect(
+			context.files.map((file) => [file.label, file.content]),
+		).toStrictEqual([[name, name]]);
 	});
 
 	it("skips a directory named like a context file", async () => {
@@ -127,9 +123,14 @@ describe("loadProjectContext", () => {
 		write(join(root, "pkg", "CLAUDE.md"), "Pkg rules.");
 		write(join(root, "real", "CLAUDE.md"), "Real rules.");
 		mkdirSync(join(root, "link"));
-		symlinkSync(join(root, "real", "CLAUDE.md"), join(root, "link", "AGENTS.md"));
+		symlinkSync(
+			join(root, "real", "CLAUDE.md"),
+			join(root, "link", "AGENTS.md"),
+		);
 		const context = await loadProjectContext(options({ cwd: root }));
-		expect(context.files.map((file) => file.label)).toStrictEqual(["AGENTS.md"]);
+		expect(context.files.map((file) => file.label)).toStrictEqual([
+			"AGENTS.md",
+		]);
 		expect(context.nested).toStrictEqual([
 			"link/AGENTS.md",
 			"pkg/AGENTS.override.md/AGENTS.md",
