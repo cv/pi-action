@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import type { Extension } from "@earendil-works/pi-durable";
+import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 
 import { BUILTIN_EXTENSION } from "./builtin-extension.ts";
@@ -51,6 +52,8 @@ export async function createDurableExtensions(
 	}
 	const { cwd, trustProject, ui, log } = options;
 	const agentDir = await agentDirectory(options);
+	// One processor for all extensions; its worker thread starts with the first image and exits when idle.
+	const images = await createNodePhotonImages();
 	log.info(
 		`pi-durable extensions: agent directory ${agentDir}, project ${trustProject ? "trusted" : "not trusted"}, ${ui ? "questions answered on GitHub" : "no UI"}`,
 	);
@@ -69,6 +72,7 @@ export async function createDurableExtensions(
 				trustProject,
 				...(ui ? { ui } : {}),
 				log: { info: log.info, warning: log.warning },
+				images,
 			});
 		} catch (error) {
 			throw new Error(
