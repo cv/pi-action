@@ -505,18 +505,22 @@ describe("run (durable)", () => {
 			return fauxAssistantMessage("ok");
 		};
 		w.faux.setResponses([record, record, record]);
+		const files = (cwd: string) => {
+			write(join(cwd, ".pi/SYSTEM.md"), "You are my bot.");
+			write(join(cwd, ".pi/APPEND_SYSTEM.md"), "Also this.");
+		};
 		const on = w.deps(w.comment("@pi one"), { trustProject: true });
-		mkdirSync(join(on.cwd, ".pi"), { recursive: true });
-		writeFileSync(join(on.cwd, ".pi", "SYSTEM.md"), "You are my bot.");
-		writeFileSync(join(on.cwd, ".pi", "APPEND_SYSTEM.md"), "Also this.");
+		files(on.cwd);
 		const lines = logLines(on.log);
 		await run(on);
 		const untrusted = w.deps(w.comment("@pi two"));
+		files(untrusted.cwd);
 		await run(untrusted);
 		const off = w.deps(w.comment("@pi three"), {
 			trustProject: true,
 			systemPromptFiles: false,
 		});
+		files(off.cwd);
 		await run(off);
 
 		expect(seen[0]).toContain("You are my bot.");
