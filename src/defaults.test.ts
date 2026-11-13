@@ -17,6 +17,7 @@ const DEFAULT_CASES = [
 	["poll_interval", String(DEFAULTS.pollInterval)],
 	["provider", DEFAULTS.provider],
 	["model", DEFAULTS.model],
+	["thinking_level", DEFAULTS.thinkingLevel],
 	["provider_api", DEFAULTS.customProviderApi],
 	["provider_auth_header", String(DEFAULTS.customProviderAuthHeader)],
 	["model_reasoning", String(DEFAULTS.customModelReasoning)],
