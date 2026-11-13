@@ -177,9 +177,17 @@ export async function captureState(
 	try {
 		const index = join(tmp, "index");
 		const env = { GIT_INDEX_FILE: index };
+		// The copy keeps the real index's mtime (down to the second). Git trusts a cached stat only for files older
+		// than the index; with the copy's new mtime, a file changed right after the commit, with the same size and
+		// mtime, would look unchanged ("racy git").
 		const copied = await fs
-			.copyFile(realIndex, index)
-			.then(() => true)
+			.stat(realIndex)
+			.then(async (stat) => {
+				await fs.copyFile(realIndex, index);
+				const seconds = Math.floor(stat.mtimeMs / 1000);
+				await fs.utimes(index, seconds, seconds);
+				return true;
+			})
 			.catch(() => false);
 		if (!copied) {
 			await git(top, ["read-tree", head], { env });
