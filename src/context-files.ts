@@ -13,7 +13,7 @@ export const PROJECT_CONTEXT_SECTION = "project_context";
  * In each directory, the first of these that is a file is loaded: pi's `loadContextFileFromDir`, in its order. Git
  * matches names case-sensitively (a fork's base commit), so `AGENTS.MD` and `CLAUDE.MD` are entries of their own.
  */
-export const CONTEXT_FILE_NAMES: readonly string[] = [
+const CONTEXT_FILE_NAMES: readonly string[] = [
 	"AGENTS.override.md",
 	"AGENTS.md",
 	"AGENTS.MD",
@@ -253,7 +253,7 @@ export function formatBytes(bytes: number): string {
  * The `project_context` section text, as pi renders it: a `<project_instructions>` block for each file. pi-action's
  * notes (nested files, the size limit, a fork's base commit) come after the files.
  */
-export function renderProjectContext(
+function renderProjectContext(
 	context: Omit<ProjectContext, "text">,
 	maxBytes: number,
 ): string | undefined {
