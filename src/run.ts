@@ -321,17 +321,19 @@ function pushOnSignals(thread: Thread, log: Log): () => void {
 	};
 }
 
-/** One line for the model, the tools it gets, and the pi-durable extensions, after the setup group. */
+/** One line for the model, its thinking level, the tools it gets, and the pi-durable extensions, after the setup group. */
 function describeSetup(
 	inputs: ActionInputs,
 	extensions: readonly Extension[],
-	modelTools: readonly string[],
+	{ modelTools, thinkingLevel }: Pick<Thread, "modelTools" | "thinkingLevel">,
 ): string {
 	const loaded = extensions.map(
 		(extension) =>
 			`${extension.name} (${(extension.tools ?? []).map((tool) => tool.name).join(", ") || "no tools"})`,
 	);
-	return `🤖 ${inputs.provider}/${inputs.model} · tools: ${modelTools.join(", ")}${loaded.length > 0 ? ` · extensions: ${loaded.join(", ")}` : ""}`;
+	const thinking =
+		thinkingLevel === undefined ? "" : ` · thinking ${thinkingLevel}`;
+	return `🤖 ${inputs.provider}/${inputs.model}${thinking} · tools: ${modelTools.join(", ")}${loaded.length > 0 ? ` · extensions: ${loaded.join(", ")}` : ""}`;
 }
 
 /** One line for a request as pi gets it: who, where, and its first line (as typed, for a prompt template or skill). */
@@ -538,6 +540,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			issueNumber,
 			models,
 			model: findModel(models, inputs.provider, inputs.model),
+			thinkingLevel: inputs.thinkingLevel,
 			log,
 			remote: deps.remote,
 			extensions: [
@@ -557,7 +560,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			},
 		});
 		thread = opened;
-		log.info(describeSetup(inputs, extensions, opened.modelTools));
+		log.info(describeSetup(inputs, extensions, opened));
 		stopSignals = pushOnSignals(opened, log);
 		announceThread(deps, opened);
 		// New comments: on a new thread, from the time of the trigger; on an existing one, since it began.
