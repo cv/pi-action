@@ -83,12 +83,13 @@ Only `github_token` is necessary. All other inputs have a default or are optiona
 | `poll_interval` | Seconds between checks for new comments while pi works | No | `15` |
 | `provider` | LLM provider (`anthropic`, `openai`, `google`, a custom name, or a provider from an extension) | No | `anthropic` |
 | `model` | Model ID | No | `claude-sonnet-5-5` |
+| `thinking_level` | How much the model thinks before it answers: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. A model that does not support the level gets the nearest level that it supports, and a model without reasoning support gets `off` (see [Thinking](docs/models.md#thinking)) | No | `medium` |
 | `provider_base_url` | Base URL of one custom provider and model. Set it to enable the `provider_*` and `model_*` inputs below (see [Models](docs/models.md#a-custom-provider-and-model)) | No | - |
 | `provider_api` | API type of the custom provider | No | `openai-completions` |
 | `provider_api_key` | Key of the custom provider: a literal key, or the name of an environment variable | No | - |
 | `provider_auth_header` | Send `Authorization: Bearer <key>` to the custom provider | No | `false` |
 | `model_name` | Display name of the custom model | No | - |
-| `model_reasoning` | The custom model supports reasoning (thinking) | No | `false` |
+| `model_reasoning` | The custom model supports reasoning (thinking). When `false`, the model gets `thinking_level: off` | No | `false` |
 | `model_input` | Comma-separated input types of the custom model (`text` or `text,image`) | No | `text` |
 | `model_context_window` | Context window of the custom model, in tokens | No | `128000` |
 | `model_max_tokens` | Maximum output tokens of the custom model (reasoning counts toward it). A response that hits it with no tool call is continued, up to 3 times in a row and within `timeout`; partial text is posted, marked as cut off. If it keeps hitting the limit, pi posts an error that says so: raise this value, up to the provider's limit for the model | No | `16384` |

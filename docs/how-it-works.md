@@ -33,7 +33,7 @@ The log of the `Run pi-action` step shows what pi does while it works, one line 
 
 ```text
 ▸ Setup
-🤖 nvidia/aws/anthropic/bedrock-claude-opus-5-5 · tools: read, write, edit, bash, typescript · extensions: pit (typescript)
+🤖 nvidia/aws/anthropic/bedrock-claude-opus-5-5 · thinking medium · tools: read, write, edit, bash, typescript · extensions: pit (typescript)
 ▸ 🧵 Thread refs/pi/threads/46: continuing, started 2026-11-12 07:11 UTC
 ▶ Request from @cv (https://github.com/o/r/issues/46#issuecomment-1): Ready to write a PR?
 💬 I'll look at the existing sessions first.
@@ -49,7 +49,7 @@ The log of the `Run pi-action` step shows what pi does while it works, one line 
 | Line | What it shows | Details (`▸`) |
 |------|---------------|---------------|
 | `Setup` | | The extensions, prompt templates, and [skills](skills.md) that pi-action loaded, and the variables that the tools of pi get |
-| `🤖` | The model, the tools that it gets (see [Tools the model sees](extensions.md#tools-the-model-sees)), and the pi-durable extensions with their tools | |
+| `🤖` | The model, its thinking level (see [Thinking](models.md#thinking)), the tools that it gets (see [Tools the model sees](extensions.md#tools-the-model-sees)), and the pi-durable extensions with their tools | |
 | `🧵 Thread` | The thread ref, and if the thread is new or continues | The git commands that read the thread ([Read a thread](threads.md#read-a-thread)) |
 | `▶` | A request that pi gets: who asked, where, and its first line. For a [prompt template](prompts.md#prompt-templates) or a [skill](skills.md#use-a-skill-explicitly), the line as typed and where it comes from | |
 | `💬` | The text of a model response (its first line, if it is longer) | The full text |
