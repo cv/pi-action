@@ -460,7 +460,7 @@ export class Thread {
  * `requested`, capped as pi caps it to what the model supports (pi-ai's `clampThinkingLevel`): `off` for a model
  * without reasoning, else the nearest level it supports. pi-durable sends the level as it is, so pi-action caps it.
  */
-export function supportedThinkingLevel(
+function supportedThinkingLevel(
 	model: Model<Api>,
 	requested: ModelThinkingLevel,
 	log: Pick<Log, "info">,

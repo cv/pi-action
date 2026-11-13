@@ -66,7 +66,7 @@ const MODEL_INPUT_MODES: ReadonlySet<string> = new Set<ModelInputMode>([
 	"image",
 ]);
 /** pi-ai's ModelThinkingLevel values, from least to most. */
-export const THINKING_LEVELS: readonly ModelThinkingLevel[] = [
+const THINKING_LEVELS: readonly ModelThinkingLevel[] = [
 	"off",
 	"minimal",
 	"low",
