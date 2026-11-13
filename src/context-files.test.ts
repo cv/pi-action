@@ -1,17 +1,12 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import type { PromptInput } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
 
 import {
-	CONTEXT_EXTENSION,
 	type ContextFilesOptions,
-	contextExtension,
 	formatBytes,
 	loadProjectContext,
-	PROJECT_CONTEXT_SECTION,
 } from "./context-files.ts";
 import { createLogger, git, tempDir, tempRemote } from "./test-helpers.ts";
 
@@ -248,21 +243,6 @@ describe("loadProjectContext on a pull request from a fork", () => {
 		expect(log.warning).toHaveBeenCalledWith(
 			"Context files: not loading the repository's AGENTS.md or CLAUDE.md, because this pull request comes from a fork and its base commit is not available",
 		);
-	});
-});
-
-describe("contextExtension", () => {
-	const render = async (text: string | undefined) => {
-		const extension = contextExtension(text);
-		expect(extension.name).toBe(CONTEXT_EXTENSION);
-		const [section] = extension.sections ?? [];
-		expect(section?.key).toBe(PROJECT_CONTEXT_SECTION);
-		return section?.render({} as PromptInput, BACKGROUND_CONTEXT);
-	};
-
-	it("renders the text it was given, or no section", async () => {
-		await expect(render("rules")).resolves.toBe("rules");
-		await expect(render(undefined)).resolves.toBeUndefined();
 	});
 });
 

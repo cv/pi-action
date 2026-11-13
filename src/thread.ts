@@ -24,7 +24,6 @@ import {
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 
-import { contextExtension } from "./context-files.ts";
 import { GitStorage } from "./storage/git-storage.ts";
 import { git } from "./storage/git.ts";
 import { GitSync, isTurnBoundary, liveRef } from "./storage/sync.ts";
@@ -52,9 +51,7 @@ export interface ThreadOptions {
 	model: Model<Api>;
 	log: Log;
 	remote?: string | undefined;
-	/** The `project_context` section (see context-files.ts), read once for the run; none when undefined. */
-	projectContext?: string | undefined;
-	/** pi-durable extensions from the `extensions` input, installed after the coding tools and pi-action-context. */
+	/** pi-durable extensions, installed after the coding tools: the built-in `pi-action`, then the `extensions` input's. */
 	extensions?: readonly Extension[];
 	/** The `exclude_tools` and `model_tools_hidden` inputs; none when undefined. */
 	tools?: ToolSelection | undefined;
@@ -261,8 +258,6 @@ export class Thread {
 				: new ObservedMemoryStorage(onEntries));
 		const registry = createRegistry();
 		registry.install(CodingTools);
-		// Before the extensions' sections: the repository's rules come first, then pit's guidelines.
-		registry.install(contextExtension(options.projectContext));
 		for (const extension of options.extensions ?? []) {
 			registry.install(extension);
 		}
