@@ -82,7 +82,7 @@ More context files: packages/api/AGENTS.md. Read the one for the directory you w
 </project_context>
 ```
 
-A thread from pi-action 0.x before this layout gets one `Updated system prompt section "project_context"` in its next run.
+A thread from an earlier version of pi-action, with the old `# Project Context` layout, gets one `Updated system prompt section "project_context"` in its next run.
 
 - **Size.** `context_files_max_bytes` (default 64 KiB) limits all files together. pi-action cuts the file at the limit, adds a note for pi, leaves out later files, and writes a warning to the log.
 - **Text.** pi-action removes invisible characters, as for the issue body (see [Security](security.md#what-pi-action-removes-from-text)). It keeps HTML comments.
