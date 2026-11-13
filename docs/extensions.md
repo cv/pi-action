@@ -95,7 +95,7 @@ The order is: the coding tools of pi-action (`coding-tools`) first, then pi-acti
 
 ### Host options
 
-`createPiDurableExtension` receives `{ cwd, agentDir, trustProject, ui, log }`:
+`createPiDurableExtension` receives `{ cwd, agentDir, trustProject, ui, log, images }`:
 
 | Option | Value |
 |--------|-------|
@@ -104,6 +104,7 @@ The order is: the coding tools of pi-action (`coding-tools`) first, then pi-acti
 | `trustProject` | The `trust_project` input |
 | `ui` | `{ ask, notify }`, the GitHub UI (see [Questions on GitHub](#questions-on-github)). Only in `comment` mode on an issue or pull request. Not set in `output` mode or for direct prompts |
 | `log` | The log of the action (`info`, `warning`) |
+| `images` | An image processor, `createNodePhotonImages()` of pi-durable. It resizes and converts images to the limits of the model, for example for pit's `workspace.viewImage` (pit 0.36.2 and later) |
 
 pi-durable extensions run in the process of pi-action. Thus, pi-action also sets `GH_TOKEN` and the git identity in its own environment when it loads such an extension. See [Security](security.md#the-agents-github-token-and-git-identity).
 
