@@ -43,7 +43,7 @@ export interface ActionInputs {
 	trustProject: boolean;
 	/** The agent directory for pi-durable extensions; a temp dir when unset. */
 	agentDir: string | undefined;
-	/** `context_files`: whether AGENTS.md (or CLAUDE.md) goes into the system prompt. */
+	/** `context_files`: whether the context files (AGENTS.md, CLAUDE.md, ...) go into the system prompt. */
 	contextFiles: boolean;
 	/** `context_files_max_bytes`: the limit of all context files together. */
 	contextFilesMaxBytes: number;

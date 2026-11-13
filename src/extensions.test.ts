@@ -39,6 +39,7 @@ const HOST = {
 	agentDir: "/a",
 	trustProject: false,
 	log: createLogger(),
+	images: { prepare: async () => undefined },
 };
 
 type Fn = (...args: unknown[]) => unknown;

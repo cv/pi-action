@@ -1,3 +1,5 @@
+import type { ImageProcessor } from "@earendil-works/pi-durable/tools";
+
 /** The logging that every part of a run needs. */
 export interface Log {
 	info: (msg: string) => void;
@@ -46,6 +48,8 @@ export interface DurableHostOptions {
 	/** GitHub comments as dialogs; omitted in output mode and for direct prompts. */
 	ui?: DurableUi;
 	log: Log;
+	/** Resizes and converts images to the model's limits, for pit's `workspace.viewImage`. */
+	images: ImageProcessor;
 }
 
 export type GitHubReaction =

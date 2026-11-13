@@ -98,7 +98,7 @@ pi-action is TypeScript on [pi-durable](https://www.npmjs.com/package/@earendil-
 | [`src/custom-provider.ts`](src/custom-provider.ts) | The custom provider from the `provider_*` and `model_*` inputs |
 | [`src/extensions.ts`](src/extensions.ts) | The `extensions` input: npm installation, entry points, loading with jiti, and the `pi` object |
 | [`src/extension-provider.ts`](src/extension-provider.ts) | Changes `pi.registerProvider(name, config)` into a pi-ai provider |
-| [`src/context-files.ts`](src/context-files.ts) | The context files (`AGENTS.md`, `CLAUDE.md`) and the text of the `project_context` section |
+| [`src/context-files.ts`](src/context-files.ts) | The context files (`AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`, ...) and the text of the `project_context` section |
 | [`src/system-prompt-files.ts`](src/system-prompt-files.ts) | `SYSTEM.md` and `APPEND_SYSTEM.md`: the lookup in `.pi` and `agent_dir`, read once for each run |
 | [`src/skills.ts`](src/skills.ts) | Skills: discovery, the `SKILL.md` frontmatter, the `available_skills` section, and `/skill:<name>` |
 | [`src/builtin-extension.ts`](src/builtin-extension.ts) | pi-action's own pi-durable extension (`pi-action`): pi's system prompt sections (`preamble`, `tools`, `rules`, `addendum`, `project_context`, `available_skills`, `cwd`), with pi's text for the coding tools |

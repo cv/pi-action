@@ -99,7 +99,7 @@ inputs:
     required: false
     default: ''
   context_files:
-    description: 'Put the repository''s AGENTS.md (or CLAUDE.md) into the system prompt: the one in agent_dir (when set), then one per directory from the workspace root down to the working directory. On a pull request from a fork, they come from its base commit'
+    description: 'Put the repository''s context files (AGENTS.override.md, AGENTS.md, CLAUDE.md, ...) into the system prompt: the one in agent_dir (when set), then one per directory from the workspace root down to the working directory. On a pull request from a fork, they come from its base commit'
     required: false
     default: 'true'
   context_files_max_bytes:

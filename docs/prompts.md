@@ -62,27 +62,27 @@ A thread from an earlier version of pi-action gets the new sections in its next 
 
 ### Context files
 
-pi-action loads context files as pi's coding agent does:
+pi-action loads context files as pi's coding agent does. In each directory, it loads the first of these files that exists: `AGENTS.override.md`, `AGENTS.md`, `AGENTS.MD`, `CLAUDE.md`, `CLAUDE.MD`. It skips a directory with one of these names.
 
-1. **Global:** `<agent_dir>/AGENTS.md`, or else `<agent_dir>/CLAUDE.md`. Only when `agent_dir` is set.
-2. **Workspace:** for each directory from the workspace root (`GITHUB_WORKSPACE`) down to the working directory of the agent: `AGENTS.md`, or else `CLAUDE.md`. Today, the working directory is the workspace root. pi-action never reads files above the workspace.
-3. **Nested files** below the working directory (for example `packages/api/AGENTS.md`) are not loaded. The section lists their paths (up to 20) and tells pi to read the one for the directory where it works. pi-action finds them with `git ls-files`, so it ignores the files that git ignores.
+1. **Global:** the file in `agent_dir`. Only when `agent_dir` is set.
+2. **Workspace:** the file in each directory from the workspace root (`GITHUB_WORKSPACE`) down to the working directory of the agent. Today, the working directory is the workspace root. pi-action never reads files above the workspace.
+3. **Nested files** below the working directory (for example `packages/api/AGENTS.md`) are not loaded. The section lists their paths (up to 20, one for each directory) and tells pi to read the one for the directory where it works. pi-action finds them with `git ls-files`, so it ignores the files that git ignores.
 
-The section looks like this:
+The section has pi's layout: one `<project_instructions>` block for each file, with its content trimmed. pi-action's notes come after the files: the nested files, the files cut or left out at the size limit, and the base commit of a pull request from a fork. The section looks like this:
 
 ```text
 <project_context>
-# Project Context
-
 Project-specific instructions and guidelines:
 
-## /home/runner/work/xyz/xyz/AGENTS.md
-
+<project_instructions path="/home/runner/work/xyz/xyz/AGENTS.md">
 <file contents>
+</project_instructions>
 
 More context files: packages/api/AGENTS.md. Read the one for the directory you work in.
 </project_context>
 ```
+
+A thread from an earlier version of pi-action, with the old `# Project Context` layout, gets one `Updated system prompt section "project_context"` in its next run.
 
 - **Size.** `context_files_max_bytes` (default 64 KiB) limits all files together. pi-action cuts the file at the limit, adds a note for pi, leaves out later files, and writes a warning to the log.
 - **Text.** pi-action removes invisible characters, as for the issue body (see [Security](security.md#what-pi-action-removes-from-text)). It keeps HTML comments.
