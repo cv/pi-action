@@ -186,9 +186,7 @@ describe("Thread: pi's system prompt sections (the built-in pi-action extension)
 		const context = await firstRequest([builtin(), pitOnly]);
 		expect(toolNames(context)).toStrictEqual(["typescript"]);
 		const sections = sectionsOf(context);
-		expect(sections["tools"]).toBe(
-			toolsSection([PIT_TOOL_LINE]),
-		);
+		expect(sections["tools"]).toBe(toolsSection([PIT_TOOL_LINE]));
 		expect(sections["rules"]).toBe(`<rules>\n${PI_RULES}\n</rules>`);
 	});
 
@@ -211,9 +209,7 @@ describe("Thread: pi's system prompt sections (the built-in pi-action extension)
 		});
 		expect(toolNames(context)).toStrictEqual(["custom"]);
 		const sections = sectionsOf(context);
-		expect(sections["tools"]).toBe(
-			toolsSection(["(none)"]),
-		);
+		expect(sections["tools"]).toBe(toolsSection(["(none)"]));
 		expect(sections["rules"]).toBe(`<rules>\n${PI_RULES}\n</rules>`);
 	});
 
