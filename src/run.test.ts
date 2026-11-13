@@ -495,6 +495,48 @@ describe("run (durable)", () => {
 		);
 	});
 
+	it("sends .pi/SYSTEM.md and APPEND_SYSTEM.md with trust_project, read once for the run", async () => {
+		const w = world();
+		const seen: string[] = [];
+		const record: FauxResponseStep = (context) => {
+			seen.push(
+				JSON.stringify(context.messages.filter((m) => m.role === "system")),
+			);
+			return fauxAssistantMessage("ok");
+		};
+		w.faux.setResponses([record, record, record]);
+		const on = w.deps(w.comment("@pi one"), { trustProject: true });
+		mkdirSync(join(on.cwd, ".pi"), { recursive: true });
+		writeFileSync(join(on.cwd, ".pi", "SYSTEM.md"), "You are my bot.");
+		writeFileSync(join(on.cwd, ".pi", "APPEND_SYSTEM.md"), "Also this.");
+		const lines = logLines(on.log);
+		await run(on);
+		const untrusted = w.deps(w.comment("@pi two"));
+		await run(untrusted);
+		const off = w.deps(w.comment("@pi three"), {
+			trustProject: true,
+			systemPromptFiles: false,
+		});
+		await run(off);
+
+		expect(seen[0]).toContain("You are my bot.");
+		expect(seen[0]).toContain("Also this.");
+		expect(seen[0]).not.toContain("You are a coding assistant");
+		const setupEnd = lines.indexOf("::endgroup::");
+		expect(lines.slice(0, setupEnd)).toContain(
+			"System prompt: .pi/SYSTEM.md (15 B, replaces pi's base prompt)",
+		);
+		expect(seen[1]).toContain("You are a coding assistant");
+		expect(seen[1]).not.toContain("You are my bot.");
+		expect(untrusted.log.info).toHaveBeenCalledWith(
+			"System prompt: not loading .pi/SYSTEM.md: trust_project is off",
+		);
+		expect(seen[2]).not.toContain("Also this.");
+		expect(off.log.info).toHaveBeenCalledWith(
+			"System prompt files: off (system_prompt_files)",
+		);
+	});
+
 	it("reads AGENTS.md from the base commit on a pull request from a fork", async () => {
 		const w = world();
 		w.faux.setResponses([fauxAssistantMessage("ok")]);
