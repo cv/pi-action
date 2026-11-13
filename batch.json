@@ -1,1 +1,1 @@
-{"format":1,"seq":143,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",2,"arguments","code"],"ingLevel,\\n\tlog: Pick<Log, \"info\">,\\n): ModelThinkingLevel {\\n\tconst level"]]}}]}
+{"format":1,"seq":144,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",2,"arguments","code"]," = clampThinkingLevel(model, requested);"]]}}]}
