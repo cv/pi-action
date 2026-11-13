@@ -1,1 +1,1 @@
-{"format":1,"seq":701,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"feat/customizable-prompt-templates 16 MERGED\nfeat/extension-prompts-and-tools 56 MERGED\nfeat/pre-commit-hook 14 MERGED\n"]]}}]}
+{"format":1,"seq":702,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"feat/skills 62 MERGED\nfeat/thread-log-hint 37 MERGED\nfix/35-max-tokens-continuation 36 MERGED\nfix/42-duplicate-replies 43 MERGED\n"]]}}]}
