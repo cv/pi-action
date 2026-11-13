@@ -6,6 +6,7 @@ import {
 	parseCsv,
 	parseExtensionSpecs,
 	parsePositiveInteger,
+	parseThinkingLevel,
 	readActionInputs,
 	readCustomProviderConfig,
 } from "./inputs.ts";
@@ -36,7 +37,9 @@ describe("readActionInputs", () => {
 				timeout: "60",
 				poll_interval: "5",
 				provider: "nvidia",
+				thinkingLevel: "high",
 				model: "openai/openai/gpt-5.5",
+				thinking_level: " High ",
 				provider_base_url: "https://inference-api.nvidia.com",
 				prompt_template: "Task: {{task}}",
 				output_mode: "output",
@@ -86,6 +89,38 @@ describe("readActionInputs", () => {
 			excludeTools: [],
 			modelToolsHidden: [],
 		});
+	});
+});
+
+describe("thinking_level", () => {
+	it("defaults to pi's medium when empty", () => {
+		expect(DEFAULTS.thinkingLevel).toBe("medium");
+		expect(parseThinkingLevel("")).toBe("medium");
+		expect(parseThinkingLevel("  ")).toBe("medium");
+	});
+
+	it("reads each of pi-ai's levels, in any case", () => {
+		for (const level of [
+			"off",
+			"minimal",
+			"low",
+			"medium",
+			"high",
+			"xhigh",
+			"max",
+		]) {
+			expect(parseThinkingLevel(level.toUpperCase())).toBe(level);
+		}
+	});
+
+	it("rejects other values", () => {
+		expect(() => parseThinkingLevel("extreme")).toThrow(
+			'Invalid thinking_level "extreme" (one of: off, minimal, low, medium, high, xhigh, max)',
+		);
+		expect(() => parseThinkingLevel("true")).toThrow("Invalid thinking_level");
+		expect(() =>
+			readActionInputs(reader({ thinking_level: "none" }), {}),
+		).toThrow('Invalid thinking_level "none"');
 	});
 });
 
