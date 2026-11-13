@@ -8,6 +8,7 @@ import {
 	readlinkSync,
 	rmSync,
 	symlinkSync,
+	utimesSync,
 	writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -104,8 +105,9 @@ describe("captureState", () => {
 		utimesSync(join(dir, ".git", "index"), t, t);
 		write(dir, "keep.txt", "KEEP\n");
 		utimesSync(join(dir, "keep.txt"), t, t);
-		expect(status(dir)).toContain("keep.txt");
+		// Before `git status`, which would write the index again.
 		expect(isClean(await captureState(dir))).toBe(false);
+		expect(status(dir)).toContain("keep.txt");
 	});
 });
 
