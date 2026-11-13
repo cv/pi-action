@@ -12,15 +12,16 @@ A follow-up does not repeat the issue or the diff, because the thread already ha
 
 ## The system prompt
 
-pi-action sends the system prompt of pi's coding agent (pi 1.5.2, `buildSystemPromptSections`), in pi's order. The built-in `pi-action` extension makes the sections 1 to 6. Each section is tagged as `<key>…</key>`, except `preamble`:
+pi-action sends the system prompt of pi's coding agent (pi 1.5.2, `buildSystemPromptSections`), in pi's order. The built-in `pi-action` extension makes the sections 1 to 7. Each section is tagged as `<key>…</key>`, except `preamble`:
 
-1. `preamble`: `You are a coding assistant running inside pi, a coding agent harness. Help users inspect files, run commands, and modify code.`
+1. `preamble`: `You are a coding assistant running inside pi, a coding agent harness. Help users inspect files, run commands, and modify code.` A [`SYSTEM.md`](#system-prompt-files) replaces the sections 1 to 3 with its text, as an untagged `preamble`.
 2. `tools`: one line for each tool that the model is offered and that has a prompt snippet, then `Additional tools may be available.` If no tool has a snippet: `(none)`.
 3. `rules`: pi's rules for the offered tools, then `Be concise in your responses` and `Show file paths clearly when working with files`.
-4. `project_context`: the [context files](#context-files) of the repository. Set `context_files: false` to remove it.
-5. `available_skills`: the [skills](skills.md#the-system-prompt) that pi can use. It is not there when no skill is listed.
-6. `cwd`: the working directory of the agent, such as `/home/runner/work/xyz/xyz`.
-7. The sections of the pi-durable extensions, in the order of `extensions` (for example pit's guidelines). See [Extensions](extensions.md#pi-durable-extensions).
+4. `addendum`: the text of [`APPEND_SYSTEM.md`](#system-prompt-files). It is not there when there is no such file.
+5. `project_context`: the [context files](#context-files) of the repository. Set `context_files: false` to remove it.
+6. `available_skills`: the [skills](skills.md#the-system-prompt) that pi can use. It is not there when no skill is listed.
+7. `cwd`: the working directory of the agent, such as `/home/runner/work/xyz/xyz`.
+8. The sections of the pi-durable extensions, in the order of `extensions` (for example pit's guidelines). See [Extensions](extensions.md#pi-durable-extensions).
 
 pi-action leaves out pi's `docs` section, because it has no pi documentation. Extensions can change each section with `wrapSection(key, …)` (see [Override tools and sections](extensions.md#override-tools-and-sections)).
 
@@ -55,7 +56,7 @@ Additional tools may be available.
 
 ### The prompt cache
 
-The tools of a run do not change, and pi-action reads the context files and skills one time for each run. Thus, each section has the same text in all requests of a run, and the prompt cache of the provider stays valid.
+The tools of a run do not change, and pi-action reads the context files, the system prompt files, and the skills one time for each run. Thus, each section has the same text in all requests of a run, and the prompt cache of the provider stays valid.
 
 A thread from an earlier version of pi-action gets the new sections in its next request. Because the new sections come before the sections that the thread already has, pi-durable removes the sections and adds them again in the new order, one time.
 
@@ -88,6 +89,26 @@ More context files: packages/api/AGENTS.md. Read the one for the directory you w
 - **One read for each run.** pi-action reads the files when the run starts. If pi changes `AGENTS.md` during the run, the system prompt stays the same, and the prompt cache of the provider stays valid. The next run on the thread sends the new content as an update of the section.
 - **Pull requests from forks.** pi-action reads the files from the base commit of the pull request, not from the checkout. See [Security](security.md#context-files-from-the-repository).
 - **The log.** The setup group shows the files, for example `Context files: AGENTS.md (2.1 KiB)`.
+
+### System prompt files
+
+As in pi's coding agent, two files change the system prompt:
+
+| File | Effect |
+|------|--------|
+| `SYSTEM.md` | Replaces pi's own sections (`preamble`, `tools`, and `rules`) with one untagged `preamble` that has the text of the file. The other sections stay. Wraps of `tools` and `rules` by extensions then do nothing |
+| `APPEND_SYSTEM.md` | Becomes the `addendum` section, after `rules` and before `project_context` |
+
+pi-action finds each file as pi does. It uses the first one of these that exists and is not empty:
+
+1. **Project:** `<working directory>/.pi/SYSTEM.md` (or `APPEND_SYSTEM.md`), **only with `trust_project: true`**, and not on a pull request from a fork. See [Security](security.md#system-prompt-files-from-the-repository).
+2. **User:** `<agent_dir>/SYSTEM.md` (or `APPEND_SYSTEM.md`). Only when `agent_dir` is set. On a pull request from a fork, pi-action skips it when `agent_dir` is in the workspace.
+
+- **Size.** `context_files_max_bytes` (default 64 KiB) limits each file. pi-action cuts a file at the limit, and writes a warning to the log.
+- **Text.** pi-action removes invisible characters (also a BOM), as for the [context files](#context-files).
+- **One read for each run.** If pi changes a file during the run, the system prompt stays the same.
+- **Turn it off.** Set `system_prompt_files: false` to load neither file.
+- **The log.** The setup group shows the files, for example `System prompt: .pi/SYSTEM.md (1.2 KiB, replaces pi's base prompt)` and `System prompt: appended agent_dir/APPEND_SYSTEM.md (300 B)`. For a project file that it skips, it writes the reason, for example `System prompt: not loading .pi/SYSTEM.md: trust_project is off`.
 
 ## The task
 
