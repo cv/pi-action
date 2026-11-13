@@ -252,7 +252,14 @@ describe("Thread: pi's system prompt sections (the built-in pi-action extension)
 			await thread.close();
 		}
 		// One system message in both requests: no "Updated system prompt section" after the edit.
-		const keys = ["preamble", "tools", "rules", "project_context", "cwd", "pit"];
+		const keys = [
+			"preamble",
+			"tools",
+			"rules",
+			"project_context",
+			"cwd",
+			"pit",
+		];
 		expect(seen.map((context) => sectionKeys(context))).toStrictEqual([
 			[keys],
 			[keys],
