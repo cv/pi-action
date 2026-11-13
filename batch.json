@@ -1,1 +1,1 @@
-{"format":1,"seq":698,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"55-pit-upgrade 64 MERGED\nchore/release-2.3.0 45 MERGED\nchore/release-2.4.0 60 MERGED\nci/pi-app-token 40 MERGED\n"]]}}]}
+{"format":1,"seq":699,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"docs/32-documentation-cleanup 34 MERGED\nfeat/33-worktree-continuity 44 MERGED\nfeat/46-multiline-commands 49 MERGED\nfeat/46-readable-logs 48 MERGED\n"]]}}]}
