@@ -36,6 +36,10 @@ inputs:
   model:
     description: 'Model ID'
     default: 'claude-sonnet-5-5'
+  thinking_level:
+    description: 'How much the model thinks before it answers: off, minimal, low, medium, high, xhigh, or max. A model that does not support the level gets the nearest level it supports (off without reasoning support), with a log line'
+    required: false
+    default: 'medium'
   provider_base_url:
     description: 'Base URL for a single custom provider/model (e.g., https://inference-api.nvidia.com)'
     required: false
@@ -186,6 +190,7 @@ runs:
         INPUT_POLL_INTERVAL: ${{ inputs.poll_interval }}
         INPUT_PROVIDER: ${{ inputs.provider }}
         INPUT_MODEL: ${{ inputs.model }}
+        INPUT_THINKING_LEVEL: ${{ inputs.thinking_level }}
         INPUT_PROVIDER_BASE_URL: ${{ inputs.provider_base_url }}
         INPUT_PROVIDER_API: ${{ inputs.provider_api }}
         INPUT_PROVIDER_API_KEY: ${{ inputs.provider_api_key }}
