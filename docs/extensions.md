@@ -19,7 +19,7 @@ Write one extension per line, or separate them with commas. pi-action ignores em
     github_token: ${{ secrets.GITHUB_TOKEN }}
     extensions: |
       # pi-durable extensions
-      github:cv/pit#v0.35.0          # pit's typescript tool
+      github:cv/pit#v0.36.1          # pit's typescript tool
       # pi extensions (providers)
       @acme/pi-provider@1.4.2        # from npm, pinned
       ./.pi/extensions/gateway.ts    # in this repository
@@ -73,7 +73,7 @@ A [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) extensi
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     extensions: |
-      github:cv/pit#v0.35.0   # pit's typescript tool (pit/durable)
+      github:cv/pit#v0.36.1   # pit's typescript tool (pit/durable)
 ```
 
 ### Package format
@@ -122,7 +122,7 @@ By default, the model gets all tools: the coding tools of pi-action (`read`, `wr
 | `exclude_tools` | pi-action disables these tools completely. Neither the model nor other tools can call them |
 | `model_tools_hidden` | pi-action does not offer these tools to the model. Other tools can still call them, for example pit's `tools.*` |
 
-For example, to give the model only pit's `typescript` tool, and keep the coding tools available to its programs:
+pit 0.36.0 and later hide the coding tools from the model themselves. The model gets only pit's `typescript` tool without these inputs, and pit's programs use `workspace.*` and `shell.*` instead of the coding tools (see [Tools the model sees](https://github.com/cv/pit/blob/main/docs/durable.md#tools-the-model-sees) in pit). With an earlier pit, hide the coding tools with `model_tools_hidden`. Its programs can then still call them through `tools.*`:
 
 ```yaml
 - uses: cv/pi-action@v2
