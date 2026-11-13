@@ -4,6 +4,7 @@ import { info, warning } from "@actions/core";
 import { context } from "@actions/github";
 
 import { parsePositiveInteger } from "./inputs.ts";
+import { nestedRun } from "./nested-run.ts";
 import { git } from "./storage/git.ts";
 import { GitSync, liveRef } from "./storage/sync.ts";
 import { worktreeRef } from "./storage/worktree.ts";
@@ -99,7 +100,11 @@ export async function pushThread(
 	}
 }
 
-if (process.argv[1]?.endsWith("push.ts") === true) {
+const nested = nestedRun(process.env);
+if (process.argv[1]?.endsWith("push.ts") === true && nested !== undefined) {
+	// The run around this one saves its own thread.
+	warning(`Not saving the thread: ${nested}`);
+} else if (process.argv[1]?.endsWith("push.ts") === true) {
 	pushThread(
 		context.payload,
 		process.cwd(),
