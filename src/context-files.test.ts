@@ -62,7 +62,7 @@ describe("loadProjectContext", () => {
 			].join("\n"),
 		);
 		expect(log.info).toHaveBeenCalledWith(
-			"Context files: agent_dir/AGENTS.md (17 B), AGENTS.md (12 B); 1 more listed",
+			"Context files: agent_dir/AGENTS.md (18 B), AGENTS.md (12 B); 1 more listed",
 		);
 	});
 
