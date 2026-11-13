@@ -1,1 +1,1 @@
-{"format":1,"seq":702,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"feat/skills 62 MERGED\nfeat/thread-log-hint 37 MERGED\nfix/35-max-tokens-continuation 36 MERGED\nfix/42-duplicate-replies 43 MERGED\n"]]}}]}
+{"format":1,"seq":703,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"fix/46-log-safety 50 MERGED\nfix/46-session-storage-failure 47 MERGED\nfix/nested-run-guard 76 OPEN\npi/issue-57-hide-default-tools 58 MERGED\n"]]}}]}
