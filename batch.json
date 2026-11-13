@@ -1,1 +1,1 @@
-{"format":1,"seq":644,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":645,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"]," M src/index.ts\n M src/push.ts\n?? src/nested-run.test.ts\n?? src/nested-run.ts\n"]]}}]}
