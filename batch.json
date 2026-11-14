@@ -1,1 +1,1 @@
-{"format":1,"seq":268,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":269,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"753f110 chore: release 2.5.2 (#84)\n\t\"version\": \"2.5.2\",\n"]]}}]}
