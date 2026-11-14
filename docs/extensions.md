@@ -115,16 +115,16 @@ pi-durable extensions run in the process of pi-action. Thus, pi-action also sets
 A tool can say how the [workflow log](how-it-works.md#the-workflow-log) shows its calls. Give the tool an optional `present` field. pi-durable does not use it, so other hosts ignore it:
 
 ```ts
-const tool = defineTool({
-	name: "typescript",
-	// ...
+// pi-durable's types do not declare `present`: add it to the tool that defineTool() returns.
+const tool = {
+	...defineTool({ name: "typescript" /* ... */ }),
 	present: {
 		// When the call starts: the 🔧 line, and the details in place of the arguments.
 		call: (args) => ({ title: args.label, body: args.code }),
 		// When it ends: the ↳ line in place of "N lines", and the details in place of the output.
 		result: (args, result) => ({ summary: "workspace.read", body: "..." }),
 	},
-});
+};
 ```
 
 - `call(args)` gets the arguments of the call. It returns `{ title, body? }`. `title` must not be empty.
