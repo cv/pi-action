@@ -24,7 +24,7 @@ function footer(ref: string | undefined): string {
 	return [
 		"",
 		"",
-		`<sub><details><summary>🧵 This conversation is stored in git on <code>${ref}</code></summary>`,
+		`<details><summary><sub>🧵 This conversation is stored in git on <code>${ref}</code></sub></summary>`,
 		"",
 		`Read it from a clone of this repository ([more](${READ_A_THREAD})):`,
 		"",
@@ -32,7 +32,7 @@ function footer(ref: string | undefined): string {
 		...readCommands(ref, "origin"),
 		"```",
 		"",
-		"</details></sub>",
+		"</details>",
 	].join("\n");
 }
 

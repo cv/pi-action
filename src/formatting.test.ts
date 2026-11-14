@@ -27,7 +27,7 @@ describe("formatSuccessComment / formatErrorComment", () => {
 			[
 				"",
 				"",
-				`<sub><details><summary>🧵 This conversation is stored in git on <code>${ref}</code></summary>`,
+				`<details><summary><sub>🧵 This conversation is stored in git on <code>${ref}</code></sub></summary>`,
 				"",
 				"Read it from a clone of this repository ([more](https://github.com/cv/pi-action/blob/main/docs/threads.md#read-a-thread)):",
 				"",
@@ -37,7 +37,7 @@ describe("formatSuccessComment / formatErrorComment", () => {
 				`git show ${ref}:batch.json | jq .   # the records of the newest step`,
 				"```",
 				"",
-				"</details></sub>",
+				"</details>",
 			].join("\n");
 		expect(formatSuccessComment("ok", "refs/pi/threads/42")).toBe(
 			`### 🤖 pi Response\n\nok${footer("refs/pi/threads/42")}`,
