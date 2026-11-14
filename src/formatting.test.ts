@@ -22,12 +22,28 @@ describe("formatSuccessComment / formatErrorComment", () => {
 		);
 	});
 
-	it("adds the thread ref as a footer", () => {
+	it("adds a collapsed footer with how to read the thread", () => {
+		const footer = (ref: string) =>
+			[
+				"",
+				"",
+				`<sub><details><summary>🧵 This conversation is stored in git on <code>${ref}</code></summary>`,
+				"",
+				"Read it from a clone of this repository ([more](https://github.com/cv/pi-action/blob/main/docs/threads.md#read-a-thread)):",
+				"",
+				"```bash",
+				`git fetch origin '${ref}:${ref}'`,
+				`git log --oneline ${ref}            # one commit for each stored step`,
+				`git show ${ref}:batch.json | jq .   # the records of the newest step`,
+				"```",
+				"",
+				"</details></sub>",
+			].join("\n");
 		expect(formatSuccessComment("ok", "refs/pi/threads/42")).toBe(
-			"### 🤖 pi Response\n\nok\n\n---\n🧵 Thread state: `refs/pi/threads/42` (`git fetch origin refs/pi/threads/42`)",
+			`### 🤖 pi Response\n\nok${footer("refs/pi/threads/42")}`,
 		);
 		expect(formatErrorComment("no", "refs/pi/threads/7")).toBe(
-			"### ❌ pi Error\n\nFailed to process request: no\n\n---\n🧵 Thread state: `refs/pi/threads/7` (`git fetch origin refs/pi/threads/7`)",
+			`### ❌ pi Error\n\nFailed to process request: no${footer("refs/pi/threads/7")}`,
 		);
 	});
 });
