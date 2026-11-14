@@ -1,1 +1,1 @@
-{"format":1,"seq":486,"writes":[{"type":"entry","value":{"kind":"pi-action.worktree","data":{"stash":"6c683ca9ade28a9f8805ca3e142cbf0ac72af68f","wrapper":"2e26f6569f17e0fb67333ce69b5076fa67c7f637"},"id":195,"conversationId":1}},{"type":"document.change","id":39,"content":{"version":1,"kind":"base","value":{"stash":"6c683ca9ade28a9f8805ca3e142cbf0ac72af68f","wrapper":"2e26f6569f17e0fb67333ce69b5076fa67c7f637"}}}]}
+{"format":1,"seq":487,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["generation"],{"attempt":1}]]}}]}
