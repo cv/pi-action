@@ -436,7 +436,10 @@ function announceThread(deps: ActionDependencies, thread: Thread): void {
 	log.endGroup();
 }
 
-/** After the final push: where the thread is now, in the log, and how to read it, in the job summary. */
+/**
+ * After the final push: where the thread is now, in the log. How to read it goes in the job summary in `output` mode;
+ * in `comment` mode, each comment has it, collapsed (#80).
+ */
 async function showThread(
 	deps: ActionDependencies,
 	thread: Thread,
@@ -448,6 +451,9 @@ async function showThread(
 	log.info(
 		`🧵 ${ref} is at ${tip === undefined ? "(nothing stored)" : tip.slice(0, 7)}`,
 	);
+	if (deps.inputs.outputMode !== "output") {
+		return;
+	}
 	try {
 		await deps.summary?.(formatThreadSummary(ref, remote));
 	} catch (error) {
