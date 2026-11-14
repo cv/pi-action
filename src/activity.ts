@@ -46,50 +46,22 @@ const ARGUMENTS_LENGTH = 4000;
 /** A line the runner would take as a workflow command (`::error::`, `::add-mask::`, the old `##[error]`). */
 const WORKFLOW_COMMAND = /^\s*(?:::|##\[)/mu;
 
-/** pit's header, the first line of a `typescript` program: `// @pit: {"label": "Read the config"}`. */
-const PIT_HEADER = /^\s*\/\/[ \t]*@pit:[ \t]*(.*)(?:\r?\n|$)/u;
 /** Compact JSON longer than this goes on the lines after its key, indented. */
 const COMPACT_JSON_LENGTH = 80;
 
-const nonEmpty = (value: unknown): value is string =>
-	typeof value === "string" && value.trim() !== "";
-
-/** The label in pit's header, if it has one. */
-function headerLabel(json: string): string | undefined {
-	let header: unknown;
-	try {
-		header = JSON.parse(json);
-	} catch {
-		return undefined;
-	}
-	if (typeof header !== "object" || header === null || !("label" in header)) {
-		return undefined;
-	}
-	return nonEmpty(header.label) ? header.label : undefined;
-}
-
 /**
- * A call's label (its `label` argument, or the label in pit's header) and the arguments that remain to show: the
- * code without pit's header, and no `label` when the label is shown already (#80).
+ * A call's `label` argument, and the arguments that remain to show: without `label` when the call's line shows it.
+ * A tool that knows more about its calls, such as pit's `typescript` and its `// @pit:` header, presents them itself
+ * (`present`, #80).
  */
 function splitLabel(args: Record<string, unknown>): {
 	label: string | undefined;
 	rest: Record<string, unknown>;
 } {
 	const { label, ...rest } = args;
-	const { code } = args;
-	const match = typeof code === "string" ? PIT_HEADER.exec(code) : null;
-	const fromHeader = match === null ? undefined : headerLabel(match[1] ?? "");
-	if (match !== null && typeof code === "string") {
-		rest["code"] = code.slice(match[0].length);
-	}
-	if (nonEmpty(label)) {
-		return { label, rest };
-	}
-	return {
-		label: fromHeader,
-		rest: label === undefined ? rest : { label, ...rest },
-	};
+	return typeof label === "string" && label.trim() !== ""
+		? { label, rest }
+		: { label: undefined, rest: args };
 }
 
 /** A value that is not a string: compact JSON, or indented JSON on the next lines when it is long. */
@@ -107,8 +79,7 @@ function formatValue(key: string, value: unknown): string {
 
 /**
  * A tool call's arguments for people: `key: value`, and a multi-line string (a script, a file) on the lines after
- * its key, as it is, not as an escaped JSON string. pit's header and the label are left out: the call's line shows
- * the label.
+ * its key, as it is, not as an escaped JSON string. The label is left out: the call's line shows it.
  */
 export function formatArguments(args: Record<string, unknown>): string {
 	const lines = Object.entries(splitLabel(args).rest).map(([key, value]) => {
