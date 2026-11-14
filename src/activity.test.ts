@@ -476,7 +476,12 @@ describe("tool presentations", () => {
 			{ name: "untitled", present: { call: () => ({ title: " " }) } },
 			{
 				name: "async",
-				present: { call: () => Promise.resolve({ title: "x" }) },
+				present: {
+					call: async () => {
+						await Promise.resolve();
+						return { title: "x" };
+					},
+				},
 			},
 			{ name: "typed", present: { call: () => ({ title: "x", body: 1 }) } },
 			{ name: "summary", present: { result: () => ({ summary: 1 }) } },
