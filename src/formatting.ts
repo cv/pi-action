@@ -53,20 +53,6 @@ export function formatThreadLog(ref: string, remote: string): string {
 	].join("\n");
 }
 
-/** How to read the thread with git, for the job summary. */
-export function formatThreadSummary(ref: string, remote: string): string {
-	return [
-		"### 🧵 pi thread",
-		"",
-		`This conversation is stored in git on \`${ref}\`. To read it ([more](${READ_A_THREAD})):`,
-		"",
-		"```bash",
-		...readCommands(ref, remote),
-		"```",
-		"",
-	].join("\n");
-}
-
 export function formatReviewComments(comments: GitHubComment[]): string {
 	if (comments.length === 0) {
 		return "";

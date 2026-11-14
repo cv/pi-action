@@ -465,7 +465,7 @@ describe("run (durable)", () => {
 		]);
 		// The plumbing is debug output.
 		expect(deps.log.debug).toHaveBeenCalledWith(`${REF}: new on origin`);
-		// In comment mode, the reply says how to read the thread, collapsed; the job summary does not (#80).
+		// The reply says how to read the thread, collapsed; the job summary does not repeat it (#80).
 		expect(deps.summary).not.toHaveBeenCalled();
 	});
 
@@ -854,13 +854,7 @@ describe("run (durable) with main's modes", () => {
 	it("output mode answers a trigger without comments or reactions, and keeps the thread", async () => {
 		const w = world();
 		w.faux.setResponses([fauxAssistantMessage("All good.")]);
-		const summary = vi.fn(async (_markdown: string) => {
-			throw new Error("no summary file");
-		});
-		const deps = {
-			...w.deps(w.comment("@pi check"), { outputMode: "output" }),
-			summary,
-		};
+		const deps = w.deps(w.comment("@pi check"), { outputMode: "output" });
 
 		await run(deps);
 
@@ -871,14 +865,9 @@ describe("run (durable) with main's modes", () => {
 		expect(w.gh.posted).toHaveLength(0);
 		expect(w.gh.addReaction).not.toHaveBeenCalled();
 		expect(git(w.remote, "rev-parse", REF).trim()).toMatch(COMMIT_ID);
-		// A job summary that cannot be written is a warning; the log still shows the thread.
+		// The log shows how to read the thread; the job summary does not (#80).
 		expect(deps.log.startGroup).toHaveBeenCalledWith(`🧵 Thread ${REF}: new`);
-		expect(summary).toHaveBeenCalledExactlyOnceWith(
-			expect.stringContaining(REF),
-		);
-		expect(deps.log.warning).toHaveBeenCalledWith(
-			"Could not write the job summary: no summary file",
-		);
+		expect(deps.summary).not.toHaveBeenCalled();
 	});
 
 	it("a direct prompt runs in memory and stores nothing", async () => {
