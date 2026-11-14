@@ -41,6 +41,8 @@ The log of the `Run pi-action` step shows what pi does while it works, one line 
 ▸   ↳ ✓ 0.1s · 5 lines
 🔧 edit: src/run.ts (2 edits)
 ▸   ↳ ✓ 0.0s · 1 line
+🔧 Read the run tests
+▸   ↳ ✓ 0.1s · 412 lines
 ▸ 💬 I opened PR #48, which ...
 ✅ Replied: https://github.com/o/r/issues/46#issuecomment-2 (24 model responses · 23 tool calls · 6m40s · 2.1M tokens in, 31k out)
 🧵 refs/pi/threads/46 is at 4325d9a
@@ -53,8 +55,8 @@ The log of the `Run pi-action` step shows what pi does while it works, one line 
 | `🧵 Thread` | The thread ref, and if the thread is new or continues | The git commands that read the thread ([Read a thread](threads.md#read-a-thread)) |
 | `▶` | A request that pi gets: who asked, where, and its first line. For a [prompt template](prompts.md#prompt-templates) or a [skill](skills.md#use-a-skill-explicitly), the line as typed and where it comes from | |
 | `💬` | The text of a model response (its first line, if it is longer) | The full text |
-| `🔧` | A tool call, when it starts: the tool and its main argument (the command, the path, or the label). For a script of more than one line, the first line and the number of other lines | |
-| `↳ ✓` or `↳ ✗ failed` | The end of a tool call: how long it took, and how many lines of output it gave | The arguments, and the last 30 lines of output |
+| `🔧` | A tool call, when it starts. For a call with a label, such as a pit program with `// @pit: {"label": "..."}` as its first line, only the label. For other calls, the tool and its main argument (the command or the path). For a script of more than one line, the first line and the number of other lines | |
+| `↳ ✓` or `↳ ✗ failed` | The end of a tool call: how long it took, and how many lines of output it gave | The arguments (a pit program without its `// @pit:` line, and long JSON values indented), and the last 30 lines of output |
 | `✅ Replied` or `❌ Reported the error` | The comment, and totals for the reply: model responses, tool calls, time, tokens, and cost if the provider reports it | |
 | `🧵 … is at` | The commit of the thread ref after the last push | |
 
