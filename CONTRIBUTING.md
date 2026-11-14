@@ -107,6 +107,7 @@ pi-action is TypeScript on [pi-durable](https://www.npmjs.com/package/@earendil-
 | [`src/github-ui.ts`](src/github-ui.ts) | Questions (`ui.ask`) as GitHub comments, and `ui.notify` in the job summary |
 | [`src/answers.ts`](src/answers.ts) | Answers from the event (a ticked box or an `/answer` reply), checked and changed into a `ui.answer` submission |
 | [`src/tool-env.ts`](src/tool-env.ts) | `GH_TOKEN` and the `github-actions[bot]` git identity for the tools of the agent |
+| [`src/tool-presentation.ts`](src/tool-presentation.ts) | The `present` field of a tool: how the workflow log shows its calls, checked |
 | [`src/push.ts`](src/push.ts) | The `if: always()` step that pushes thread state that the run did not push |
 | [`src/worktree.ts`](src/worktree.ts) | `WorktreeContinuity`: saves the working tree at turn boundaries, points the conversation at each snapshot (the `pi-action.worktree` document), and restores it at the start of a run |
 | [`src/storage/git.ts`](src/storage/git.ts) | Git objects in the process, and compare-and-swap ref updates |
