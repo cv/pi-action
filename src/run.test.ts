@@ -243,7 +243,10 @@ describe("run (durable)", () => {
 
 		expect(w.gh.posted).toHaveLength(1);
 		expect(w.gh.posted[0]).toContain("### 🤖 pi Response\n\nFixed it.");
-		expect(w.gh.posted[0]).toContain(REF);
+		expect(w.gh.posted[0]).toContain(
+			`<summary>🧵 This conversation is stored in git on <code>${REF}</code></summary>`,
+		);
+		expect(w.gh.posted[0]).toContain(`git fetch origin '${REF}:${REF}'`);
 		expect(w.reacted("eyes")).toStrictEqual([trigger.id]);
 		expect(w.reacted("rocket")).toStrictEqual([trigger.id]);
 		const log = git(w.remote, "log", "--format=%s", REF);
