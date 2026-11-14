@@ -19,7 +19,7 @@ Write one extension per line, or separate them with commas. pi-action ignores em
     github_token: ${{ secrets.GITHUB_TOKEN }}
     extensions: |
       # pi-durable extensions
-      github:cv/pit#v0.36.3          # pit's typescript tool
+      github:cv/pit#v0.36.5          # pit's typescript tool
       # pi extensions (providers)
       @acme/pi-provider@1.4.2        # from npm, pinned
       ./.pi/extensions/gateway.ts    # in this repository
@@ -73,7 +73,7 @@ A [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) extensi
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     extensions: |
-      github:cv/pit#v0.36.3   # pit's typescript tool (pit/durable)
+      github:cv/pit#v0.36.5   # pit's typescript tool (pit/durable)
 ```
 
 ### Package format
@@ -112,7 +112,7 @@ pi-durable extensions run in the process of pi-action. Thus, pi-action also sets
 
 ### Show tool calls in the workflow log
 
-A tool can say how the [workflow log](how-it-works.md#the-workflow-log) shows its calls. Give the tool an optional `present` field. pi-durable does not use it, so other hosts ignore it:
+A tool can say how the [workflow log](how-it-works.md#the-workflow-log) shows its calls. Give the tool an optional `present` field. pi-durable does not use it, so other hosts ignore it. pit's `typescript` tool has one (pit 0.36.5 and later): the log shows the label of each program, its code, the functions it uses, and its result as text:
 
 ```ts
 // pi-durable's types do not declare `present`: add it to the tool that defineTool() returns.
