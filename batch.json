@@ -1,1 +1,1 @@
-{"format":1,"seq":63,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":64,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"remote: \nremote: Create a pull request for 'ci/77-pit-0.36.3' on GitHub by visiting:        \nremote:      https://github.com/cv/pi-action/pull/new/ci/77-pit-0.36.3        \nremote: \n"]]}}]}
