@@ -527,6 +527,8 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			skills,
 			systemPrompt,
 		} = setup;
+		// Tools of pi-durable extensions can say how the log shows their calls (`present`).
+		activity.useTools(extensions.flatMap((extension) => extension.tools ?? []));
 		// `/skill:<name>` first, so a template can't take a skill's command.
 		const expand = (triggers: Trigger[]) =>
 			triggers.map((trigger) => {
