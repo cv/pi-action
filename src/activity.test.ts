@@ -264,30 +264,23 @@ describe("Activity", () => {
 		]);
 	});
 
-	it("takes the label of a pit program from its header, and leaves the header out", () => {
-		const code =
-			'// @pit: {"label": "Read the config"}\nasync ({ workspace: { read } }) =>\n\tread("a.json")\n';
-		expect(describeCall("typescript", { code })).toBe("Read the config");
+	it("shows a call by its label argument, and leaves the label out of the details", () => {
+		const code = 'async ({ workspace: { read } }) =>\n\tread("a.json")\n';
 		expect(describeCall("typescript", { code, label: "  Given label  " })).toBe(
 			"Given label",
 		);
-		expect(formatArguments({ code, timeoutMs: 5000 })).toBe(
+		expect(formatArguments({ label: "Read", code, timeoutMs: 5000 })).toBe(
 			'code:\nasync ({ workspace: { read } }) =>\n\tread("a.json")\ntimeoutMs: 5000',
 		);
 		expect(formatArguments({ code, label: "" })).toBe(
-			'label: \ncode:\nasync ({ workspace: { read } }) =>\n\tread("a.json")',
+			'code:\nasync ({ workspace: { read } }) =>\n\tread("a.json")\nlabel: ',
 		);
-		// A header without a label, or one that is not JSON, is left out too.
+		// pit's `// @pit:` header is pit's to present (`present`); without it, the program's first line shows.
 		expect(
 			describeCall("typescript", {
-				code: "  // @pit: {}\nasync () => 1",
+				code: '// @pit: {"label": "x"}\nasync () => 1',
 			}),
-		).toBe("typescript: async () => 1");
-		expect(
-			describeCall("typescript", {
-				code: "// @pit: nope\nasync () => 1",
-			}),
-		).toBe("typescript: async () => 1");
+		).toBe('typescript: // @pit: {"label": "x"} (+1 line)');
 	});
 
 	it("shows long JSON values indented", () => {
@@ -295,26 +288,6 @@ describe("Activity", () => {
 		expect(formatArguments({ params, n: [1, 2] })).toBe(
 			`params:\n${JSON.stringify(params, null, 2)}\nn: [1,2]`,
 		);
-	});
-
-	it("logs a pit program by its label, and its code without the header", () => {
-		const r = recorder();
-		r.activity.entries([
-			assistant([
-				call("t", "typescript", {
-					code: '// @pit: {"label": "List files"}\nasync ({ workspace: { list } }) => list()',
-				}),
-			]),
-			toolResult("t", '["a.ts"]', { durationMs: 20 }),
-		]);
-		expect(r.lines).toStrictEqual([
-			"🔧 List files",
-			"::group::  ↳ ✓ 0.0s · 1 line",
-			"code: async ({ workspace: { list } }) => list()",
-			"──",
-			'["a.ts"]',
-			"::endgroup::",
-		]);
 	});
 
 	it("shows multi-line arguments as they are", () => {
