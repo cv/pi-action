@@ -19,7 +19,7 @@ Write one extension per line, or separate them with commas. pi-action ignores em
     github_token: ${{ secrets.GITHUB_TOKEN }}
     extensions: |
       # pi-durable extensions
-      github:cv/pit#v0.36.2          # pit's typescript tool
+      github:cv/pit#v0.36.3          # pit's typescript tool
       # pi extensions (providers)
       @acme/pi-provider@1.4.2        # from npm, pinned
       ./.pi/extensions/gateway.ts    # in this repository
@@ -73,7 +73,7 @@ A [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) extensi
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     extensions: |
-      github:cv/pit#v0.36.2   # pit's typescript tool (pit/durable)
+      github:cv/pit#v0.36.3   # pit's typescript tool (pit/durable)
 ```
 
 ### Package format
