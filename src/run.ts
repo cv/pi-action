@@ -436,7 +436,11 @@ function announceThread(deps: ActionDependencies, thread: Thread): void {
 }
 
 /** After the final push: where the thread is now, in the log. Each comment says how to read it (#80). */
-function showThread(deps: ActionDependencies, thread: Thread, ref: string): void {
+function showThread(
+	deps: ActionDependencies,
+	thread: Thread,
+	ref: string,
+): void {
 	const { tip } = thread;
 	deps.log.info(
 		`🧵 ${ref} is at ${tip === undefined ? "(nothing stored)" : tip.slice(0, 7)}`,
