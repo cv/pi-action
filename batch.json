@@ -1,1 +1,1 @@
-{"format":1,"seq":550,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":551,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"Finished in 4ms on 4 files using 4 threads.\n"]]}}]}
