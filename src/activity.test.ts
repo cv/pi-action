@@ -268,9 +268,9 @@ describe("Activity", () => {
 		const code =
 			'// @pit: {"label": "Read the config"}\nasync ({ workspace: { read } }) =>\n\tread("a.json")\n';
 		expect(describeCall("typescript", { code })).toBe("Read the config");
-		expect(
-			describeCall("typescript", { code, label: "  Given label  " }),
-		).toBe("Given label");
+		expect(describeCall("typescript", { code, label: "  Given label  " })).toBe(
+			"Given label",
+		);
 		expect(formatArguments({ code, timeoutMs: 5000 })).toBe(
 			'code:\nasync ({ workspace: { read } }) =>\n\tread("a.json")\ntimeoutMs: 5000',
 		);
@@ -310,13 +310,12 @@ describe("Activity", () => {
 		expect(r.lines).toStrictEqual([
 			"🔧 List files",
 			"::group::  ↳ ✓ 0.0s · 1 line",
-			"code:\nasync ({ workspace: { list } }) => list()",
+			"code: async ({ workspace: { list } }) => list()",
 			"──",
 			'["a.ts"]',
 			"::endgroup::",
 		]);
 	});
-
 
 	it("shows multi-line arguments as they are", () => {
 		expect(

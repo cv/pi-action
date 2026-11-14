@@ -73,8 +73,7 @@ function splitLabel(args: Record<string, unknown>): {
 	const { label, ...rest } = args;
 	const { code } = args;
 	const match = typeof code === "string" ? PIT_HEADER.exec(code) : null;
-	const fromHeader =
-		match === null ? undefined : headerLabel(match[1] ?? "");
+	const fromHeader = match === null ? undefined : headerLabel(match[1] ?? "");
 	if (match !== null && typeof code === "string") {
 		rest["code"] = code.slice(match[0].length);
 	}
