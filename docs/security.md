@@ -53,6 +53,10 @@ To commit as a different identity, set these variables in the `env` of the step.
 
 The token is not new to the agent. `actions/checkout` already stores it in the git credentials of the checkout, where all tools can read it. `GH_TOKEN` only lets `gh` find it. **Give `github_token` only the permissions that the agent must have.**
 
+## A run inside a run
+
+pi-action sets `PI_ACTION_RUNNING` (its process ID) in its own environment when it starts. All tools of the agent inherit it. When the variable is set, pi-action does not run: the step fails at once, before pi-action reads the inputs or changes a ref. The `Save pi thread state` step does not push either. Thus, the agent cannot start a second run of the action, for example with `node src/index.ts`. A second run would work on the same thread refs, and break the run that started it.
+
 ## What pi-action removes from text
 
 [`sanitizeInput()`](../src/security.ts) removes HTML comments (`<!-- ... -->`) and invisible characters (zero-width space, zero-width non-joiner, zero-width joiner, byte order mark, soft hyphen). People can use them to hide instructions.
