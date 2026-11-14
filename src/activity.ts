@@ -8,6 +8,12 @@ import type {
 } from "@earendil-works/pi-ai";
 import type { EntryRecord } from "@earendil-works/pi-durable";
 
+import {
+	type ToolPresentation,
+	toolPresentation,
+} from "./tool-presentation.ts";
+import { getErrorMessage } from "./utils.ts";
+
 /** The log calls this module makes. */
 export interface ActivityLog {
 	info: (message: string) => void;
@@ -40,50 +46,22 @@ const ARGUMENTS_LENGTH = 4000;
 /** A line the runner would take as a workflow command (`::error::`, `::add-mask::`, the old `##[error]`). */
 const WORKFLOW_COMMAND = /^\s*(?:::|##\[)/mu;
 
-/** pit's header, the first line of a `typescript` program: `// @pit: {"label": "Read the config"}`. */
-const PIT_HEADER = /^\s*\/\/[ \t]*@pit:[ \t]*(.*)(?:\r?\n|$)/u;
 /** Compact JSON longer than this goes on the lines after its key, indented. */
 const COMPACT_JSON_LENGTH = 80;
 
-const nonEmpty = (value: unknown): value is string =>
-	typeof value === "string" && value.trim() !== "";
-
-/** The label in pit's header, if it has one. */
-function headerLabel(json: string): string | undefined {
-	let header: unknown;
-	try {
-		header = JSON.parse(json);
-	} catch {
-		return undefined;
-	}
-	if (typeof header !== "object" || header === null || !("label" in header)) {
-		return undefined;
-	}
-	return nonEmpty(header.label) ? header.label : undefined;
-}
-
 /**
- * A call's label (its `label` argument, or the label in pit's header) and the arguments that remain to show: the
- * code without pit's header, and no `label` when the label is shown already (#80).
+ * A call's `label` argument, and the arguments that remain to show: without `label` when the call's line shows it.
+ * A tool that knows more about its calls, such as pit's `typescript` and its `// @pit:` header, presents them itself
+ * (`present`, #80).
  */
 function splitLabel(args: Record<string, unknown>): {
 	label: string | undefined;
 	rest: Record<string, unknown>;
 } {
 	const { label, ...rest } = args;
-	const { code } = args;
-	const match = typeof code === "string" ? PIT_HEADER.exec(code) : null;
-	const fromHeader = match === null ? undefined : headerLabel(match[1] ?? "");
-	if (match !== null && typeof code === "string") {
-		rest["code"] = code.slice(match[0].length);
-	}
-	if (nonEmpty(label)) {
-		return { label, rest };
-	}
-	return {
-		label: fromHeader,
-		rest: label === undefined ? rest : { label, ...rest },
-	};
+	return typeof label === "string" && label.trim() !== ""
+		? { label, rest }
+		: { label: undefined, rest: args };
 }
 
 /** A value that is not a string: compact JSON, or indented JSON on the next lines when it is long. */
@@ -101,8 +79,7 @@ function formatValue(key: string, value: unknown): string {
 
 /**
  * A tool call's arguments for people: `key: value`, and a multi-line string (a script, a file) on the lines after
- * its key, as it is, not as an escaped JSON string. pit's header and the label are left out: the call's line shows
- * the label.
+ * its key, as it is, not as an escaped JSON string. The label is left out: the call's line shows it.
  */
 export function formatArguments(args: Record<string, unknown>): string {
 	const lines = Object.entries(splitLabel(args).rest).map(([key, value]) => {
@@ -242,9 +219,26 @@ function outputTail(text: string): string[] {
 		: shown;
 }
 
+/** A call that has not ended. */
+interface OpenCall {
+	name: string;
+	arguments: Record<string, unknown>;
+	/** Its `🔧` line, without the icon. */
+	label: string;
+	/** Its details: its arguments, or the body the tool presented. */
+	args: string;
+	/** Whether its response made other calls too. */
+	parallel: boolean;
+}
+
+/** `text`, at most `max` characters. */
+const cut = (text: string, max: number) =>
+	text.length > max ? `${text.slice(0, max - 1)}…` : text;
+
 /**
  * Logs the entries pi-durable stores, as they are stored: `💬` for a model's text, `🔧` when a tool call starts,
- * and `↳` when it ends, in a group with its arguments and the end of its output. Counts them for `take()`.
+ * and `↳` when it ends, in a group with its arguments and the end of its output. Counts them for `take()`. A tool
+ * with a `present` field says itself what these lines show (see `useTools()`).
  */
 export class Activity {
 	private readonly log: ActivityLog;
@@ -252,15 +246,31 @@ export class Activity {
 	private stats = emptyStats();
 	private since: number | undefined;
 	private lastEntry = -1;
-	/** Tool calls that have not ended: their line, and whether their response made other calls too. */
-	private readonly calls = new Map<
-		string,
-		{ label: string; args: string; parallel: boolean }
-	>();
+	private readonly calls = new Map<string, OpenCall>();
+	private readonly presentations = new Map<string, ToolPresentation>();
+	/** `<tool>.<hook>` of the presentations that failed, which the log said once. */
+	private readonly failed = new Set<string>();
 
 	constructor(log: ActivityLog, now: () => number = Date.now) {
 		this.log = log;
 		this.now = now;
+	}
+
+	/**
+	 * Show the calls of these tools as their `present` fields say. A tool named like an earlier one replaces it, as in
+	 * the registry; a tool without `present` gets the generic form.
+	 */
+	useTools(
+		tools: readonly { readonly name: string; readonly present?: unknown }[],
+	): void {
+		for (const tool of tools) {
+			const presentation = toolPresentation(tool);
+			if (presentation === undefined) {
+				this.presentations.delete(tool.name);
+			} else {
+				this.presentations.set(tool.name, presentation);
+			}
+		}
 	}
 
 	/** Log stored entries; each entry is logged once, however often it is passed. */
@@ -294,6 +304,33 @@ export class Activity {
 		return stats;
 	}
 
+	/**
+	 * What a tool's presentation returns, or undefined: when the tool has none, or when it fails, which the log says
+	 * once for each tool and hook. The log then shows the generic form.
+	 */
+	private presented<T>(
+		tool: string,
+		hook: "call" | "result",
+		present: (presentation: ToolPresentation) => T | undefined,
+	): T | undefined {
+		const presentation = this.presentations.get(tool);
+		if (presentation === undefined) {
+			return undefined;
+		}
+		try {
+			return present(presentation);
+		} catch (error) {
+			const key = `${tool}.${hook}`;
+			if (!this.failed.has(key)) {
+				this.failed.add(key);
+				this.log.info(
+					`⚠️ Tool ${tool}: present.${hook}() failed, so the log shows its calls in the generic form: ${oneLine(getErrorMessage(error))}`,
+				);
+			}
+			return undefined;
+		}
+	}
+
 	private assistant(message: AssistantMessage): void {
 		const { usage } = message;
 		this.stats.responses += 1;
@@ -311,11 +348,22 @@ export class Activity {
 		}
 		const calls = message.content.filter((block) => block.type === "toolCall");
 		for (const call of calls) {
-			const label = describeCall(call.name, call.arguments);
+			const presented = this.presented(call.name, "call", (presentation) =>
+				presentation.call?.(call.arguments),
+			);
+			const label =
+				presented === undefined
+					? describeCall(call.name, call.arguments)
+					: oneLine(presented.title);
 			this.stats.toolCalls += 1;
 			this.calls.set(call.id, {
+				name: call.name,
+				arguments: call.arguments,
 				label,
-				args: formatArguments(call.arguments),
+				args:
+					presented?.body === undefined
+						? formatArguments(call.arguments)
+						: cut(presented.body, ARGUMENTS_LENGTH),
 				parallel: calls.length > 1,
 			});
 			this.log.info(`🔧 ${label}`);
@@ -340,8 +388,13 @@ export class Activity {
 		if (message.isError) {
 			this.stats.failedToolCalls += 1;
 		}
-		const text = textOf(message.content);
-		const output = outputTail(text);
+		const presented =
+			call === undefined
+				? undefined
+				: this.presented(call.name, "result", (presentation) =>
+						presentation.result?.(call.arguments, message),
+					);
+		const text = presented?.body ?? textOf(message.content);
 		const lines = text === "" ? 0 : text.split("\n").length;
 		const status = message.isError ? "✗ failed" : "✓";
 		const parts = [
@@ -349,14 +402,17 @@ export class Activity {
 			...(message.durationMs === undefined
 				? []
 				: [formatDuration(message.durationMs)]),
-			plural(lines, "line"),
-		];
-		this.log.startGroup(`  ↳ ${status} ${parts.join(" · ")}`);
+			presented?.summary === undefined
+				? plural(lines, "line")
+				: oneLine(presented.summary),
+		].filter((part) => part !== "");
+		const summary = parts.length > 0 ? ` ${parts.join(" · ")}` : "";
+		this.log.startGroup(`  ↳ ${status}${summary}`);
 		if (call !== undefined) {
 			this.raw(call.args);
 			this.log.info("──");
 		}
-		this.raw(lines === 0 ? "(no output)" : output.join("\n"));
+		this.raw(lines === 0 ? "(no output)" : outputTail(text).join("\n"));
 		this.log.endGroup();
 	}
 

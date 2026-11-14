@@ -264,30 +264,23 @@ describe("Activity", () => {
 		]);
 	});
 
-	it("takes the label of a pit program from its header, and leaves the header out", () => {
-		const code =
-			'// @pit: {"label": "Read the config"}\nasync ({ workspace: { read } }) =>\n\tread("a.json")\n';
-		expect(describeCall("typescript", { code })).toBe("Read the config");
+	it("shows a call by its label argument, and leaves the label out of the details", () => {
+		const code = 'async ({ workspace: { read } }) =>\n\tread("a.json")\n';
 		expect(describeCall("typescript", { code, label: "  Given label  " })).toBe(
 			"Given label",
 		);
-		expect(formatArguments({ code, timeoutMs: 5000 })).toBe(
+		expect(formatArguments({ label: "Read", code, timeoutMs: 5000 })).toBe(
 			'code:\nasync ({ workspace: { read } }) =>\n\tread("a.json")\ntimeoutMs: 5000',
 		);
 		expect(formatArguments({ code, label: "" })).toBe(
-			'label: \ncode:\nasync ({ workspace: { read } }) =>\n\tread("a.json")',
+			'code:\nasync ({ workspace: { read } }) =>\n\tread("a.json")\nlabel: ',
 		);
-		// A header without a label, or one that is not JSON, is left out too.
+		// pit's `// @pit:` header is pit's to present (`present`); without it, the program's first line shows.
 		expect(
 			describeCall("typescript", {
-				code: "  // @pit: {}\nasync () => 1",
+				code: '// @pit: {"label": "x"}\nasync () => 1',
 			}),
-		).toBe("typescript: async () => 1");
-		expect(
-			describeCall("typescript", {
-				code: "// @pit: nope\nasync () => 1",
-			}),
-		).toBe("typescript: async () => 1");
+		).toBe('typescript: // @pit: {"label": "x"} (+1 line)');
 	});
 
 	it("shows long JSON values indented", () => {
@@ -295,26 +288,6 @@ describe("Activity", () => {
 		expect(formatArguments({ params, n: [1, 2] })).toBe(
 			`params:\n${JSON.stringify(params, null, 2)}\nn: [1,2]`,
 		);
-	});
-
-	it("logs a pit program by its label, and its code without the header", () => {
-		const r = recorder();
-		r.activity.entries([
-			assistant([
-				call("t", "typescript", {
-					code: '// @pit: {"label": "List files"}\nasync ({ workspace: { list } }) => list()',
-				}),
-			]),
-			toolResult("t", '["a.ts"]', { durationMs: 20 }),
-		]);
-		expect(r.lines).toStrictEqual([
-			"🔧 List files",
-			"::group::  ↳ ✓ 0.0s · 1 line",
-			"code: async ({ workspace: { list } }) => list()",
-			"──",
-			'["a.ts"]',
-			"::endgroup::",
-		]);
 	});
 
 	it("shows multi-line arguments as they are", () => {
@@ -374,5 +347,139 @@ describe("Activity", () => {
 			"x",
 			"::endgroup::",
 		]);
+	});
+});
+
+describe("tool presentations", () => {
+	const typescript = {
+		name: "typescript",
+		present: {
+			prefix: "Run",
+			call(this: { prefix: string }, args: Record<string, unknown>) {
+				args["code"] = "changed";
+				return {
+					title: `${this.prefix} ${String(args["label"])}`,
+					body: "the program",
+				};
+			},
+			result: (_args: unknown, result: { content: { text: string }[] }) => ({
+				summary: "workspace.read",
+				body: `result: ${result.content[0]?.text ?? ""}`,
+			}),
+		},
+	};
+
+	it("shows a call and its result as the tool presents them", () => {
+		const r = recorder();
+		r.activity.useTools([typescript, { name: "bash" }]);
+		r.activity.entries([
+			assistant([
+				call("t", "typescript", { label: "the check", code: "x" }),
+				call("b", "bash", { command: "ls" }),
+			]),
+			toolResult("t", "42", { durationMs: 20 }),
+			toolResult("b", "a.ts"),
+		]);
+		expect(r.lines).toStrictEqual([
+			"🔧 Run the check",
+			"🔧 bash: ls",
+			"::group::  ↳ ✓ Run the check · 0.0s · workspace.read",
+			"the program",
+			"──",
+			"result: 42",
+			"::endgroup::",
+			"::group::  ↳ ✓ bash: ls · 1 line",
+			"command: ls",
+			"──",
+			"a.ts",
+			"::endgroup::",
+		]);
+	});
+
+	it("shows the generic form for what a tool does not present, and for a tool that a later one replaces", () => {
+		const r = recorder();
+		r.activity.useTools([
+			{
+				name: "callOnly",
+				present: { call: () => ({ title: "Only a title" }) },
+			},
+			{ name: "resultOnly", present: { result: () => ({ summary: "" }) } },
+			typescript,
+			{ name: "typescript" },
+			{ name: "none", present: { other: 1 } },
+		]);
+		r.activity.entries([
+			assistant([
+				call("a", "callOnly", { x: 1 }),
+				call("b", "resultOnly", { y: 2 }),
+				call("c", "typescript", { code: "1" }),
+			]),
+			toolResult("a", "out"),
+			toolResult("b", "out"),
+		]);
+		expect(r.lines).toStrictEqual([
+			"🔧 Only a title",
+			'🔧 resultOnly {"y":2}',
+			"🔧 typescript: 1",
+			"::group::  ↳ ✓ Only a title · 1 line",
+			"x: 1",
+			"──",
+			"out",
+			"::endgroup::",
+			'::group::  ↳ ✓ resultOnly {"y":2}',
+			"y: 2",
+			"──",
+			"out",
+			"::endgroup::",
+		]);
+	});
+
+	it("says once when a presentation fails, and shows the generic form", () => {
+		const r = recorder();
+		r.activity.useTools([
+			{
+				name: "bad",
+				present: {
+					call: () => {
+						throw new Error("boom");
+					},
+					result: () => "text",
+				},
+			},
+			{ name: "untitled", present: { call: () => ({ title: " " }) } },
+			{
+				name: "async",
+				present: {
+					call: async () => {
+						await Promise.resolve();
+						return { title: "x" };
+					},
+				},
+			},
+			{ name: "typed", present: { call: () => ({ title: "x", body: 1 }) } },
+			{ name: "summary", present: { result: () => ({ summary: 1 }) } },
+		]);
+		r.activity.entries([
+			assistant([call("a", "bad", {}), call("b", "bad", {})]),
+			toolResult("a", "out"),
+			assistant([
+				call("c", "untitled", {}),
+				call("d", "async", {}),
+				call("e", "typed", {}),
+				call("f", "summary", {}),
+			]),
+			toolResult("f", ""),
+		]);
+		expect(r.lines.filter((line) => line.startsWith("⚠️"))).toStrictEqual([
+			"⚠️ Tool bad: present.call() failed, so the log shows its calls in the generic form: boom",
+			"⚠️ Tool bad: present.result() failed, so the log shows its calls in the generic form: present.result() did not return an object",
+			"⚠️ Tool untitled: present.call() failed, so the log shows its calls in the generic form: present.call() returned no title",
+			"⚠️ Tool async: present.call() failed, so the log shows its calls in the generic form: present.call() did not return an object",
+			"⚠️ Tool typed: present.call() failed, so the log shows its calls in the generic form: present.call() returned a body that is not a string",
+			"⚠️ Tool summary: present.result() failed, so the log shows its calls in the generic form: present.result() returned a summary that is not a string",
+		]);
+		expect(r.lines).toContain("🔧 bad");
+		expect(r.lines).toContain("::group::  ↳ ✓ bad · 1 line");
+		expect(r.lines).toContain("::group::  ↳ ✓ summary · 0 lines");
 	});
 });
