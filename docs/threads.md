@@ -124,7 +124,7 @@ git log --oneline refs/pi/threads/42            # one commit for each stored ste
 git show refs/pi/threads/42:batch.json | jq .   # the records of the newest step
 ```
 
-The workflow log of each run on a thread shows these commands for that thread at the start of the run, in the group `🧵 Thread refs/pi/threads/<number>`. The job summary of the run shows them too. Each answer comment of pi-action shows the ref of its thread, and the `git fetch` command.
+The workflow log of each run on a thread shows these commands for that thread at the start of the run, in the group `🧵 Thread refs/pi/threads/<number>`. Each comment of pi-action ends with these commands for its thread, in a collapsed section: `🧵 This conversation is stored in git on refs/pi/threads/<number>`.
 
 To get all threads with each `git fetch`, run this command one time:
 

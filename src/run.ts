@@ -20,7 +20,6 @@ import {
 	formatErrorComment,
 	formatSuccessComment,
 	formatThreadLog,
-	formatThreadSummary,
 } from "./formatting.ts";
 import { createGitHubUi, type GitHubUi } from "./github-ui.ts";
 import {
@@ -436,23 +435,16 @@ function announceThread(deps: ActionDependencies, thread: Thread): void {
 	log.endGroup();
 }
 
-/** After the final push: where the thread is now, in the log, and how to read it, in the job summary. */
-async function showThread(
+/** After the final push: where the thread is now, in the log. Each comment says how to read it (#80). */
+function showThread(
 	deps: ActionDependencies,
 	thread: Thread,
 	ref: string,
-): Promise<void> {
-	const { log } = deps;
-	const remote = deps.remote ?? "origin";
+): void {
 	const { tip } = thread;
-	log.info(
+	deps.log.info(
 		`🧵 ${ref} is at ${tip === undefined ? "(nothing stored)" : tip.slice(0, 7)}`,
 	);
-	try {
-		await deps.summary?.(formatThreadSummary(ref, remote));
-	} catch (error) {
-		log.warning(`Could not write the job summary: ${getErrorMessage(error)}`);
-	}
 }
 
 export async function run(deps: ActionDependencies): Promise<void> {
@@ -635,7 +627,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		if (thread) {
 			await closeThread(thread, log);
 			if (thread.ref !== undefined) {
-				await showThread(deps, thread, thread.ref);
+				showThread(deps, thread, thread.ref);
 			}
 		}
 	}

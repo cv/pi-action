@@ -1,21 +1,6 @@
 // The comments pi-action posts, and existing PR review comments as prompt context.
 import type { GitHubComment } from "./types.ts";
 
-/** `ref`, the thread's ref (e.g. refs/pi/threads/42), adds a footer saying where the thread is stored. */
-function footer(ref: string | undefined): string {
-	return ref
-		? `\n\n---\n🧵 Thread state: \`${ref}\` (\`git fetch origin ${ref}\`)`
-		: "";
-}
-
-export function formatSuccessComment(response: string, ref?: string): string {
-	return `### 🤖 pi Response\n\n${response}${footer(ref)}`;
-}
-
-export function formatErrorComment(error: string, ref?: string): string {
-	return `### ❌ pi Error\n\nFailed to process request: ${error}${footer(ref)}`;
-}
-
 const READ_A_THREAD =
 	"https://github.com/cv/pi-action/blob/main/docs/threads.md#read-a-thread";
 
@@ -28,26 +13,43 @@ function readCommands(ref: string, remote: string): string[] {
 	];
 }
 
+/**
+ * `ref`, the thread's ref (e.g. refs/pi/threads/42), adds a footer: where the conversation is stored, collapsed, with
+ * the git commands that read it from a clone (#80).
+ */
+function footer(ref: string | undefined): string {
+	if (!ref) {
+		return "";
+	}
+	return [
+		"",
+		"",
+		`<details><summary><sub>🧵 This conversation is stored in git on <code>${ref}</code></sub></summary>`,
+		"",
+		`Read it from a clone of this repository ([more](${READ_A_THREAD})):`,
+		"",
+		"```bash",
+		...readCommands(ref, "origin"),
+		"```",
+		"",
+		"</details>",
+	].join("\n");
+}
+
+export function formatSuccessComment(response: string, ref?: string): string {
+	return `### 🤖 pi Response\n\n${response}${footer(ref)}`;
+}
+
+export function formatErrorComment(error: string, ref?: string): string {
+	return `### ❌ pi Error\n\nFailed to process request: ${error}${footer(ref)}`;
+}
+
 /** How to read the thread with git, for the workflow log. */
 export function formatThreadLog(ref: string, remote: string): string {
 	return [
 		`This conversation is stored in git on ${ref}. To read it:`,
 		...readCommands(ref, remote).map((command) => `  ${command}`),
 		`See ${READ_A_THREAD}`,
-	].join("\n");
-}
-
-/** How to read the thread with git, for the job summary. */
-export function formatThreadSummary(ref: string, remote: string): string {
-	return [
-		"### 🧵 pi thread",
-		"",
-		`This conversation is stored in git on \`${ref}\`. To read it ([more](${READ_A_THREAD})):`,
-		"",
-		"```bash",
-		...readCommands(ref, remote),
-		"```",
-		"",
 	].join("\n");
 }
 

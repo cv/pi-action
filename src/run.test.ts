@@ -243,7 +243,10 @@ describe("run (durable)", () => {
 
 		expect(w.gh.posted).toHaveLength(1);
 		expect(w.gh.posted[0]).toContain("### 🤖 pi Response\n\nFixed it.");
-		expect(w.gh.posted[0]).toContain(REF);
+		expect(w.gh.posted[0]).toContain(
+			`<summary><sub>🧵 This conversation is stored in git on <code>${REF}</code></sub></summary>`,
+		);
+		expect(w.gh.posted[0]).toContain(`git fetch origin '${REF}:${REF}'`);
 		expect(w.reacted("eyes")).toStrictEqual([trigger.id]);
 		expect(w.reacted("rocket")).toStrictEqual([trigger.id]);
 		const log = git(w.remote, "log", "--format=%s", REF);
@@ -462,9 +465,8 @@ describe("run (durable)", () => {
 		]);
 		// The plumbing is debug output.
 		expect(deps.log.debug).toHaveBeenCalledWith(`${REF}: new on origin`);
-		expect(deps.summary).toHaveBeenCalledExactlyOnceWith(
-			expect.stringContaining(`git log --oneline ${REF}`),
-		);
+		// The reply says how to read the thread, collapsed; the job summary does not repeat it (#80).
+		expect(deps.summary).not.toHaveBeenCalled();
 	});
 
 	it("puts the checkout's AGENTS.md into the system prompt, and logs it in the setup group", async () => {
@@ -655,7 +657,9 @@ describe("run (durable)", () => {
 		);
 		expect(w.gh.posted.length).toBeGreaterThanOrEqual(2);
 		// Nothing is answered twice: the first comment was already handled.
-		expect(w.gh.posted.filter((p) => p.includes("one"))).toHaveLength(1);
+		expect(
+			w.gh.posted.filter((p) => p.startsWith("### 🤖 pi Response\n\none")),
+		).toHaveLength(1);
 	});
 
 	it("adds comments posted while pi works to the running conversation", async () => {
@@ -850,13 +854,7 @@ describe("run (durable) with main's modes", () => {
 	it("output mode answers a trigger without comments or reactions, and keeps the thread", async () => {
 		const w = world();
 		w.faux.setResponses([fauxAssistantMessage("All good.")]);
-		const summary = vi.fn(async (_markdown: string) => {
-			throw new Error("no summary file");
-		});
-		const deps = {
-			...w.deps(w.comment("@pi check"), { outputMode: "output" }),
-			summary,
-		};
+		const deps = w.deps(w.comment("@pi check"), { outputMode: "output" });
 
 		await run(deps);
 
@@ -867,14 +865,9 @@ describe("run (durable) with main's modes", () => {
 		expect(w.gh.posted).toHaveLength(0);
 		expect(w.gh.addReaction).not.toHaveBeenCalled();
 		expect(git(w.remote, "rev-parse", REF).trim()).toMatch(COMMIT_ID);
-		// A job summary that cannot be written is a warning; the log still shows the thread.
+		// The log shows how to read the thread; the job summary does not (#80).
 		expect(deps.log.startGroup).toHaveBeenCalledWith(`🧵 Thread ${REF}: new`);
-		expect(summary).toHaveBeenCalledExactlyOnceWith(
-			expect.stringContaining(REF),
-		);
-		expect(deps.log.warning).toHaveBeenCalledWith(
-			"Could not write the job summary: no summary file",
-		);
+		expect(deps.summary).not.toHaveBeenCalled();
 	});
 
 	it("a direct prompt runs in memory and stores nothing", async () => {

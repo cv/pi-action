@@ -7,7 +7,6 @@ import {
 	formatReviewComments,
 	formatSuccessComment,
 	formatThreadLog,
-	formatThreadSummary,
 } from "./formatting.ts";
 import { createComment } from "./test-helpers.ts";
 
@@ -22,17 +21,33 @@ describe("formatSuccessComment / formatErrorComment", () => {
 		);
 	});
 
-	it("adds the thread ref as a footer", () => {
+	it("adds a collapsed footer with how to read the thread", () => {
+		const footer = (ref: string) =>
+			[
+				"",
+				"",
+				`<details><summary><sub>🧵 This conversation is stored in git on <code>${ref}</code></sub></summary>`,
+				"",
+				"Read it from a clone of this repository ([more](https://github.com/cv/pi-action/blob/main/docs/threads.md#read-a-thread)):",
+				"",
+				"```bash",
+				`git fetch origin '${ref}:${ref}'`,
+				`git log --oneline ${ref}            # one commit for each stored step`,
+				`git show ${ref}:batch.json | jq .   # the records of the newest step`,
+				"```",
+				"",
+				"</details>",
+			].join("\n");
 		expect(formatSuccessComment("ok", "refs/pi/threads/42")).toBe(
-			"### 🤖 pi Response\n\nok\n\n---\n🧵 Thread state: `refs/pi/threads/42` (`git fetch origin refs/pi/threads/42`)",
+			`### 🤖 pi Response\n\nok${footer("refs/pi/threads/42")}`,
 		);
 		expect(formatErrorComment("no", "refs/pi/threads/7")).toBe(
-			"### ❌ pi Error\n\nFailed to process request: no\n\n---\n🧵 Thread state: `refs/pi/threads/7` (`git fetch origin refs/pi/threads/7`)",
+			`### ❌ pi Error\n\nFailed to process request: no${footer("refs/pi/threads/7")}`,
 		);
 	});
 });
 
-describe("formatThreadLog / formatThreadSummary", () => {
+describe("formatThreadLog", () => {
 	const commands = [
 		"git fetch upstream 'refs/pi/threads/42:refs/pi/threads/42'",
 		"git log --oneline refs/pi/threads/42            # one commit for each stored step",
@@ -47,18 +62,6 @@ describe("formatThreadLog / formatThreadSummary", () => {
 				"See https://github.com/cv/pi-action/blob/main/docs/threads.md#read-a-thread",
 			].join("\n"),
 		);
-		expect(formatThreadSummary("refs/pi/threads/42", "upstream")).toBe(
-			[
-				"### 🧵 pi thread",
-				"",
-				"This conversation is stored in git on `refs/pi/threads/42`. To read it ([more](https://github.com/cv/pi-action/blob/main/docs/threads.md#read-a-thread)):",
-				"",
-				"```bash",
-				...commands,
-				"```",
-				"",
-			].join("\n"),
-		);
 	});
 
 	it("uses the same commands as docs/threads.md", () => {
@@ -66,7 +69,7 @@ describe("formatThreadLog / formatThreadSummary", () => {
 			new URL("../docs/threads.md", import.meta.url),
 			"utf8",
 		);
-		const sample = formatThreadSummary("refs/pi/threads/42", "origin");
+		const sample = formatSuccessComment("ok", "refs/pi/threads/42");
 		const block = /```bash\n(.*?)```/su.exec(sample)?.[1];
 		expect(block).toBeDefined();
 		expect(docs).toContain(block);
