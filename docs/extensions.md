@@ -130,7 +130,7 @@ const tool = {
 - `call(args)` gets the arguments of the call. It returns `{ title, body? }`. `title` must not be empty.
 - `result(args, result)` gets the arguments and the stored tool result (pi-ai's `ToolResultMessage`, with its `details`). It returns `{ summary?, body? }`.
 - Both functions are optional. Each field that a function leaves out gets the usual form.
-- Return plain text, synchronously. Use only the inputs: pi-action logs from the stored entries, also when a run continues a thread.
+- Return plain text, synchronously. Use only the inputs: pi-action calls the functions for the stored entries of the conversation, not while the tool runs.
 - pi-action keeps its limits: one line of at most 120 characters for `title` and `summary`, 4000 characters of `body` for a call, and the last 30 lines of `body` for a result. It also stops the runner from running workflow commands in the text.
 - If a function throws or returns another type, pi-action shows the usual form, and writes `⚠️ Tool <name>: present.call() failed ...` to the log one time.
 - A tool that replaces an earlier one with the same name also replaces its `present`.
