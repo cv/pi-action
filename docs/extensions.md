@@ -110,6 +110,31 @@ The `pi-action` extension has pi's system prompt sections. Use these keys with `
 
 pi-durable extensions run in the process of pi-action. Thus, pi-action also sets `GH_TOKEN` and the git identity in its own environment when it loads such an extension. See [Security](security.md#the-agents-github-token-and-git-identity).
 
+### Show tool calls in the workflow log
+
+A tool can say how the [workflow log](how-it-works.md#the-workflow-log) shows its calls. Give the tool an optional `present` field. pi-durable does not use it, so other hosts ignore it:
+
+```ts
+// pi-durable's types do not declare `present`: add it to the tool that defineTool() returns.
+const tool = {
+	...defineTool({ name: "typescript" /* ... */ }),
+	present: {
+		// When the call starts: the 🔧 line, and the details in place of the arguments.
+		call: (args) => ({ title: args.label, body: args.code }),
+		// When it ends: the ↳ line in place of "N lines", and the details in place of the output.
+		result: (args, result) => ({ summary: "workspace.read", body: "..." }),
+	},
+};
+```
+
+- `call(args)` gets the arguments of the call. It returns `{ title, body? }`. `title` must not be empty.
+- `result(args, result)` gets the arguments and the stored tool result (pi-ai's `ToolResultMessage`, with its `details`). It returns `{ summary?, body? }`.
+- Both functions are optional. Each field that a function leaves out gets the usual form.
+- Return plain text, synchronously. Use only the inputs: pi-action logs from the stored entries, also when a run continues a thread.
+- pi-action keeps its limits: one line of at most 120 characters for `title` and `summary`, 4000 characters of `body` for a call, and the last 30 lines of `body` for a result. It also stops the runner from running workflow commands in the text.
+- If a function throws or returns another type, pi-action shows the usual form, and writes `⚠️ Tool <name>: present.call() failed ...` to the log one time.
+- A tool that replaces an earlier one with the same name also replaces its `present`.
+
 ### `trust_project`
 
 `trust_project` (default `false`) tells the extension that it can load and run the configuration of the repository. For pit, this is `.pi/pit.json` and `.pi/functions`. pi-action uses it too: for the prompt templates in `.pi/prompts`, the skills in `.pi/skills` and `.agents/skills`, and `.pi/SYSTEM.md` and `.pi/APPEND_SYSTEM.md` (see [Security](security.md#skills-from-the-repository)).
