@@ -88,9 +88,9 @@ function splitLabel(args: Record<string, unknown>): {
 
 /** A value that is not a string: compact JSON, or indented JSON on the next lines when it is long. */
 function formatValue(key: string, value: unknown): string {
-	// `undefined` for a value JSON does not have; TypeScript's type leaves that out.
-	const compact: string | undefined = JSON.stringify(value);
-	if (compact !== undefined && compact.length > COMPACT_JSON_LENGTH) {
+	// String(): `undefined` (no JSON) shows as such; TypeScript's type for JSON.stringify leaves it out.
+	const compact = String(JSON.stringify(value));
+	if (compact.length > COMPACT_JSON_LENGTH) {
 		const indented = JSON.stringify(value, null, 2);
 		if (indented.includes("\n")) {
 			return `${key}:\n${indented}`;
