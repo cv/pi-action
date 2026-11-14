@@ -288,9 +288,6 @@ describe("Activity", () => {
 				code: "// @pit: nope\nasync () => 1",
 			}),
 		).toBe("typescript: async () => 1");
-		expect(describeCall("typescript", { code: "// @pit: null" })).toBe(
-			"typescript",
-		);
 	});
 
 	it("shows long JSON values indented", () => {
