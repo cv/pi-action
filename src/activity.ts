@@ -8,7 +8,10 @@ import type {
 } from "@earendil-works/pi-ai";
 import type { EntryRecord } from "@earendil-works/pi-durable";
 
-import { type ToolPresentation, toolPresentation } from "./tool-presentation.ts";
+import {
+	type ToolPresentation,
+	toolPresentation,
+} from "./tool-presentation.ts";
 import { getErrorMessage } from "./utils.ts";
 
 /** The log calls this module makes. */

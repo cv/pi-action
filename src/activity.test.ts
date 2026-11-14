@@ -384,7 +384,10 @@ describe("tool presentations", () => {
 			prefix: "Run",
 			call(this: { prefix: string }, args: Record<string, unknown>) {
 				args["code"] = "changed";
-				return { title: `${this.prefix} ${String(args["label"])}`, body: "the program" };
+				return {
+					title: `${this.prefix} ${String(args["label"])}`,
+					body: "the program",
+				};
 			},
 			result: (_args: unknown, result: { content: { text: string }[] }) => ({
 				summary: "workspace.read",
@@ -423,7 +426,10 @@ describe("tool presentations", () => {
 	it("shows the generic form for what a tool does not present, and for a tool that a later one replaces", () => {
 		const r = recorder();
 		r.activity.useTools([
-			{ name: "callOnly", present: { call: () => ({ title: "Only a title" }) } },
+			{
+				name: "callOnly",
+				present: { call: () => ({ title: "Only a title" }) },
+			},
 			{ name: "resultOnly", present: { result: () => ({ summary: "" }) } },
 			typescript,
 			{ name: "typescript" },
@@ -468,7 +474,10 @@ describe("tool presentations", () => {
 				},
 			},
 			{ name: "untitled", present: { call: () => ({ title: " " }) } },
-			{ name: "async", present: { call: () => Promise.resolve({ title: "x" }) } },
+			{
+				name: "async",
+				present: { call: () => Promise.resolve({ title: "x" }) },
+			},
 			{ name: "typed", present: { call: () => ({ title: "x", body: 1 }) } },
 			{ name: "summary", present: { result: () => ({ summary: 1 }) } },
 		]);
