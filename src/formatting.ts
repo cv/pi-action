@@ -1,7 +1,6 @@
 // The comments pi-action posts, and existing PR review comments as prompt context.
 import type { GitHubComment } from "./types.ts";
 
-
 const READ_A_THREAD =
 	"https://github.com/cv/pi-action/blob/main/docs/threads.md#read-a-thread";
 
