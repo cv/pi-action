@@ -430,7 +430,8 @@ export class Activity {
 				? plural(lines, "line")
 				: oneLine(presented.summary),
 		].filter((part) => part !== "");
-		this.log.startGroup(`  ↳ ${[status, ...parts].join(" ")}`.replace(`${status} `, `${status} `));
+		const summary = parts.length > 0 ? ` ${parts.join(" · ")}` : "";
+		this.log.startGroup(`  ↳ ${status}${summary}`);
 		if (call !== undefined) {
 			this.raw(call.args);
 			this.log.info("──");
