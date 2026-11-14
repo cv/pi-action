@@ -1,1 +1,1 @@
-{"format":1,"seq":644,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":645,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"      Tests  14 passed (14)\n[feat/80-tool-presentation 61ba1f0] feat: let tools say how the workflow log shows their calls\n 7 files changed, 379 insertions(+), 16 deletions(-)\n create mode 100644 src/tool-presentation.ts\n"]]}}]}
