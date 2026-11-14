@@ -289,7 +289,9 @@ export class Activity {
 	 * Show the calls of these tools as their `present` fields say. A tool named like an earlier one replaces it, as in
 	 * the registry; a tool without `present` gets the generic form.
 	 */
-	useTools(tools: readonly { readonly name: string }[]): void {
+	useTools(
+		tools: readonly { readonly name: string; readonly present?: unknown }[],
+	): void {
 		for (const tool of tools) {
 			const presentation = toolPresentation(tool);
 			if (presentation === undefined) {
