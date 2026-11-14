@@ -126,7 +126,7 @@ describe("describeCall", () => {
 			"edit: src/a.ts (1 edit)",
 		);
 		expect(describeCall("typescript", { label: "Read files", code: "x" })).toBe(
-			"typescript: Read files",
+			"Read files",
 		);
 		expect(
 			describeCall("typescript", { code: "\n  async () => 1\nmore" }),
@@ -263,6 +263,63 @@ describe("Activity", () => {
 			...output.slice(10),
 		]);
 	});
+
+	it("takes the label of a pit program from its header, and leaves the header out", () => {
+		const code =
+			'// @pit: {"label": "Read the config"}\nasync ({ workspace: { read } }) =>\n\tread("a.json")\n';
+		expect(describeCall("typescript", { code })).toBe("Read the config");
+		expect(
+			describeCall("typescript", { code, label: "  Given label  " }),
+		).toBe("Given label");
+		expect(formatArguments({ code, timeoutMs: 5000 })).toBe(
+			'code:\nasync ({ workspace: { read } }) =>\n\tread("a.json")\ntimeoutMs: 5000',
+		);
+		expect(formatArguments({ code, label: "" })).toBe(
+			'label: \ncode:\nasync ({ workspace: { read } }) =>\n\tread("a.json")',
+		);
+		// A header without a label, or one that is not JSON, is left out too.
+		expect(
+			describeCall("typescript", {
+				code: "  // @pit: {}\nasync () => 1",
+			}),
+		).toBe("typescript: async () => 1");
+		expect(
+			describeCall("typescript", {
+				code: "// @pit: nope\nasync () => 1",
+			}),
+		).toBe("typescript: async () => 1");
+		expect(describeCall("typescript", { code: "// @pit: null" })).toBe(
+			"typescript",
+		);
+	});
+
+	it("shows long JSON values indented", () => {
+		const params = { files: ["src/a.ts", "src/b.ts"], query: "x".repeat(60) };
+		expect(formatArguments({ params, n: [1, 2] })).toBe(
+			`params:\n${JSON.stringify(params, null, 2)}\nn: [1,2]`,
+		);
+	});
+
+	it("logs a pit program by its label, and its code without the header", () => {
+		const r = recorder();
+		r.activity.entries([
+			assistant([
+				call("t", "typescript", {
+					code: '// @pit: {"label": "List files"}\nasync ({ workspace: { list } }) => list()',
+				}),
+			]),
+			toolResult("t", '["a.ts"]', { durationMs: 20 }),
+		]);
+		expect(r.lines).toStrictEqual([
+			"🔧 List files",
+			"::group::  ↳ ✓ 0.0s · 1 line",
+			"code:\nasync ({ workspace: { list } }) => list()",
+			"──",
+			'["a.ts"]',
+			"::endgroup::",
+		]);
+	});
+
 
 	it("shows multi-line arguments as they are", () => {
 		expect(
