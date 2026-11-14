@@ -376,3 +376,137 @@ describe("Activity", () => {
 		]);
 	});
 });
+
+describe("tool presentations", () => {
+	const typescript = {
+		name: "typescript",
+		present: {
+			prefix: "Run",
+			call(this: { prefix: string }, args: Record<string, unknown>) {
+				args["code"] = "changed";
+				return {
+					title: `${this.prefix} ${String(args["label"])}`,
+					body: "the program",
+				};
+			},
+			result: (_args: unknown, result: { content: { text: string }[] }) => ({
+				summary: "workspace.read",
+				body: `result: ${result.content[0]?.text ?? ""}`,
+			}),
+		},
+	};
+
+	it("shows a call and its result as the tool presents them", () => {
+		const r = recorder();
+		r.activity.useTools([typescript, { name: "bash" }]);
+		r.activity.entries([
+			assistant([
+				call("t", "typescript", { label: "the check", code: "x" }),
+				call("b", "bash", { command: "ls" }),
+			]),
+			toolResult("t", "42", { durationMs: 20 }),
+			toolResult("b", "a.ts"),
+		]);
+		expect(r.lines).toStrictEqual([
+			"🔧 Run the check",
+			"🔧 bash: ls",
+			"::group::  ↳ ✓ Run the check · 0.0s · workspace.read",
+			"the program",
+			"──",
+			"result: 42",
+			"::endgroup::",
+			"::group::  ↳ ✓ bash: ls · 1 line",
+			"command: ls",
+			"──",
+			"a.ts",
+			"::endgroup::",
+		]);
+	});
+
+	it("shows the generic form for what a tool does not present, and for a tool that a later one replaces", () => {
+		const r = recorder();
+		r.activity.useTools([
+			{
+				name: "callOnly",
+				present: { call: () => ({ title: "Only a title" }) },
+			},
+			{ name: "resultOnly", present: { result: () => ({ summary: "" }) } },
+			typescript,
+			{ name: "typescript" },
+			{ name: "none", present: { other: 1 } },
+		]);
+		r.activity.entries([
+			assistant([
+				call("a", "callOnly", { x: 1 }),
+				call("b", "resultOnly", { y: 2 }),
+				call("c", "typescript", { code: "1" }),
+			]),
+			toolResult("a", "out"),
+			toolResult("b", "out"),
+		]);
+		expect(r.lines).toStrictEqual([
+			"🔧 Only a title",
+			'🔧 resultOnly {"y":2}',
+			"🔧 typescript: 1",
+			"::group::  ↳ ✓ Only a title · 1 line",
+			"x: 1",
+			"──",
+			"out",
+			"::endgroup::",
+			'::group::  ↳ ✓ resultOnly {"y":2}',
+			"y: 2",
+			"──",
+			"out",
+			"::endgroup::",
+		]);
+	});
+
+	it("says once when a presentation fails, and shows the generic form", () => {
+		const r = recorder();
+		r.activity.useTools([
+			{
+				name: "bad",
+				present: {
+					call: () => {
+						throw new Error("boom");
+					},
+					result: () => "text",
+				},
+			},
+			{ name: "untitled", present: { call: () => ({ title: " " }) } },
+			{
+				name: "async",
+				present: {
+					call: async () => {
+						await Promise.resolve();
+						return { title: "x" };
+					},
+				},
+			},
+			{ name: "typed", present: { call: () => ({ title: "x", body: 1 }) } },
+			{ name: "summary", present: { result: () => ({ summary: 1 }) } },
+		]);
+		r.activity.entries([
+			assistant([call("a", "bad", {}), call("b", "bad", {})]),
+			toolResult("a", "out"),
+			assistant([
+				call("c", "untitled", {}),
+				call("d", "async", {}),
+				call("e", "typed", {}),
+				call("f", "summary", {}),
+			]),
+			toolResult("f", ""),
+		]);
+		expect(r.lines.filter((line) => line.startsWith("⚠️"))).toStrictEqual([
+			"⚠️ Tool bad: present.call() failed, so the log shows its calls in the generic form: boom",
+			"⚠️ Tool bad: present.result() failed, so the log shows its calls in the generic form: present.result() did not return an object",
+			"⚠️ Tool untitled: present.call() failed, so the log shows its calls in the generic form: present.call() returned no title",
+			"⚠️ Tool async: present.call() failed, so the log shows its calls in the generic form: present.call() did not return an object",
+			"⚠️ Tool typed: present.call() failed, so the log shows its calls in the generic form: present.call() returned a body that is not a string",
+			"⚠️ Tool summary: present.result() failed, so the log shows its calls in the generic form: present.result() returned a summary that is not a string",
+		]);
+		expect(r.lines).toContain("🔧 bad");
+		expect(r.lines).toContain("::group::  ↳ ✓ bad · 1 line");
+		expect(r.lines).toContain("::group::  ↳ ✓ summary · 0 lines");
+	});
+});
