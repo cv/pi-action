@@ -462,9 +462,8 @@ describe("run (durable)", () => {
 		]);
 		// The plumbing is debug output.
 		expect(deps.log.debug).toHaveBeenCalledWith(`${REF}: new on origin`);
-		expect(deps.summary).toHaveBeenCalledExactlyOnceWith(
-			expect.stringContaining(`git log --oneline ${REF}`),
-		);
+		// In comment mode, the reply says how to read the thread, collapsed; the job summary does not (#80).
+		expect(deps.summary).not.toHaveBeenCalled();
 	});
 
 	it("puts the checkout's AGENTS.md into the system prompt, and logs it in the setup group", async () => {
@@ -655,7 +654,9 @@ describe("run (durable)", () => {
 		);
 		expect(w.gh.posted.length).toBeGreaterThanOrEqual(2);
 		// Nothing is answered twice: the first comment was already handled.
-		expect(w.gh.posted.filter((p) => p.includes("one"))).toHaveLength(1);
+		expect(
+			w.gh.posted.filter((p) => p.startsWith("### 🤖 pi Response\n\none")),
+		).toHaveLength(1);
 	});
 
 	it("adds comments posted while pi works to the running conversation", async () => {
