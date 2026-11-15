@@ -280,6 +280,7 @@ describe("loadExtensions", () => {
 				"--ignore-scripts",
 				"--legacy-peer-deps",
 				"--omit=dev",
+				"--allow-git=root",
 				"@acme/helper@1",
 			]),
 		);
@@ -290,6 +291,27 @@ describe("loadExtensions", () => {
 		expect(warnings(log)).toStrictEqual([
 			"@acme/helper has no pi extensions; it is installed for other extensions to import",
 		]);
+	});
+
+	it("leaves allow-git to npm_config_allow_git when the environment sets it", async () => {
+		const runNpm = vi.fn<NpmRunner>(async (_args, cwd) => {
+			write(
+				join(cwd, "package.json"),
+				JSON.stringify({ dependencies: { "@acme/helper": "1.0.0" } }),
+			);
+			write(join(cwd, "node_modules/@acme/helper/lib.js"), "");
+		});
+		await loadExtensions({
+			specs: ["github:acme/helper#v1"],
+			cwd: tempDir(),
+			log: createLogger(),
+			env: { RUNNER_TEMP: tempDir(), NPM_CONFIG_ALLOW_GIT: "all" },
+			runNpm,
+		});
+		const [call] = runNpm.mock.calls;
+		expect(call?.[0]).toContain("github:acme/helper#v1");
+		expect(call?.[0]).not.toContain("--allow-git=root");
+		expect(call?.[2]).toMatchObject({ NPM_CONFIG_ALLOW_GIT: "all" });
 	});
 
 	it("reports npm failures with npm's message", async () => {
