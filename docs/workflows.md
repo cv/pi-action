@@ -55,7 +55,7 @@ jobs:
       || contains(github.event.comment.body || '', '/answer')))
     # ...
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: cv/pi-action@v2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -125,7 +125,7 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: cv/pi-action@v2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

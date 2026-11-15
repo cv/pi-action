@@ -51,7 +51,7 @@ Each issue or pull request is one conversation (a **thread**). The thread contin
          pull-requests: write
 
        steps:
-         - uses: actions/checkout@v6
+         - uses: actions/checkout@v7
 
          - name: Run pi-action
            uses: cv/pi-action@v2
