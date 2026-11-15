@@ -33,7 +33,8 @@ Write one extension per line, or separate them with commas. pi-action ignores em
 
 ### Installation
 
-- pi-action installs npm packages into a new directory in `RUNNER_TEMP`, never into your repository. It runs `npm install --ignore-scripts --legacy-peer-deps --omit=dev`.
+- pi-action installs npm packages into a new directory in `RUNNER_TEMP`, never into your repository. It runs `npm install --ignore-scripts --legacy-peer-deps --omit=dev --allow-git=root`.
+- `--allow-git=root` lets npm install the git specs of the input, such as `github:owner/repo#ref`. npm 12 refuses git specs by default. npm does not install git dependencies of these packages. To change this, set `NPM_CONFIG_ALLOW_GIT` in the `env` of the step, for example to `all`. Then pi-action does not add `--allow-git`.
 - npm does not get the `INPUT_*` variables of the action (`github_token`, `api_key`).
 - Lifecycle scripts do not run. Thus, packages that need a build step or native modules do not work.
 - pi-action does not install the pi packages of an extension (its `peerDependencies`). Imports of `@earendil-works/pi-ai`, `@earendil-works/pi-durable`, and `@earendil-works/chord` (and their subpaths) get the copies of pi-action. Thus, the extension and pi-action share one instance of each.
