@@ -1,1 +1,1 @@
-{"format":1,"seq":185,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"629b1fa chore: release 2.5.3 (#87)\n"]]}}]}
+{"format":1,"seq":186,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"]," * [new tag]         v2.5.3 -> v2.5.3\n"]]}}]}
