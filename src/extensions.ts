@@ -149,6 +149,17 @@ function npmEnv(env: Env): Env {
 	);
 }
 
+/**
+ * `--allow-git=root`: npm 12 refuses git specs, such as `github:owner/repo#ref`, by default. `root` allows the specs
+ * of the input, but not the git dependencies of their packages. An `npm_config_allow_git` in the environment wins.
+ */
+function allowGitArgs(env: Env): string[] {
+	const configured = Object.keys(env).some(
+		(name) => name.toLowerCase() === "npm_config_allow_git",
+	);
+	return configured ? [] : ["--allow-git=root"];
+}
+
 /** Installs npm specs into a fresh directory under RUNNER_TEMP; returns each installed package's root. */
 async function installPackages(
 	specs: string[],
@@ -171,6 +182,7 @@ async function installPackages(
 				"--omit=dev",
 				"--no-audit",
 				"--no-fund",
+				...allowGitArgs(env),
 				"--prefix",
 				dir,
 				...specs,
