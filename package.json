@@ -42,20 +42,20 @@
 		"jiti": "^2.7.0"
 	},
 	"devDependencies": {
-		"@commitlint/cli": "^21.2.2",
-		"@commitlint/config-conventional": "^21.2.2",
-		"@j178/prek": "^0.4.14",
+		"@commitlint/cli": "^21.2.4",
+		"@commitlint/config-conventional": "^21.2.4",
+		"@j178/prek": "^0.5.10",
 		"@octokit/webhooks-types": "^7.6.1",
 		"@types/node": "^26.6.6",
-		"@vitest/coverage-v8": "^4.1.10",
+		"@vitest/coverage-v8": "^5.1.0",
 		"actionlint": "^2.0.6",
-		"jscpd": "^5.0.16",
-		"knip": "^6.32.2",
+		"jscpd": "^5.4.3",
+		"knip": "^6.45.1",
 		"oxfmt": "0.78.0",
 		"oxlint": "1.93.0",
-		"oxlint-tsgolint": "^7.0.2007",
+		"oxlint-tsgolint": "7.0.2007",
 		"typescript": "^7.0.2",
-		"vitest": "^4.1.10"
+		"vitest": "^5.1.0"
 	},
 	"engines": {
 		"node": ">=24.0.0"
