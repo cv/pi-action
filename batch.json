@@ -1,1 +1,1 @@
-{"format":1,"seq":50,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"@earendil-works/pi-ai 1.5.2\n@earendil-works/pi-durable 1.5.2\n@earendil-works/pi-coding-agent 1.5.2\njiti 2.7.0\n"]]}}]}
+{"format":1,"seq":51,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"@commitlint/cli 21.2.4\n@j178/prek 0.5.11\n@octokit/webhooks-types 7.6.1\n"]]}}]}
