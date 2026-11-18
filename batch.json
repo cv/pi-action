@@ -1,1 +1,1 @@
-{"format":1,"seq":52,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"@types/node 26.6.6\n@vitest/coverage-v8 5.1.1\nactionlint 2.0.6\njscpd 5.4.3\n"]]}}]}
+{"format":1,"seq":53,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"knip 6.46.1\noxfmt 0.79.0\noxlint 1.94.0\noxlint-tsgolint 7.0.2007\n"]]}}]}
