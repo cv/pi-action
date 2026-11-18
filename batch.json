@@ -1,1 +1,1 @@
-{"format":1,"seq":49,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"],["s",["tools",0,"output"],"installed\n@actions/core 3.0.1\n@actions/github 9.1.1\n@earendil-works/chord 1.5.2\n"]]}}]}
+{"format":1,"seq":50,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"@earendil-works/pi-ai 1.5.2\n@earendil-works/pi-durable 1.5.2\n@earendil-works/pi-coding-agent 1.5.2\njiti 2.7.0\n"]]}}]}
