@@ -33,16 +33,16 @@ The log of the `Run pi-action` step shows what pi does while it works, one line 
 
 ```text
 ▸ Setup
-🤖 nvidia/aws/anthropic/bedrock-claude-opus-5-5 · thinking medium · tools: read, write, edit, bash, typescript · extensions: pit (typescript)
+🤖 nvidia/aws/anthropic/bedrock-claude-opus-5-5 · thinking medium · tools: typescript · extensions: pit (typescript)
 ▸ 🧵 Thread refs/pi/threads/46: continuing, started 2026-11-12 07:11 UTC
 ▶ Request from @cv (https://github.com/o/r/issues/46#issuecomment-1): Ready to write a PR?
 💬 I'll look at the existing sessions first.
-🔧 bash: git log --oneline -5
-▸   ↳ ✓ 0.1s · 5 lines
-🔧 edit: src/run.ts (2 edits)
-▸   ↳ ✓ 0.0s · 1 line
-🔧 Read the run tests
-▸   ↳ ✓ 0.1s · 412 lines
+🔧 Read the recent commits and the run tests
+▸   ↳ ✓ 0.1s · git.log · workspace.read
+🔧 Make the run handle a missing thread
+▸   ↳ ✓ 0.0s · workspace.edit
+🔧 Run npm run check
+▸   ↳ ✓ 48.2s · shell.exec
 ▸ 💬 I opened PR #48, which ...
 ✅ Replied: https://github.com/o/r/issues/46#issuecomment-2 (24 model responses · 23 tool calls · 6m40s · 2.1M tokens in, 31k out)
 🧵 refs/pi/threads/46 is at 4325d9a
