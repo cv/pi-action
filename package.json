@@ -44,18 +44,18 @@
 	"devDependencies": {
 		"@commitlint/cli": "^21.2.4",
 		"@commitlint/config-conventional": "^21.2.4",
-		"@j178/prek": "^0.5.10",
+		"@j178/prek": "^0.5.11",
 		"@octokit/webhooks-types": "^7.6.1",
 		"@types/node": "^26.6.6",
-		"@vitest/coverage-v8": "^5.1.0",
+		"@vitest/coverage-v8": "^5.1.1",
 		"actionlint": "^2.0.6",
 		"jscpd": "^5.4.3",
-		"knip": "^6.45.1",
-		"oxfmt": "0.78.0",
-		"oxlint": "1.93.0",
+		"knip": "^6.46.1",
+		"oxfmt": "0.79.0",
+		"oxlint": "1.94.0",
 		"oxlint-tsgolint": "7.0.2007",
 		"typescript": "^7.0.2",
-		"vitest": "^5.1.0"
+		"vitest": "^5.1.1"
 	},
 	"engines": {
 		"node": ">=24.0.0"
