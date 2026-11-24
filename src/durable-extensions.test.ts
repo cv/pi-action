@@ -32,6 +32,7 @@ function options(
 		ui: undefined,
 		log: createLogger(),
 		env: { RUNNER_TEMP: tempDir() },
+		images: { prepare: async () => undefined },
 		...overrides,
 	};
 }
