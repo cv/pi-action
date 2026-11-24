@@ -110,6 +110,12 @@ describe("createDurableExtensions", () => {
 		).rejects.toThrow('named "pi-action", which is already taken');
 		await expect(
 			createDurableExtensions(
+				[factory("a.ts", async () => ({ name: "fit-images" }))],
+				options(),
+			),
+		).rejects.toThrow('named "fit-images", which is already taken');
+		await expect(
+			createDurableExtensions(
 				[
 					factory("b.ts", async () => {
 						throw new Error("boom");
