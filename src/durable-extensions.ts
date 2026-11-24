@@ -3,8 +3,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import type { Extension } from "@earendil-works/pi-durable";
-import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node";
-import { CodingTools } from "@earendil-works/pi-durable/tools";
+import { createFitImagesExtension } from "@earendil-works/pi-durable/images/fit";
+import {
+	CodingTools,
+	type ImageProcessor,
+} from "@earendil-works/pi-durable/tools";
 
 import { BUILTIN_EXTENSION } from "./builtin-extension.ts";
 import type { DurableExtensionFactory } from "./extensions.ts";
@@ -22,6 +25,8 @@ export interface DurableExtensionsOptions {
 	ui: DurableUi | undefined;
 	log: Log;
 	env: Record<string, string | undefined>;
+	/** The run's image processor (see `Thread.open`), for pit's `workspace.viewImage`. */
+	images: ImageProcessor;
 }
 
 /** The `agent_dir` input, or a fresh directory under RUNNER_TEMP. */
@@ -40,7 +45,7 @@ async function agentDirectory(
 
 /**
  * Builds the pi-durable extensions the `extensions` input declared, with the run's host options, for the thread's
- * registry. Their names must not collide with each other, with pi-action's coding tools, or with its built-in extension (pi-action). Their tools may: a tool
+ * registry. Their names must not collide with each other, with pi-action's coding tools, with its `fit-images` extension, or with its built-in extension (pi-action). Their tools may: a tool
  * named like an earlier one replaces it (the last one wins, as with pi's `registerTool`), which the log says.
  */
 export async function createDurableExtensions(
@@ -50,14 +55,16 @@ export async function createDurableExtensions(
 	if (factories.length === 0) {
 		return [];
 	}
-	const { cwd, trustProject, ui, log } = options;
+	const { cwd, trustProject, ui, log, images } = options;
 	const agentDir = await agentDirectory(options);
-	// One processor for all extensions; its worker thread starts with the first image and exits when idle.
-	const images = await createNodePhotonImages();
 	log.info(
 		`pi-durable extensions: agent directory ${agentDir}, project ${trustProject ? "trusted" : "not trusted"}, ${ui ? "questions answered on GitHub" : "no UI"}`,
 	);
-	const names = new Set([CodingTools.name, BUILTIN_EXTENSION]);
+	const names = new Set([
+		CodingTools.name,
+		createFitImagesExtension(images).name,
+		BUILTIN_EXTENSION,
+	]);
 	const owners = new Map(
 		(CodingTools.tools ?? []).map((tool) => [tool.name, CodingTools.name]),
 	);
