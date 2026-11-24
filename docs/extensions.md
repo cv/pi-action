@@ -19,7 +19,7 @@ Write one extension per line, or separate them with commas. pi-action ignores em
     github_token: ${{ secrets.GITHUB_TOKEN }}
     extensions: |
       # pi-durable extensions
-      github:cv/pit#v0.39.0          # pit's typescript tool
+      github:cv/pit#v0.39.2          # pit's typescript tool
       # pi extensions (providers)
       @acme/pi-provider@1.4.2        # from npm, pinned
       ./.pi/extensions/gateway.ts    # in this repository
@@ -74,7 +74,7 @@ A [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) extensi
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     extensions: |
-      github:cv/pit#v0.39.0   # pit's typescript tool (pit/durable)
+      github:cv/pit#v0.39.2   # pit's typescript tool (pit/durable)
 ```
 
 ### Package format
@@ -83,7 +83,7 @@ A [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable) extensi
 - The module exports `createPiDurableExtension(options)`, or a default export with the same signature.
 - The function returns a pi-durable `Extension`: `{ name, tools?, sections?, hooks?, wraps?, tasks? }`.
 - If a package has `pi.durable` and `pi.extensions`, pi-action loads only the `pi.durable` entry, because its pi extensions need the pi coding agent. pi-action writes this to the log.
-- pi-action installs the extensions after its coding tools (read, write, edit, bash). Each extension must have a unique name, other than `coding-tools` and `pi-action`. Tool names can repeat (see [Override tools and sections](#override-tools-and-sections)).
+- pi-action installs the extensions after its coding tools (read, write, edit, bash). Each extension must have a unique name, other than `fit-images`, `coding-tools`, and `pi-action`. Tool names can repeat (see [Override tools and sections](#override-tools-and-sections)).
 
 ### Override tools and sections
 
@@ -92,7 +92,7 @@ An extension can change the tools and prompt sections of pi-action and of other 
 - **Replace a tool.** A tool with the name of an earlier tool replaces it, as `pi.registerTool` does in pi. For example, an extension with its own `bash` tool replaces the `bash` of pi-action. pi-action writes `pi-durable extension <name> replaces tool bash from coding-tools` to the log.
 - **Wrap a tool or a section.** `wrapTool(tool, wrapper)` and `wrapSection(key, wrapper)` of pi-durable change a tool or a section, for example its description or its text. `wrapTool("read", (t) => ({ ...t, callers: ["tools"] }))` hides `read` from the model, but other tools can still call it (see [Tools the model sees](#tools-the-model-sees)).
 
-The order is: the coding tools of pi-action (`coding-tools`) first, then its built-in extension `pi-action`, then the extensions in the order of the `extensions` input. Extensions cannot use the names `coding-tools` and `pi-action`. pi-durable applies the wraps of all extensions in this order. Thus, the last wrap wins.
+The order is: pi-durable's `fit-images` extension first, then the coding tools of pi-action (`coding-tools`), then its built-in extension `pi-action`, then the extensions in the order of the `extensions` input. Extensions cannot use the names `fit-images`, `coding-tools`, and `pi-action`. pi-durable applies the wraps of all extensions in this order. Thus, the last wrap wins.
 
 The `pi-action` extension has pi's system prompt sections. Use these keys with `wrapSection`: `preamble`, `tools`, `rules`, `addendum`, `project_context`, `available_skills`, and `cwd` (see [The system prompt](prompts.md#the-system-prompt)). For example, `wrapSection("rules", (s) => ({ ...s, render: () => "- My rule" }))` replaces pi's rules.
 
@@ -107,9 +107,13 @@ The `pi-action` extension has pi's system prompt sections. Use these keys with `
 | `trustProject` | The `trust_project` input |
 | `ui` | `{ ask, notify }`, the GitHub UI (see [Questions on GitHub](#questions-on-github)). Only in `comment` mode on an issue or pull request. Not set in `output` mode or for direct prompts |
 | `log` | The log of the action (`info`, `warning`) |
-| `images` | An image processor, `createNodePhotonImages()` of pi-durable. It resizes and converts images to the limits of the model, for example for pit's `workspace.viewImage` (pit 0.36.2 and later) |
+| `images` | An image processor, `createNodePhotonImages()` of pi-durable. It resizes and converts images to the limits of the model, for example for pit's `workspace.viewImage` (pit 0.36.2 and later). pi-action uses the same processor for `read` and for `fit-images` (see [Images](#images)) |
 
 pi-durable extensions run in the process of pi-action. Thus, pi-action also sets `GH_TOKEN` and the git identity in its own environment when it loads such an extension. See [Security](security.md#the-agents-github-token-and-git-identity).
+
+### Images
+
+pi-action fits each image that the model gets to the limits of the model, before the thread stores it. The image processor resizes and converts the images that `read` returns. The `fit-images` extension of pi-durable does the same for the results of all other tools, for example an MCP tool, and writes what it changed in an `info` diagnostic. Thus, a tool does not have to fit its images itself, and a large or damaged image does not stop the thread. The hooks of the extensions see the fitted images.
 
 ### Show tool calls in the workflow log
 
