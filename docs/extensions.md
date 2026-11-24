@@ -109,11 +109,11 @@ The `pi-action` extension has pi's system prompt sections. Use these keys with `
 | `log` | The log of the action (`info`, `warning`) |
 | `images` | An image processor, `createNodePhotonImages()` of pi-durable. It resizes and converts images to the limits of the model, for example for pit's `workspace.viewImage` (pit 0.36.2 and later). pi-action uses the same processor for `read` and for `fit-images` (see [Images](#images)) |
 
+pi-durable extensions run in the process of pi-action. Thus, pi-action also sets `GH_TOKEN` and the git identity in its own environment when it loads such an extension. See [Security](security.md#the-agents-github-token-and-git-identity).
+
 ### Images
 
 pi-action fits each image that the model gets to the limits of the model, before the thread stores it. The image processor resizes and converts the images that `read` returns. The `fit-images` extension of pi-durable does the same for the results of all other tools, for example an MCP tool, and writes what it changed in an `info` diagnostic. Thus, a tool does not have to fit its images itself, and a large or damaged image does not stop the thread. The hooks of the extensions see the fitted images.
-
-pi-durable extensions run in the process of pi-action. Thus, pi-action also sets `GH_TOKEN` and the git identity in its own environment when it loads such an extension. See [Security](security.md#the-agents-github-token-and-git-identity).
 
 ### Show tool calls in the workflow log
 
