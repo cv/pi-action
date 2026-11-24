@@ -22,7 +22,12 @@ import {
 	ToolResultEntry,
 } from "@earendil-works/pi-durable";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
-import { CodingTools } from "@earendil-works/pi-durable/tools";
+import { createFitImagesExtension } from "@earendil-works/pi-durable/images/fit";
+import {
+	CodingTools,
+	createCodingTools,
+	type ImageProcessor,
+} from "@earendil-works/pi-durable/tools";
 
 import { GitStorage } from "./storage/git-storage.ts";
 import { git } from "./storage/git.ts";
@@ -53,6 +58,11 @@ export interface ThreadOptions {
 	thinkingLevel?: ModelThinkingLevel | undefined;
 	log: Log;
 	remote?: string | undefined;
+	/**
+	 * Fits the images the model gets to its limits: `read`'s, and with the `fit-images` extension, installed first, those
+	 * of every other tool. Without one, `read` returns images as they are, and no other tool's are fitted.
+	 */
+	images?: ImageProcessor | undefined;
 	/** pi-durable extensions, installed after the coding tools: the built-in `pi-action`, then the `extensions` input's. */
 	extensions?: readonly Extension[];
 	/** The `exclude_tools` and `model_tools_hidden` inputs; none when undefined. */
@@ -265,7 +275,14 @@ export class Thread {
 				? new MemoryStorage()
 				: new ObservedMemoryStorage(onEntries));
 		const registry = createRegistry();
-		registry.install(CodingTools);
+		const { images } = options;
+		if (images === undefined) {
+			registry.install(CodingTools);
+		} else {
+			// First, so the hooks of the extensions after it see the fitted images.
+			registry.install(createFitImagesExtension(images));
+			registry.install(createCodingTools({ images }));
+		}
 		for (const extension of options.extensions ?? []) {
 			registry.install(extension);
 		}

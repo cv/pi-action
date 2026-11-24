@@ -32,6 +32,7 @@ function options(
 		ui: undefined,
 		log: createLogger(),
 		env: { RUNNER_TEMP: tempDir() },
+		images: { prepare: async () => undefined },
 		...overrides,
 	};
 }
@@ -107,6 +108,12 @@ describe("createDurableExtensions", () => {
 				options(),
 			),
 		).rejects.toThrow('named "pi-action", which is already taken');
+		await expect(
+			createDurableExtensions(
+				[factory("a.ts", async () => ({ name: "fit-images" }))],
+				options(),
+			),
+		).rejects.toThrow('named "fit-images", which is already taken');
 		await expect(
 			createDurableExtensions(
 				[

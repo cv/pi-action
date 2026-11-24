@@ -3,6 +3,8 @@ import { join, resolve } from "node:path";
 
 import type { Models } from "@earendil-works/pi-ai/models";
 import type { Extension } from "@earendil-works/pi-durable";
+import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node";
+import type { ImageProcessor } from "@earendil-works/pi-durable/tools";
 
 import { Activity, formatStats, oneLine } from "./activity.ts";
 import { createBuiltinExtension } from "./builtin-extension.ts";
@@ -178,7 +180,8 @@ function runSkills(
  * The `extensions` input and the model setup: the built-in and custom providers and those extensions register
  * (unless `createModels` overrides it), the pi-durable extensions for the thread, which get the GitHub UI when
  * the run posts to an issue or PR, and the variables the agent's tools get (see `toolEnv()`). pi-durable extensions
- * run in this process, so when there are any, those variables are set in its environment too (after npm ran).
+ * run in this process, so when there are any, those variables are set in its environment too (after npm ran). One
+ * image processor serves the coding tools' `read`, the extensions, and the images of every tool result.
  */
 async function setUp(
 	deps: ActionDependencies,
@@ -187,6 +190,7 @@ async function setUp(
 ): Promise<{
 	models: Models;
 	extensions: Extension[];
+	images: ImageProcessor;
 	tools: Record<string, string>;
 	ui: GitHubUi | undefined;
 	templates: PromptTemplates;
@@ -221,7 +225,10 @@ async function setUp(
 		inputs.outputMode === "comment" && issueNumber !== undefined
 			? createGitHubUi({ gh, issueNumber, log, summary: deps.summary })
 			: undefined;
+	// Its worker thread starts with the first image and exits when idle.
+	const images = await createNodePhotonImages();
 	const extensions = await createDurableExtensions(loaded.durable, {
+		images,
 		cwd,
 		agentDir: inputs.agentDir,
 		trustProject: inputs.trustProject,
@@ -230,6 +237,7 @@ async function setUp(
 		env,
 	});
 	return {
+		images,
 		models,
 		extensions,
 		tools,
@@ -512,6 +520,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 		const {
 			models,
 			extensions,
+			images,
 			tools,
 			ui,
 			templates,
@@ -537,6 +546,7 @@ export async function run(deps: ActionDependencies): Promise<void> {
 			thinkingLevel: inputs.thinkingLevel,
 			log,
 			remote: deps.remote,
+			images,
 			extensions: [
 				createBuiltinExtension({
 					projectContext: context,
