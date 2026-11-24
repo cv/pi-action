@@ -60,12 +60,17 @@ export function extractTriggerInfo(
 		source = "issue" in payload ? "comment" : "review_comment";
 	}
 	const triggerText = origin.body ?? "";
+	// The webhook types allow a deleted (null) user; isSupportedWebhookPayload has already refused one.
+	const author = origin.user;
+	if (author === null) {
+		return null;
+	}
 	if (triggerText === "") {
 		return null;
 	}
 	return {
 		triggerText,
-		author: origin.user,
+		author,
 		authorAssociation: origin.author_association,
 		issueNumber: subject.number,
 		issueTitle: subject.title,
