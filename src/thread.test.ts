@@ -507,7 +507,6 @@ describe("Thread: the thinking level", () => {
 	});
 });
 
-
 /** A 1x1 PNG. */
 const PNG =
 	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
@@ -543,7 +542,11 @@ async function imagesSeen(options: Partial<ThreadOptions>): Promise<string[]> {
 		...options,
 	});
 	try {
-		const submission = await thread.submit({ key: "k", content: "hi", data: {} });
+		const submission = await thread.submit({
+			key: "k",
+			content: "hi",
+			data: {},
+		});
 		await submission.wait(BACKGROUND_CONTEXT);
 	} finally {
 		await thread.close();
