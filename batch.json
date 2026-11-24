@@ -1,1 +1,1 @@
-{"format":1,"seq":95,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"]," ✓ src/action-docs.test.ts (1 test) 12ms\n ✓ src/tool-filter.test.ts (2 tests) 5ms\n ✓ src/utils.test.ts (7 tests) 5ms\n"]]}}]}
+{"format":1,"seq":96,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"]," ✓ src/storage/conformance.test.ts (34 tests) 2979ms\n   ✓ GitStorage (33)\n     ✓ streams long document tails across root replacement deltas 387ms\n"]]}}]}
