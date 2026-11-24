@@ -566,11 +566,9 @@ describe("Thread: images", () => {
 	it("fits the images of every tool's results with the run's image processor", async () => {
 		const prepared: string[] = [];
 		const images = {
-			prepare: async (bytes: Uint8Array, mimeType: string) => {
+			prepare: async (_bytes: Uint8Array, mimeType: string) => {
 				prepared.push(mimeType);
-				return bytes.length > 0
-					? { data: "Zml0dGVk", mimeType: "image/png" }
-					: undefined;
+				return { data: "Zml0dGVk", mimeType: "image/png" };
 			},
 		};
 		await expect(imagesSeen({ images })).resolves.toStrictEqual(["Zml0dGVk"]);
