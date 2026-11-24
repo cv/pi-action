@@ -1,1 +1,1 @@
-{"format":1,"seq":88,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"],["s",["tools",0,"output"],"oxfmt 0.80.0\noxlint 1.95.0\noxlint-tsgolint 7.0.2008\n"]]}}]}
+{"format":1,"seq":89,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"typescript 7.0.2\n@types/node 26.6.6\nvitest 5.1.1\n"]]}}]}
