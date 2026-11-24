@@ -1,9 +1,4 @@
-import type {
-	IssueCommentCreatedEvent,
-	IssuesOpenedEvent,
-	PullRequestOpenedEvent,
-	PullRequestReviewCommentCreatedEvent,
-} from "@octokit/webhooks-types";
+import type { components } from "@octokit/openapi-webhooks-types";
 
 import type {
 	GitHubComment,
