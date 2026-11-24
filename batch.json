@@ -1,1 +1,1 @@
-{"format":1,"seq":90,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"knip 6.48.0\njscpd 5.4.3\nactionlint 2.0.6\n@j178/prek 0.5.11\n"]]}}]}
+{"format":1,"seq":91,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"@commitlint/cli 21.2.4\njiti 2.7.0\n@actions/core 3.0.1\n@actions/github 9.1.1\n"]]}}]}
