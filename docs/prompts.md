@@ -12,7 +12,7 @@ A follow-up does not repeat the issue or the diff, because the thread already ha
 
 ## The system prompt
 
-pi-action sends the system prompt of pi's coding agent (pi 1.5.2, `buildSystemPromptSections`), in pi's order. The built-in `pi-action` extension makes the sections 1 to 7. Each section is tagged as `<key>…</key>`, except `preamble`:
+pi-action sends the system prompt of pi's coding agent (pi 1.6.0, `buildSystemPromptSections`), in pi's order. The built-in `pi-action` extension makes the sections 1 to 7. Each section is tagged as `<key>…</key>`, except `preamble`:
 
 1. `preamble`: `You are a coding assistant running inside pi, a coding agent harness. Help users inspect files, run commands, and modify code.` A [`SYSTEM.md`](#system-prompt-files) replaces the sections 1 to 3 with its text, as an untagged `preamble`.
 2. `tools`: one line for each tool that the model is offered and that has a prompt snippet, then `Additional tools may be available.` If no tool has a snippet: `(none)`.
