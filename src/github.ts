@@ -1,9 +1,4 @@
-import type {
-	IssueCommentCreatedEvent,
-	IssuesOpenedEvent,
-	PullRequestOpenedEvent,
-	PullRequestReviewCommentCreatedEvent,
-} from "@octokit/webhooks-types";
+import type { components } from "@octokit/openapi-webhooks-types";
 
 import type {
 	GitHubComment,
@@ -15,11 +10,13 @@ import type {
 	TriggerSource,
 } from "./types.ts";
 
+type WebhookSchemas = components["schemas"];
+
 type SupportedWebhookPayload =
-	| IssueCommentCreatedEvent
-	| IssuesOpenedEvent
-	| PullRequestOpenedEvent
-	| PullRequestReviewCommentCreatedEvent;
+	| WebhookSchemas["webhook-issue-comment-created"]
+	| WebhookSchemas["webhook-issues-opened"]
+	| WebhookSchemas["webhook-pull-request-opened"]
+	| WebhookSchemas["webhook-pull-request-review-comment-created"];
 
 /** The payload comes from outside: check the parts we read instead of trusting the webhook types. */
 function isSupportedWebhookPayload(
@@ -63,12 +60,17 @@ export function extractTriggerInfo(
 		source = "issue" in payload ? "comment" : "review_comment";
 	}
 	const triggerText = origin.body ?? "";
+	// The webhook types allow a deleted (null) user; isSupportedWebhookPayload has already refused one.
+	const author = origin.user;
+	if (author === null) {
+		return null;
+	}
 	if (triggerText === "") {
 		return null;
 	}
 	return {
 		triggerText,
-		author: origin.user,
+		author,
 		authorAssociation: origin.author_association,
 		issueNumber: subject.number,
 		issueTitle: subject.title,
