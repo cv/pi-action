@@ -10,11 +10,13 @@ import type {
 	TriggerSource,
 } from "./types.ts";
 
+type WebhookSchemas = components["schemas"];
+
 type SupportedWebhookPayload =
-	| IssueCommentCreatedEvent
-	| IssuesOpenedEvent
-	| PullRequestOpenedEvent
-	| PullRequestReviewCommentCreatedEvent;
+	| WebhookSchemas["webhook-issue-comment-created"]
+	| WebhookSchemas["webhook-issues-opened"]
+	| WebhookSchemas["webhook-pull-request-opened"]
+	| WebhookSchemas["webhook-pull-request-review-comment-created"];
 
 /** The payload comes from outside: check the parts we read instead of trusting the webhook types. */
 function isSupportedWebhookPayload(
