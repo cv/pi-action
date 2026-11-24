@@ -506,3 +506,78 @@ describe("Thread: the thinking level", () => {
 		}
 	});
 });
+
+/** A 1x1 PNG. */
+const PNG =
+	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+/** The images in the tool results of the model's second request, when a tool returns `PNG`. */
+async function imagesSeen(options: Partial<ThreadOptions>): Promise<string[]> {
+	const { faux, models, model } = fauxModels();
+	const seen: ModelContext[] = [];
+	faux.setResponses([
+		() =>
+			fauxAssistantMessage([fauxToolCall("shot", {})], {
+				stopReason: "toolUse",
+			}),
+		(context) => {
+			seen.push(context);
+			return fauxAssistantMessage("ok");
+		},
+	]);
+	const shot = defineTool({
+		name: "shot",
+		description: "A screenshot",
+		parameters: { type: "object", properties: {} },
+		execute: async () => ({
+			output: [{ type: "image", data: PNG, mimeType: "image/png" }],
+		}),
+	});
+	const thread = await Thread.open({
+		cwd: tempDir(),
+		models,
+		model,
+		log: createLogger(),
+		extensions: [defineExtension({ name: "camera", tools: [shot] })],
+		...options,
+	});
+	try {
+		const submission = await thread.submit({
+			key: "k",
+			content: "hi",
+			data: {},
+		});
+		await submission.wait(BACKGROUND_CONTEXT);
+	} finally {
+		await thread.close();
+	}
+	return seen.flatMap((context) =>
+		context.messages.flatMap((message) =>
+			message.role === "toolResult"
+				? message.content.flatMap((part) =>
+						part.type === "image" ? [part.data] : [],
+					)
+				: [],
+		),
+	);
+}
+
+describe("Thread: images", () => {
+	it("fits the images of every tool's results with the run's image processor", async () => {
+		const prepared: string[] = [];
+		const images = {
+			prepare: async (bytes: Uint8Array, mimeType: string) => {
+				prepared.push(mimeType);
+				return bytes.length > 0
+					? { data: "Zml0dGVk", mimeType: "image/png" }
+					: undefined;
+			},
+		};
+		await expect(imagesSeen({ images })).resolves.toStrictEqual(["Zml0dGVk"]);
+		expect(prepared).toStrictEqual(["image/png"]);
+	});
+
+	it("passes them through without one", async () => {
+		await expect(imagesSeen({})).resolves.toStrictEqual([PNG]);
+	});
+});

@@ -14,7 +14,7 @@ import { type Skills, skillsSection } from "./skills.ts";
 export const BUILTIN_EXTENSION = "pi-action";
 
 /** The pi version whose prompt text pi-action copies (`buildSystemPromptSections` in pi-coding-agent). */
-export const PI_PROMPT_VERSION = "1.5.2";
+export const PI_PROMPT_VERSION = "1.6.0";
 
 /**
  * The section keys of the built-in extension, in order, for `wrapSection`. With a `SYSTEM.md`, `tools` and `rules`
