@@ -1,1 +1,1 @@
-{"format":1,"seq":162,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"text"],"v2.5.5**."]]}}]}
+{"format":1,"seq":163,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"text"]," The release is still a draft: CONTRIBUTING.md has a person review it before publishing, so I left that step to you.\n\n1. **#94:** squash-merged into `main` as `420a249`. All of its checks passed.\n2. **Release PR ["]]}}]}
