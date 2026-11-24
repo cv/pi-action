@@ -70,7 +70,7 @@ export function extractTriggerInfo(
 	}
 	return {
 		triggerText,
-		author,
+		author: { login: author.login, type: toUserType(author.type) },
 		authorAssociation: origin.author_association,
 		issueNumber: subject.number,
 		issueTitle: subject.title,
