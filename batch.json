@@ -1,1 +1,1 @@
-{"format":1,"seq":142,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":143,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"[{\"databaseId\":45330446204,\"headBranch\":\"v2.5.5\",\"status\":\"in_progress\"}]\n"]]}}]}
